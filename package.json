@@ -5,13 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:lan": "SPIKE_LAN=1 vite --host",
+    "dev:lan": "LAN=1 vite --host",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "preview:lan": "SPIKE_LAN=1 vite preview --host --port 5173",
+    "preview:lan": "LAN=1 vite preview --host --port 5173",
     "typecheck": "tsc -b --noEmit",
     "lint": "oxlint",
-    "check": "bun run typecheck && bun run lint"
+    "test": "bun test",
+    "check": "bun run typecheck && bun run lint && bun run test"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.115.0",
@@ -20,6 +21,7 @@
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@types/bun": "^1.4.1",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",

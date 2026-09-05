@@ -4,6 +4,42 @@
   "ignorePatterns": ["dist", "dev-dist", "node_modules"],
   "rules": {
     "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
+    "react/only-export-components": ["warn", { "allowConstantExport": true }],
+    "typescript/no-explicit-any": "error",
+    "typescript/consistent-type-assertions": ["error", { "assertionStyle": "never" }]
+  },
+  "overrides": [
+    {
+      "files": ["src/dominio/**"],
+      "rules": {
+        "no-restricted-globals": [
+          "error",
+          { "name": "parseFloat", "message": "Dinheiro é bigint de centavos; parseFloat devolve ponto flutuante (RI-01, EL-03, D-022)." },
+          { "name": "parseInt", "message": "Dinheiro é bigint de centavos; parseInt devolve number (RI-01, EL-03, D-022)." },
+          { "name": "Number", "message": "Number() converte para ponto flutuante. Use BigInt() (RI-01, EL-03, D-022)." },
+          { "name": "Math", "message": "Math opera em number. Repartição de parcela é divisão inteira de bigint (RI-01, EL-03, D-022, D-012)." },
+          { "name": "isNaN", "message": "NaN só existe em ponto flutuante; no domínio não há number (RI-01, EL-03, D-022)." },
+          { "name": "isFinite", "message": "Infinito só existe em ponto flutuante; no domínio não há number (RI-01, EL-03, D-022)." }
+        ],
+        "no-restricted-properties": [
+          "error",
+          { "property": "toFixed", "message": "toFixed formata number. A formatação em pt-BR do domínio parte de bigint (RI-01, EL-03, D-022)." },
+          { "property": "toPrecision", "message": "toPrecision formata number (RI-01, EL-03, D-022)." },
+          { "object": "Number", "property": "parseFloat", "message": "Number.parseFloat devolve ponto flutuante (RI-01, EL-03, D-022)." },
+          { "object": "Number", "property": "parseInt", "message": "Number.parseInt devolve number (RI-01, EL-03, D-022)." }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["*", "!./**", "!../**"],
+                "message": "O domínio não depende de nada externo: sem framework de UI, sem banco, sem cliente de backend. Ele é testável sem navegador (AGENTS.md §4)."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
 }
