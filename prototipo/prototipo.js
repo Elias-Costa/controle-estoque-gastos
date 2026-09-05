@@ -9,6 +9,12 @@
  * **Dinheiro é bigint de centavos aqui também** (RI-01, D-022). Não porque o protótipo precise
  * ser correto — ele não vira produto —, mas porque escrever a versão errada por dois dias e a
  * certa depois é como um centavo de ponto flutuante entra num projeto.
+ *
+ * **O saldo é derivado das parcelas, nunca guardado** (RN-01). A primeira versão deste arquivo
+ * guardava um campo `devendo` e mexia nele à mão: a confirmação dizia "ainda deve R$ 30,00" e a
+ * fichinha, um toque depois, dizia "deve R$ 60,00" com a parcela recém-paga ainda vencida. Num
+ * protótipo isso não é bug de produto — é **defeito de instrumento**, e teria produzido uma falha
+ * falsa de EL-08 na única sessão que mede EL-08. É a mesma lição do botão de idempotência de E-00.
  */
 
 // ---------------------------------------------------------------------------
@@ -31,15 +37,22 @@ function emReais(centavos) {
  * Lê o que ela digitou e devolve centavos em bigint.
  *
  * Aceita "30", "30,00", "30.00" e "1.250,00" — porque não sabemos ainda como ela digita, e
- * recusar um formato no meio da tarefa cronometrada mediria o campo, não o fluxo. Como ela
- * digita valor é justamente um dos pontos de observação da sessão.
+ * recusar um formato no meio da tarefa cronometrada mediria o campo, não o fluxo.
+ *
+ * **Atenção, e é `D-034` (EM ABERTO):** aqui "3990" vira **R$ 3.990,00**, não R$ 39,90. Boa parte dos
+ * aplicativos de dinheiro no celular preenche pela direita e faria o contrário. Nenhuma das duas
+ * convenções foi escolhida por ninguém — este arquivo estava decidindo por omissão até a revisão de
+ * 2026-09-05 —, e errar produz um valor **100× maior** na ficha de uma pessoa real.
+ *
+ * O protótipo deixa **de propósito** como está: a sessão de E-02 existe para ver o que ela digita
+ * quando ninguém explicou nada. Corrigir aqui seria responder `D-034` sem perguntar a ela.
  */
 function centavosDeTexto(texto) {
   const limpo = String(texto).replace(/[^\d,.]/g, '')
   // O último separador é o decimal; os anteriores são milhar.
-  const ultimaVirgula = Math.max(limpo.lastIndexOf(','), limpo.lastIndexOf('.'))
-  const parteInteira = (ultimaVirgula === -1 ? limpo : limpo.slice(0, ultimaVirgula)).replace(/\D/g, '')
-  const parteDecimal = ultimaVirgula === -1 ? '' : limpo.slice(ultimaVirgula + 1).replace(/\D/g, '')
+  const ultimoSeparador = Math.max(limpo.lastIndexOf(','), limpo.lastIndexOf('.'))
+  const parteInteira = (ultimoSeparador === -1 ? limpo : limpo.slice(0, ultimoSeparador)).replace(/\D/g, '')
+  const parteDecimal = ultimoSeparador === -1 ? '' : limpo.slice(ultimoSeparador + 1).replace(/\D/g, '')
   const centavos = (parteDecimal + '00').slice(0, 2)
   return BigInt(parteInteira || '0') * 100n + BigInt(centavos)
 }
@@ -65,77 +78,150 @@ function repartirEmParcelas(totalCentavos, vezes) {
 }
 
 // ---------------------------------------------------------------------------
+// Datas
+// ---------------------------------------------------------------------------
+
+/*
+ * Datas em ISO por dentro e "dd/mm" na tela. O ISO existe por um motivo prático: ordenar o
+ * histórico em ordem cronológica inversa (RF-02) e decidir o que está vencido são comparações
+ * de texto, sem biblioteca e sem fuso.
+ */
+const HOJE = '2026-09-05'
+const ONTEM = '2026-09-04'
+const OUTRO_DIA = '2026-08-30'
+
+/** "2026-09-28" -> "28/09". */
+const comoEla = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
+
+/** Vencida é a parcela cuja data já passou. Comparação de texto ISO, que ordena igual à data. */
+const estaVencida = (parcela) => parcela.restante > 0n && parcela.data < HOJE
+
+/** Datas sugeridas para parcelas novas: de mês em mês (RF-05). */
+const DATAS_SUGERIDAS = ['2026-10-05', '2026-11-05', '2026-12-05', '2027-01-05']
+
+// ---------------------------------------------------------------------------
 // Dados falsos
 // ---------------------------------------------------------------------------
 
 /*
- * Nomes e valores inventados. Os totais dividem exato nas parcelas mostradas, para que a
- * ficha não encene por acidente uma decisão que ainda não foi tomada (D-012, D-030).
- * "Hoje" é 05/09 para efeito das datas abaixo — uma parcela vencida e as outras a vencer,
- * porque RF-02 exige que parcela vencida seja visualmente distinta.
+ * Nomes e valores inventados, montados em torno de HOJE = 05/09: a Cláudia tem parcela vencida
+ * (RF-02 exige que vencida seja visualmente distinta) e as demais estão a vencer.
+ *
+ * `parcelas` está sempre em ordem de vencimento — é o que faz o abatimento de RN-02 percorrer da
+ * mais antiga para a mais nova sem precisar reordenar nada.
  */
 const FICHAS = [
   {
     id: 'rosa',
     nome: 'Dona Rosa',
     referencia: 'vizinha do 302',
-    devendo: 9000n,
-    proxima: { valor: 3000n, data: '10/09', vencida: false },
-    historico: [
-      { data: '10/09', descricao: 'Parcela 2 de 3', valor: 3000n, tipo: 'a-vencer' },
-      { data: '10/10', descricao: 'Parcela 3 de 3', valor: 3000n, tipo: 'a-vencer' },
-      { data: '28/08', descricao: 'Pagou no Pix', valor: -3000n, tipo: 'recebimento' },
-      { data: '10/08', descricao: 'Levou 3 coisas', valor: 12000n, tipo: 'venda' },
+    parcelas: [
+      { valor: 3000n, restante: 0n, data: '2026-08-10', ordem: 1, de: 4 },
+      { valor: 3000n, restante: 3000n, data: '2026-09-10', ordem: 2, de: 4 },
+      { valor: 3000n, restante: 3000n, data: '2026-10-10', ordem: 3, de: 4 },
+      { valor: 3000n, restante: 3000n, data: '2026-11-10', ordem: 4, de: 4 },
+    ],
+    eventos: [
+      { data: '2026-08-28', descricao: 'Pagou no Pix', valor: -3000n, tipo: 'recebimento' },
+      { data: '2026-08-10', descricao: 'Creme, perfume e sabonete', valor: 12000n, tipo: 'venda' },
     ],
   },
   {
     id: 'claudia',
     nome: 'Cláudia',
     referencia: 'do salão',
-    devendo: 6000n,
-    proxima: { valor: 3000n, data: '28/08', vencida: true },
-    historico: [
-      { data: '28/09', descricao: 'Parcela 2 de 2', valor: 3000n, tipo: 'a-vencer' },
-      { data: '28/08', descricao: 'Parcela 1 de 2', valor: 3000n, tipo: 'vencida' },
-      { data: '28/07', descricao: 'Levou 2 coisas', valor: 6000n, tipo: 'venda' },
+    parcelas: [
+      { valor: 3000n, restante: 3000n, data: '2026-08-28', ordem: 1, de: 2 },
+      { valor: 3000n, restante: 3000n, data: '2026-09-28', ordem: 2, de: 2 },
     ],
+    eventos: [{ data: '2026-07-28', descricao: 'Shampoo e condicionador', valor: 6000n, tipo: 'venda' }],
   },
   {
     id: 'vera',
     nome: 'Vera',
     referencia: 'irmã da Sandra',
-    devendo: 4500n,
-    proxima: { valor: 4500n, data: '15/09', vencida: false },
-    historico: [
-      { data: '15/09', descricao: 'Parcela única', valor: 4500n, tipo: 'a-vencer' },
-      { data: '15/08', descricao: 'Levou 1 coisa', valor: 4500n, tipo: 'venda' },
-    ],
+    parcelas: [{ valor: 4500n, restante: 4500n, data: '2026-09-15', ordem: 1, de: 1 }],
+    eventos: [{ data: '2026-08-15', descricao: 'Kit de maquiagem', valor: 4500n, tipo: 'venda' }],
   },
   {
     id: 'marlene',
     nome: 'Marlene',
     referencia: 'da igreja',
-    devendo: 0n,
-    proxima: null,
-    historico: [
-      { data: '30/08', descricao: 'Pagou tudo, em dinheiro', valor: -8000n, tipo: 'recebimento' },
-      { data: '02/08', descricao: 'Levou 2 coisas', valor: 8000n, tipo: 'venda' },
+    parcelas: [{ valor: 8000n, restante: 0n, data: '2026-08-30', ordem: 1, de: 1 }],
+    eventos: [
+      { data: '2026-08-30', descricao: 'Pagou tudo, em dinheiro', valor: -8000n, tipo: 'recebimento' },
+      { data: '2026-08-02', descricao: 'Hidratante e batom', valor: 8000n, tipo: 'venda' },
     ],
   },
   {
     id: 'ivone',
     nome: 'Ivone',
     referencia: 'do trabalho do Zé',
-    devendo: 12000n,
-    proxima: { valor: 4000n, data: '12/09', vencida: false },
-    historico: [
-      { data: '12/09', descricao: 'Parcela 1 de 3', valor: 4000n, tipo: 'a-vencer' },
-      { data: '12/10', descricao: 'Parcela 2 de 3', valor: 4000n, tipo: 'a-vencer' },
-      { data: '12/11', descricao: 'Parcela 3 de 3', valor: 4000n, tipo: 'a-vencer' },
-      { data: '20/08', descricao: 'Levou 4 coisas', valor: 12000n, tipo: 'venda' },
+    parcelas: [
+      { valor: 4000n, restante: 4000n, data: '2026-09-12', ordem: 1, de: 3 },
+      { valor: 4000n, restante: 4000n, data: '2026-10-12', ordem: 2, de: 3 },
+      { valor: 4000n, restante: 4000n, data: '2026-11-12', ordem: 3, de: 3 },
     ],
+    eventos: [{ data: '2026-08-20', descricao: 'Quatro coisas do catálogo', valor: 12000n, tipo: 'venda' }],
   },
 ]
+
+// ---------------------------------------------------------------------------
+// Regras derivadas
+// ---------------------------------------------------------------------------
+
+/** Quanto a cliente deve: soma do que falta em cada parcela. Derivado, nunca guardado (RN-01). */
+function saldoDe(ficha) {
+  let total = 0n
+  for (const parcela of ficha.parcelas) total += parcela.restante
+  return total
+}
+
+/** A próxima parcela em aberto — a mais antiga que ainda tem saldo. `undefined` se está tudo pago. */
+const proximaParcelaDe = (ficha) => ficha.parcelas.find((p) => p.restante > 0n)
+
+/**
+ * Abate o recebimento na parcela em aberto mais antiga, com o excedente escorrendo para as
+ * seguintes (RN-02, D-006). Nenhuma decisão sobre onde abater é pedida a ela (RI-08).
+ *
+ * Devolve o que sobrou depois de quitar tudo. **O que fazer com essa sobra é D-016, EM ABERTO** —
+ * o protótipo apenas informa o fato na confirmação e não inventa a regra (nem crédito, nem recusa,
+ * nem saldo negativo). Se ela pagar a mais durante a sessão, a reação dela é o dado.
+ */
+function receber(ficha, valorPago) {
+  let restanteDoPagamento = valorPago
+  for (const parcela of ficha.parcelas) {
+    if (restanteDoPagamento === 0n) break
+    if (parcela.restante === 0n) continue
+    const abate = restanteDoPagamento < parcela.restante ? restanteDoPagamento : parcela.restante
+    parcela.restante -= abate
+    restanteDoPagamento -= abate
+  }
+  return restanteDoPagamento
+}
+
+/**
+ * As linhas do histórico da ficha, em ordem cronológica inversa (RF-02).
+ *
+ * Entram as parcelas **em aberto** e os eventos já acontecidos (o que ela levou, o que pagou).
+ * Parcela quitada não vira linha própria: quem a representa é o recebimento correspondente, e
+ * mostrar as duas encheria a ficha de linhas repetidas.
+ */
+function linhasDaFicha(ficha) {
+  const deParcelas = ficha.parcelas
+    .filter((p) => p.restante > 0n)
+    .map((p) => ({
+      data: p.data,
+      // "N de M" é dentro da venda que gerou a parcela, nunca sobre a lista inteira da ficha:
+      // uma cliente com duas compras tem duas contagens, e somá-las mostraria "Parcela 1 de 4"
+      // para uma compra que foi paga de uma vez só.
+      descricao: p.de === 1 ? 'Parcela' : `Parcela ${p.ordem} de ${p.de}`,
+      valor: p.restante,
+      tipo: estaVencida(p) ? 'vencida' : 'a-vencer',
+    }))
+
+  return [...deParcelas, ...ficha.eventos].sort((a, b) => (a.data < b.data ? 1 : a.data > b.data ? -1 : 0))
+}
 
 // ---------------------------------------------------------------------------
 // Estado da sessão (em memória — recarregar reinicia)
@@ -151,9 +237,21 @@ const estado = {
 }
 
 const elemento = (id) => document.getElementById(id)
+const escolhido = (nome) => document.querySelector(`input[name="${nome}"]:checked`).value
 
-/** Troca a tela visível. Não há rota nem histórico: o protótipo é um baralho de cartas. */
+/**
+ * Troca a tela visível **e redesenha o que ela mostra**.
+ *
+ * O redesenho mora aqui, e não em cada botão, por causa do defeito que a primeira versão tinha:
+ * `data-ir="tela-ficha"` só reexibia a ficha antiga, e ela via a confirmação dizer uma coisa e a
+ * fichinha dizer outra. Toda porta de entrada de uma tela passa por aqui, então nenhuma pode
+ * esquecer de redesenhar.
+ */
 function mostrarTela(id) {
+  if (id === 'tela-inicio') desenharLista(elemento('lista-fichas'), elemento('busca').value, abrirFicha)
+  if (id === 'tela-venda-cliente') desenharLista(elemento('lista-venda'), elemento('busca-venda').value, abrirVenda)
+  if (id === 'tela-ficha' && estado.fichaAberta !== null) desenharFicha(estado.fichaAberta)
+
   for (const tela of document.querySelectorAll('.tela')) {
     tela.hidden = tela.id !== id
   }
@@ -161,25 +259,38 @@ function mostrarTela(id) {
 }
 
 // ---------------------------------------------------------------------------
-// Tela inicial
+// Tela inicial e escolha de cliente
 // ---------------------------------------------------------------------------
 
 /**
- * Desenha a lista de fichinhas, opcionalmente filtrada pela busca.
+ * Deixa o texto comparável: minúsculas e sem acento.
+ *
+ * Sem isto, "cla" não encontra "Cláudia" e "salao" não encontra "do salão" — e a lista volta **vazia**
+ * no meio de uma tarefa cronometrada, o que ela leria como "essa cliente não está aqui". Ninguém digita
+ * acento correndo, muito menos no teclado do iPhone. Achado na revisão de 2026-09-05, por teste.
+ *
+ * A faixa \u0300-\u036f é a dos diacríticos combinantes que o NFD separa da
+ * letra base. Escapada de propósito: os caracteres literais são invisíveis num editor, e
+ * ninguém revisa o que não enxerga.
+ */
+const semAcento = (texto) => texto.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+
+/**
+ * Desenha a lista de fichinhas, filtrada pela busca.
  *
  * `aoEscolher` muda conforme a origem: da tela inicial a escolha abre a ficha; da tela de nova
  * venda ela escolhe para quem é a venda.
  */
 function desenharLista(alvo, filtro, aoEscolher) {
-  const termo = filtro.trim().toLowerCase()
-  const visiveis = FICHAS.filter(
-    (f) => f.nome.toLowerCase().includes(termo) || f.referencia.toLowerCase().includes(termo),
-  )
+  const termo = semAcento(filtro.trim())
+  const visiveis = FICHAS.filter((f) => semAcento(f.nome).includes(termo) || semAcento(f.referencia).includes(termo))
 
   alvo.replaceChildren()
   for (const ficha of visiveis) {
-    const atrasada = ficha.proxima !== null && ficha.proxima.vencida
-    const linha = document.createElement('li')
+    const saldo = saldoDe(ficha)
+    const proxima = proximaParcelaDe(ficha)
+    const atrasada = proxima !== undefined && estaVencida(proxima)
+
     const botao = document.createElement('button')
     botao.type = 'button'
     if (atrasada) botao.classList.add('em-atraso')
@@ -194,7 +305,7 @@ function desenharLista(alvo, filtro, aoEscolher) {
 
     const quanto = document.createElement('span')
     quanto.className = 'quanto'
-    quanto.textContent = ficha.devendo === 0n ? 'em dia' : emReais(ficha.devendo)
+    quanto.textContent = saldo === 0n ? 'em dia' : emReais(saldo)
     if (atrasada) {
       const aviso = document.createElement('span')
       aviso.className = 'aviso-atraso'
@@ -204,6 +315,8 @@ function desenharLista(alvo, filtro, aoEscolher) {
 
     botao.append(quem, quanto)
     botao.addEventListener('click', () => aoEscolher(ficha))
+
+    const linha = document.createElement('li')
     linha.append(botao)
     alvo.append(linha)
   }
@@ -213,37 +326,39 @@ function desenharLista(alvo, filtro, aoEscolher) {
 // Ficha
 // ---------------------------------------------------------------------------
 
-/** Abre a ficha de uma cliente: saldo e próxima parcela no topo, histórico abaixo (RF-02). */
-function abrirFicha(ficha) {
-  estado.fichaAberta = ficha
-  elemento('ficha-nome').textContent = ficha.nome
-  elemento('ficha-saldo').textContent = ficha.devendo === 0n ? 'Nada' : emReais(ficha.devendo)
+/** Desenha a ficha: saldo e próxima parcela no topo, histórico abaixo (RF-02). */
+function desenharFicha(ficha) {
+  const saldo = saldoDe(ficha)
+  const proxima = proximaParcelaDe(ficha)
 
-  const proxima = elemento('ficha-proxima')
-  proxima.classList.toggle('vencida', ficha.proxima !== null && ficha.proxima.vencida)
-  if (ficha.proxima === null) {
-    proxima.textContent = 'Está tudo pago'
-  } else if (ficha.proxima.vencida) {
-    proxima.textContent = `${emReais(ficha.proxima.valor)} venceu em ${ficha.proxima.data}`
+  elemento('ficha-nome').textContent = ficha.nome
+  elemento('ficha-saldo').textContent = saldo === 0n ? 'Nada' : emReais(saldo)
+
+  const linhaProxima = elemento('ficha-proxima')
+  linhaProxima.classList.toggle('vencida', proxima !== undefined && estaVencida(proxima))
+  if (proxima === undefined) {
+    linhaProxima.textContent = 'Está tudo pago'
+  } else if (estaVencida(proxima)) {
+    linhaProxima.textContent = `${emReais(proxima.restante)} venceu em ${comoEla(proxima.data)}`
   } else {
-    proxima.textContent = `Próxima: ${emReais(ficha.proxima.valor)} em ${ficha.proxima.data}`
+    linhaProxima.textContent = `Próxima: ${emReais(proxima.restante)} em ${comoEla(proxima.data)}`
   }
 
   // O botão some quando não há o que receber: oferecer uma ação impossível é ruído.
-  elemento('botao-recebi').hidden = ficha.proxima === null
-  elemento('botao-recebi').textContent =
-    ficha.proxima === null ? 'Recebi' : `Recebi ${emReais(ficha.proxima.valor)}`
+  const botao = elemento('botao-recebi')
+  botao.hidden = proxima === undefined
+  botao.textContent = proxima === undefined ? 'Recebi' : `Recebi ${emReais(proxima.restante)}`
 
   const historico = elemento('ficha-historico')
   historico.replaceChildren()
-  for (const linha of ficha.historico) {
+  for (const linha of linhasDaFicha(ficha)) {
     const item = document.createElement('li')
     if (linha.tipo === 'vencida') item.classList.add('vencida')
     if (linha.tipo === 'recebimento') item.classList.add('paga')
 
     const data = document.createElement('span')
     data.className = 'data'
-    data.textContent = linha.data
+    data.textContent = comoEla(linha.data)
     const descricao = document.createElement('span')
     descricao.className = 'descricao'
     descricao.textContent = linha.descricao
@@ -254,7 +369,11 @@ function abrirFicha(ficha) {
     item.append(data, descricao, cifra)
     historico.append(item)
   }
+}
 
+/** Abre a ficha de uma cliente. */
+function abrirFicha(ficha) {
+  estado.fichaAberta = ficha
   mostrarTela('tela-ficha')
 }
 
@@ -271,27 +390,45 @@ function abrirFicha(ficha) {
  */
 function abrirRecebimento() {
   const ficha = estado.fichaAberta
-  if (ficha === null || ficha.proxima === null) return
+  if (ficha === null) return
+  const proxima = proximaParcelaDe(ficha)
+  if (proxima === undefined) return
+
   elemento('recebimento-titulo').textContent = `Recebi da ${ficha.nome}`
-  elemento('recebimento-valor').value = emReais(ficha.proxima.valor).replace('R$ ', '')
+  elemento('recebimento-valor').value = emReais(proxima.restante).replace('R$ ', '')
   mostrarTela('tela-recebimento')
 }
 
-/** Confirma o recebimento: abate o saldo em memória e mostra quanto ficou faltando. */
+/** Confirma o recebimento: abate as parcelas e mostra o saldo novo, que é o que ela confere em voz alta. */
 function confirmarRecebimento() {
   const ficha = estado.fichaAberta
   if (ficha === null) return
+
   const pago = centavosDeTexto(elemento('recebimento-valor').value)
-  const restante = ficha.devendo - pago
+  if (pago === 0n) return // Guarda de instrumento: sem valor não há o que confirmar.
 
-  ficha.devendo = restante
-  ficha.historico.unshift({ data: 'hoje', descricao: 'Pagou', valor: -pago, tipo: 'recebimento' })
-  // Encenação simples: no produto, o abatimento percorre as parcelas em aberto (RN-02).
-  ficha.proxima = restante > 0n ? ficha.proxima : null
+  const forma = escolhido('forma')
+  const quando = { hoje: HOJE, ontem: ONTEM, outro: OUTRO_DIA }[escolhido('quando-recebi')]
+  const sobra = receber(ficha, pago)
 
-  elemento('recebido-linha').textContent = `Recebeu ${emReais(pago)} da ${ficha.nome}`
-  elemento('recebido-saldo').textContent =
-    restante > 0n ? `Ainda deve ${emReais(restante)}` : 'Ela não deve mais nada'
+  ficha.eventos.unshift({
+    data: quando,
+    descricao: forma === 'Pix' ? 'Pagou no Pix' : 'Pagou em dinheiro',
+    valor: -pago,
+    tipo: 'recebimento',
+  })
+
+  const saldo = saldoDe(ficha)
+  elemento('recebido-linha').textContent = `Anotado: ${emReais(pago)} da ${ficha.nome}`
+  if (saldo > 0n) {
+    elemento('recebido-saldo').textContent = `Ainda deve ${emReais(saldo)}`
+  } else if (sobra > 0n) {
+    // D-016 EM ABERTO: a tela informa o fato e não decide se vira crédito, troco ou recusa.
+    elemento('recebido-saldo').textContent = `Pagou ${emReais(sobra)} a mais`
+  } else {
+    elemento('recebido-saldo').textContent = 'Ela não deve mais nada'
+  }
+
   mostrarTela('tela-recebido')
 }
 
@@ -299,12 +436,10 @@ function confirmarRecebimento() {
 // Nova venda
 // ---------------------------------------------------------------------------
 
-/** Soma o que foi digitado nos itens. Total é sempre derivado do que está na tela. */
+/** Soma o que foi digitado nos itens. O total é sempre derivado do que está na tela. */
 function totalDaVenda() {
   let total = 0n
-  for (const item of estado.itens) {
-    total += centavosDeTexto(item.preco)
-  }
+  for (const item of estado.itens) total += centavosDeTexto(item.preco)
   return total
 }
 
@@ -313,20 +448,18 @@ function atualizarVenda() {
   const total = totalDaVenda()
   elemento('venda-total').textContent = emReais(total)
 
-  const fiado = document.querySelector('input[name="pagamento"]:checked').value === 'fiado'
+  const fiado = escolhido('pagamento') === 'fiado'
   elemento('bloco-parcelas').hidden = !fiado
 
   const lista = elemento('venda-parcelas')
   lista.replaceChildren()
   if (!fiado || total === 0n) return
 
-  // Datas encenadas: a primeira em 30 dias, as demais de mês em mês (RF-05).
-  const diasDoMes = ['05/10', '05/11', '05/12', '05/01']
   repartirEmParcelas(total, estado.vezes).forEach((valor, indice) => {
     const linha = document.createElement('li')
     const quando = document.createElement('span')
     quando.className = 'quando'
-    quando.textContent = `${indice + 1}ª em ${diasDoMes[indice]}`
+    quando.textContent = `${indice + 1}ª em ${comoEla(DATAS_SUGERIDAS[indice])}`
     const quanto = document.createElement('span')
     quanto.textContent = emReais(valor)
     linha.append(quando, quanto)
@@ -340,8 +473,6 @@ function desenharItens() {
   lista.replaceChildren()
 
   estado.itens.forEach((item, indice) => {
-    const linha = document.createElement('li')
-
     const descricao = document.createElement('input')
     descricao.type = 'text'
     descricao.className = 'texto-item'
@@ -362,6 +493,7 @@ function desenharItens() {
       atualizarVenda()
     })
 
+    const linha = document.createElement('li')
     linha.append(descricao, preco)
     lista.append(linha)
   })
@@ -384,31 +516,42 @@ function abrirVenda(ficha) {
   mostrarTela('tela-venda')
 }
 
-/** Fecha a venda: soma no que ela já devia e mostra o novo saldo. */
+/** Junta o que ela digitou numa frase para o histórico: "Hidratante e batom". */
+function descricaoDosItens() {
+  const nomes = estado.itens.map((i) => i.descricao.trim()).filter((d) => d !== '')
+  if (nomes.length === 0) return `Levou ${estado.itens.length} coisas`
+  if (nomes.length === 1) return nomes[0]
+  return `${nomes.slice(0, -1).join(', ')} e ${nomes[nomes.length - 1].toLowerCase()}`
+}
+
+/** Fecha a venda: cria as parcelas, lança o evento e mostra o saldo novo. */
 function salvarVenda() {
   const ficha = estado.fichaAberta
   if (ficha === null) return
+
   const total = totalDaVenda()
-  const fiado = document.querySelector('input[name="pagamento"]:checked').value === 'fiado'
-  const parcelas = repartirEmParcelas(total, estado.vezes)
+  // Guarda de instrumento, não regra de produto: sem valor não há venda, e avançar mostraria
+  // uma confirmação de R$ 0,00 que ela leria como "pronto" no meio da tarefa cronometrada.
+  if (total === 0n) return
+
+  const fiado = escolhido('pagamento') === 'fiado'
+  const quando = { hoje: HOJE, ontem: ONTEM, outro: OUTRO_DIA }[escolhido('quando-venda')]
 
   if (fiado) {
-    ficha.devendo += total
-    ficha.proxima = { valor: parcelas[0], data: '05/10', vencida: false }
+    repartirEmParcelas(total, estado.vezes).forEach((valor, indice) => {
+      ficha.parcelas.push({ valor, restante: valor, data: DATAS_SUGERIDAS[indice], ordem: indice + 1, de: estado.vezes })
+    })
+    // Parcelas ficam em ordem de vencimento: é o que faz o abatimento de RN-02 funcionar.
+    ficha.parcelas.sort((a, b) => (a.data < b.data ? -1 : a.data > b.data ? 1 : 0))
   }
-  ficha.historico.unshift({
-    data: 'hoje',
-    descricao: fiado ? `Levou ${estado.itens.length} coisas` : 'Levou e pagou na hora',
-    valor: total,
-    tipo: 'venda',
-  })
 
+  ficha.eventos.unshift({ data: quando, descricao: descricaoDosItens(), valor: total, tipo: 'venda' })
+
+  const saldo = saldoDe(ficha)
   elemento('vendido-linha').textContent = fiado
     ? `Anotado na fichinha da ${ficha.nome}`
     : `${ficha.nome} levou e pagou ${emReais(total)}`
-  elemento('vendido-saldo').textContent = fiado
-    ? `Agora ela deve ${emReais(ficha.devendo)}`
-    : 'Ela não deve nada'
+  elemento('vendido-saldo').textContent = fiado ? `Agora ela deve ${emReais(saldo)}` : 'Ela não deve nada'
   mostrarTela('tela-vendido')
 }
 
@@ -420,28 +563,37 @@ for (const botao of document.querySelectorAll('[data-ir]')) {
   botao.addEventListener('click', () => mostrarTela(botao.dataset.ir))
 }
 
-elemento('busca').addEventListener('input', (evento) => {
-  desenharLista(elemento('lista-fichas'), evento.target.value, abrirFicha)
+// Só a lista é redesenhada, e não a tela inteira: `mostrarTela` rola ao topo, e rolar a cada tecla
+// com o teclado do iPhone aberto é tremido o bastante para atrapalhar a tarefa cronometrada.
+elemento('busca').addEventListener('input', () => {
+  desenharLista(elemento('lista-fichas'), elemento('busca').value, abrirFicha)
 })
-elemento('busca-venda').addEventListener('input', (evento) => {
-  desenharLista(elemento('lista-venda'), evento.target.value, abrirVenda)
+elemento('busca-venda').addEventListener('input', () => {
+  desenharLista(elemento('lista-venda'), elemento('busca-venda').value, abrirVenda)
 })
 
 elemento('botao-recebi').addEventListener('click', abrirRecebimento)
 elemento('botao-confirmar-recebimento').addEventListener('click', confirmarRecebimento)
-elemento('botao-venda-daqui').addEventListener('click', () => abrirVenda(estado.fichaAberta))
 elemento('botao-salvar-venda').addEventListener('click', salvarVenda)
+elemento('botao-venda-daqui').addEventListener('click', () => {
+  if (estado.fichaAberta !== null) abrirVenda(estado.fichaAberta)
+})
 
 elemento('botao-mais-item').addEventListener('click', () => {
   estado.itens.push({ descricao: '', preco: '' })
   desenharItens()
 })
 
-// Cliente nova: no protótipo o cadastro não existe ainda (RF-01 é escopo de E-09). O botão
-// está aqui porque a sessão precisa mostrar se ela procura por ele — se procurar, o cadastro
-// tem que caber no caminho da venda, e isso é achado, não suposição.
+/*
+ * Cliente nova: o cadastro de verdade é RF-01 e escopo de E-09. O botão está aqui porque a sessão
+ * precisa mostrar **se ela procura por ele** durante a venda — se procurar, o cadastro tem que
+ * caber no caminho da venda, e isso é achado, não suposição. A ficha criada entra na lista para
+ * que o resto do fluxo continue coerente.
+ */
 elemento('botao-cliente-nova').addEventListener('click', () => {
-  abrirVenda({ id: 'nova', nome: 'cliente nova', referencia: '', devendo: 0n, proxima: null, historico: [] })
+  const nova = { id: `nova-${FICHAS.length}`, nome: 'Cliente nova', referencia: '', parcelas: [], eventos: [] }
+  FICHAS.push(nova)
+  abrirVenda(nova)
 })
 
 for (const botao of document.querySelectorAll('#venda-vezes .vez')) {
@@ -458,5 +610,4 @@ for (const opcao of document.querySelectorAll('input[name="pagamento"]')) {
   opcao.addEventListener('change', atualizarVenda)
 }
 
-desenharLista(elemento('lista-fichas'), '', abrirFicha)
-desenharLista(elemento('lista-venda'), '', abrirVenda)
+mostrarTela('tela-inicio')
