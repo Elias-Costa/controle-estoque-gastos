@@ -98,11 +98,13 @@
         <label class="opcao"><input type="radio" name="forma" value="dinheiro" /><span>Dinheiro</span></label>
       </fieldset>
 
+      <!-- Duas opções, e a terceira saiu de propósito: ver o comentário de `HOJE`/`ONTEM` em
+           prototipo.js. "Outro dia" não abria seletor nenhum e carimbava o lançamento seis dias
+           atrás em silêncio. Escolher a data é RF-05, escopo de E-10 — não reponha aqui. -->
       <fieldset class="escolha">
         <legend class="rotulo-campo">Quando</legend>
         <label class="opcao"><input type="radio" name="quando-recebi" value="hoje" checked /><span>Hoje</span></label>
         <label class="opcao"><input type="radio" name="quando-recebi" value="ontem" /><span>Ontem</span></label>
-        <label class="opcao"><input type="radio" name="quando-recebi" value="outro" /><span>Outro dia</span></label>
       </fieldset>
 
       <div class="rodape-acao">
@@ -185,11 +187,11 @@
         <ul class="parcelas" id="venda-parcelas"></ul>
       </div>
 
+      <!-- Mesma razão da tela de recebimento: "Outro dia" era uma data inventada em silêncio. -->
       <fieldset class="escolha">
         <legend class="rotulo-campo">Quando foi</legend>
         <label class="opcao"><input type="radio" name="quando-venda" value="hoje" checked /><span>Hoje</span></label>
         <label class="opcao"><input type="radio" name="quando-venda" value="ontem" /><span>Ontem</span></label>
-        <label class="opcao"><input type="radio" name="quando-venda" value="outro" /><span>Outro dia</span></label>
       </fieldset>
 
       <div class="rodape-acao">

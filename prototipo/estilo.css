@@ -455,6 +455,19 @@ body {
   color: var(--tinta);
 }
 
+/*
+ * Indisponível, e não morto. O botão fica assim enquanto não há valor a confirmar — antes era
+ * verde, tocável, e simplesmente não fazia nada nem dizia nada. Numa tarefa cronometrada, os
+ * segundos gastos diante de um botão morto entram no tempo de RNF-02 como se fossem do desenho.
+ *
+ * Sem `opacity`, de propósito: o botão continua legível, porque RNF-03 pede contraste alto e a
+ * tela é lida sem óculos de perto. O que muda é a cor, não a nitidez.
+ */
+.botao-principal:disabled {
+  background: var(--borda);
+  color: var(--suave);
+}
+
 .largura-cheia {
   margin-bottom: 0.75rem;
 }

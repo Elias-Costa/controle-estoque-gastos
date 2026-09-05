@@ -132,9 +132,20 @@ function emMeses(quantidade) {
   return iso(alvo)
 }
 
+/*
+ * Só "Hoje" e "Ontem": é o que o protótipo consegue encenar sem mentir.
+ *
+ * Havia um terceiro botão, "Outro dia", e ele não abria seletor nenhum — carimbava o lançamento
+ * seis dias atrás, em silêncio. Ela tocava, nada aparecia na tela, e a ficha passava a mostrar uma
+ * data que ela não escolheu, bem no lugar onde ela vai conferir. Achado na revisão de 2026-09-05,
+ * por execução.
+ *
+ * Escolher a data de um lançamento é RF-05 e escopo de E-10. Aqui a ausência é deliberada: se ela
+ * procurar por outra data durante a sessão, isso é achado, e vale a exceção 1 da §3 do roteiro
+ * ("isso eu ainda não fiz"). Data inventada em silêncio não é achado nenhum.
+ */
 const HOJE = emDias(0)
 const ONTEM = emDias(-1)
-const OUTRO_DIA = emDias(-6)
 
 /** "2026-09-28" -> "28/09". */
 const comoEla = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
@@ -476,7 +487,20 @@ function abrirRecebimento() {
 
   elemento('recebimento-titulo').textContent = `Recebi da ${ficha.nome}`
   elemento('recebimento-valor').value = emReais(proxima.restante).replace('R$ ', '')
+  atualizarRecebimento()
   mostrarTela('tela-recebimento')
+}
+
+/**
+ * Mantém "Confirmar" indisponível enquanto não há valor digitado.
+ *
+ * Mesma correção do lado da venda, pelo mesmo motivo: a guarda de `confirmarRecebimento` já
+ * recusava o valor zero, mas o botão ficava **morto e mudo** — e os segundos que ela gastasse
+ * diante dele entrariam no tempo de RT-14 como se fossem do desenho, e não do instrumento.
+ * Achado na revisão de 2026-09-05, por execução.
+ */
+function atualizarRecebimento() {
+  elemento('botao-confirmar-recebimento').disabled = centavosDeTexto(elemento('recebimento-valor').value) === 0n
 }
 
 /** Confirma o recebimento: abate as parcelas e mostra o saldo novo, que é o que ela confere em voz alta. */
@@ -488,7 +512,7 @@ function confirmarRecebimento() {
   if (pago === 0n) return // Guarda de instrumento: sem valor não há o que confirmar.
 
   const forma = escolhido('forma')
-  const quando = { hoje: HOJE, ontem: ONTEM, outro: OUTRO_DIA }[escolhido('quando-recebi')]
+  const quando = { hoje: HOJE, ontem: ONTEM }[escolhido('quando-recebi')]
   const sobra = receber(ficha, pago)
 
   ficha.eventos.unshift({
@@ -527,6 +551,11 @@ function totalDaVenda() {
 function atualizarVenda() {
   const total = totalDaVenda()
   elemento('venda-total').textContent = emReais(total)
+
+  // Indisponível **antes** do toque, e não mudo depois dele. A guarda de `salvarVenda` já recusava
+  // o total zero, mas em silêncio: ela tocava "Pronto", nada acontecia e nada era dito. Ver o
+  // comentário de `salvarVenda` — a regra é a mesma, esta linha só a torna visível.
+  elemento('botao-salvar-venda').disabled = total === 0n
 
   const fiado = escolhido('pagamento') === 'fiado'
   elemento('bloco-parcelas').hidden = !fiado
@@ -627,7 +656,7 @@ function salvarVenda() {
   if (total === 0n) return
 
   const fiado = escolhido('pagamento') === 'fiado'
-  const quando = { hoje: HOJE, ontem: ONTEM, outro: OUTRO_DIA }[escolhido('quando-venda')]
+  const quando = { hoje: HOJE, ontem: ONTEM }[escolhido('quando-venda')]
 
   if (fiado) {
     repartirEmParcelas(total, estado.vezes).forEach((valor, indice) => {
@@ -643,7 +672,25 @@ function salvarVenda() {
   elemento('vendido-linha').textContent = fiado
     ? `Anotado na fichinha da ${ficha.nome}`
     : `${ficha.nome} levou e pagou ${emReais(total)}`
-  elemento('vendido-saldo').textContent = fiado ? `Agora ela deve ${emReais(saldo)}` : 'Ela não deve nada'
+
+  /*
+   * O número da confirmação é sempre o saldo derivado das parcelas (RN-01) — inclusive na venda
+   * à vista, e é aí que estava o defeito. A ramificação à vista dizia "Ela não deve nada" fixo, e
+   * para qualquer cliente que já devesse alguma coisa a confirmação contradizia a ficha um toque
+   * depois: "Ela não deve nada" contra "Deve R$ 45,00". É a mesma classe de defeito que a revisão
+   * anterior corrigiu no saldo guardado à mão, na ramificação que a correção não alcançou —
+   * conferir a fichinha depois é exatamente o que ela faz, e isto produziria falha falsa de EL-08.
+   * Achado na revisão de 2026-09-05, por execução.
+   *
+   * "Ainda deve" é a frase que a confirmação do recebimento já usa: nenhuma palavra nova entra na
+   * tela dela por causa desta correção (RI-07).
+   */
+  elemento('vendido-saldo').textContent =
+    saldo === 0n
+      ? 'Ela não deve nada'
+      : fiado
+        ? `Agora ela deve ${emReais(saldo)}`
+        : `Ainda deve ${emReais(saldo)}`
   mostrarTela('tela-vendido')
 }
 
@@ -665,6 +712,7 @@ elemento('busca-venda').addEventListener('input', () => {
 })
 
 elemento('botao-recebi').addEventListener('click', abrirRecebimento)
+elemento('recebimento-valor').addEventListener('input', atualizarRecebimento)
 elemento('botao-confirmar-recebimento').addEventListener('click', confirmarRecebimento)
 elemento('botao-salvar-venda').addEventListener('click', salvarVenda)
 elemento('botao-venda-daqui').addEventListener('click', () => {

@@ -20,8 +20,7 @@ O problema que ele resolve não é "controlar estoque": é **substituir um cader
 
 **Em desenvolvimento. A fundação do repositório está pronta; as telas ainda não existem.**
 
-O spike de viabilidade foi removido — ele existia para provar a arquitetura no aparelho real antes de
-escrever o sistema, e provou. No iPhone, não no desktop:
+A arquitetura foi provada no aparelho real antes de o sistema ser escrito — no iPhone, não no desktop:
 
 - `bigint` atravessa o IndexedDB do Safari sem perda de precisão
 - O armazenamento persistente é concedido com o PWA instalado na tela de início
@@ -29,13 +28,13 @@ escrever o sistema, e provou. No iPhone, não no desktop:
 - A escrita funciona em modo avião, sem tocar na rede
 - O reenvio da fila é idempotente: o mesmo item enviado duas vezes não vira duas linhas
 
-O que existe hoje de código é a fundação: modo estrito, as fronteiras entre as camadas aplicadas por
-lint, o portão `check` e o mecanismo que leva uma versão nova ao aparelho.
+O que existe hoje é a fundação: as fronteiras entre as camadas, a garantia de que dinheiro nunca vira
+ponto flutuante e o mecanismo que leva uma versão nova ao aparelho.
 
 Há também um **protótipo navegável** em `prototipo/` — as telas de ficha, venda fiado e recebimento,
 clicáveis, com dados inventados e sem persistência nenhuma. Ele não é o aplicativo e não vira o
 aplicativo: existe para cronometrar, com a usuária, se lançar no app é mais rápido que anotar no
-papel. Essa medição é o critério de aceite mais importante do projeto, e ainda não aconteceu.
+papel. Se não for, o sistema não serve — e essa medição ainda não aconteceu.
 
 ## Arquitetura
 
@@ -58,9 +57,6 @@ src/sincronizacao/    fila de operações e envio
 src/interface/        as telas
 src/plataforma/       service worker e carimbo de versão
 ```
-
-Cada pasta tem um `LEIA-ME.md` com o que entra ali e o que pode importar. O detalhamento e os
-trade-offs estão em [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ## Stack
 
@@ -86,7 +82,7 @@ bun install
 bun run dev
 ```
 
-Não é preciso configurar nada além disso **hoje**: a sincronização com o Supabase começa em E-06, e até lá o app não toca a rede. Quando começar, será `.env.example` copiado para `.env.local` com `VITE_SUPABASE_URL` e a chave `anon` em `VITE_SUPABASE_ANON_KEY`.
+Não é preciso configurar nada além disso **hoje**: a sincronização com o Supabase ainda não está ligada, e até lá o app não toca a rede. Quando estiver, será um `.env.local` na raiz com `VITE_SUPABASE_URL` e a chave `anon` em `VITE_SUPABASE_ANON_KEY`.
 
 ## Comandos
 
