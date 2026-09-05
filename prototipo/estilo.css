@@ -277,9 +277,15 @@ body {
   background: none;
   color: var(--tinta);
   /*
-   * Propriedades separadas, e não o atalho `font:`. No atalho, `inherit` não é família válida
-   * e o navegador descarta a declaração inteira em silêncio — o campo volta ao tamanho padrão
-   * do sistema. Foi o que aconteceu na primeira versão desta folha, e só apareceu na captura.
+   * Propriedades separadas, e não o atalho `font:`. O que o atalho não aceita é `inherit` **como
+   * família dentro de um valor composto**: `font: 2.25rem/1 inherit` é inválido e o navegador
+   * descarta a declaração inteira em silêncio — o campo volta ao padrão do sistema, que foi o que
+   * aconteceu na primeira versão desta folha e só apareceu na captura.
+   *
+   * `font: inherit` **sozinho é válido** e é o que `.busca` e `.texto-item` usam: medido no
+   * Chromium em 2026-09-05 (herda os 18px do `body`, contra 13,33px de Arial quando a declaração
+   * cai). Registrado com esta precisão porque a versão anterior deste comentário condenava as
+   * duas formas, e a próxima pessoa "consertaria" um `font: inherit` que não está quebrado.
    */
   font-family: inherit;
   font-size: 2.25rem;
