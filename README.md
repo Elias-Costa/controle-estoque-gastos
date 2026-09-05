@@ -18,15 +18,19 @@ O problema que ele resolve não é "controlar estoque": é **substituir um cader
 
 ## Estado
 
-**Em desenvolvimento. Ainda não há código de produção.**
+**Em desenvolvimento. A fundação do repositório está pronta; as telas ainda não existem.**
 
-O que existe em `src/spike/` é um spike de viabilidade descartável, que serviu para provar a arquitetura no aparelho real antes de escrever o sistema. Ele confirmou, no iPhone e não no desktop:
+O spike de viabilidade foi removido — ele existia para provar a arquitetura no aparelho real antes de
+escrever o sistema, e provou. No iPhone, não no desktop:
 
 - `bigint` atravessa o IndexedDB do Safari sem perda de precisão
 - O armazenamento persistente é concedido com o PWA instalado na tela de início
 - **O dado sobrevive a reiniciar o aparelho**
 - A escrita funciona em modo avião, sem tocar na rede
 - O reenvio da fila é idempotente: o mesmo item enviado duas vezes não vira duas linhas
+
+O que existe hoje de código é a fundação: modo estrito, as fronteiras entre as camadas aplicadas por
+lint, o portão `check` e o mecanismo que leva uma versão nova ao aparelho.
 
 ## Arquitetura
 
@@ -40,6 +44,19 @@ Três consequências disso atravessam o código inteiro:
 
 As invariantes financeiras valem **no banco** (constraints e políticas de linha), não apenas no código do aplicativo.
 
+As camadas são separadas por pasta, e a fronteira do domínio é aplicada por lint — não por combinado:
+
+```
+src/dominio/          regras do negócio, puras. Só importa caminhos relativos
+src/dados/            base local (Dexie) e repositórios
+src/sincronizacao/    fila de operações e envio
+src/interface/        as telas
+src/plataforma/       service worker e carimbo de versão
+```
+
+Cada pasta tem um `LEIA-ME.md` com o que entra ali e o que pode importar. O detalhamento e os
+trade-offs estão em [`ARCHITECTURE.md`](ARCHITECTURE.md).
+
 ## Stack
 
 | Camada | Escolha |
@@ -47,7 +64,7 @@ As invariantes financeiras valem **no banco** (constraints e políticas de linha
 | Interface | React + Vite + TypeScript, como SPA estática |
 | Base local | Dexie (IndexedDB) |
 | Nuvem | Supabase — Postgres, autenticação e Row Level Security |
-| Runtime e pacotes | Bun |
+| Runtime e pacotes | Bun — e `bun test` para os testes de unidade |
 | PWA | `vite-plugin-pwa` |
 
 Não há renderização no servidor: o app é instalado e funciona offline, então o artefato é estático.
@@ -60,11 +77,11 @@ Requisito: [Bun](https://bun.sh).
 bun install
 ```
 
-Copie `.env.example` para `.env.local` e preencha com o projeto do Supabase — `VITE_SUPABASE_URL` e a chave `anon` em `VITE_SUPABASE_ANON_KEY`. Sem elas o app roda, mas sem a parte de nuvem.
-
 ```bash
 bun run dev
 ```
+
+Não é preciso configurar nada além disso **hoje**: a sincronização com o Supabase começa em E-06, e até lá o app não toca a rede. Quando começar, será `.env.example` copiado para `.env.local` com `VITE_SUPABASE_URL` e a chave `anon` em `VITE_SUPABASE_ANON_KEY`.
 
 ## Comandos
 
@@ -74,7 +91,8 @@ bun run dev
 | `bun run dev:lan` | Idem, com HTTPS e exposto na rede local — para abrir no celular |
 | `bun run build` | Build de produção |
 | `bun run preview:lan` | Serve o build de produção com HTTPS na rede local |
-| `bun run check` | Typecheck + lint. É o portão de qualquer mudança |
+| `bun run test` | Testes de unidade, com o runner do Bun |
+| `bun run check` | Typecheck + lint + testes. É o portão de qualquer mudança |
 
 ## Testando no celular
 
