@@ -32,6 +32,11 @@ escrever o sistema, e provou. No iPhone, não no desktop:
 O que existe hoje de código é a fundação: modo estrito, as fronteiras entre as camadas aplicadas por
 lint, o portão `check` e o mecanismo que leva uma versão nova ao aparelho.
 
+Há também um **protótipo navegável** em `prototipo/` — as telas de ficha, venda fiado e recebimento,
+clicáveis, com dados inventados e sem persistência nenhuma. Ele não é o aplicativo e não vira o
+aplicativo: existe para cronometrar, com a usuária, se lançar no app é mais rápido que anotar no
+papel. Essa medição é o critério de aceite mais importante do projeto, e ainda não aconteceu.
+
 ## Arquitetura
 
 **Offline-first, e isso é a decisão central.** Toda escrita vai primeiro para o banco local no aparelho e só depois sobe para a nuvem, por uma fila de envio. O app não tem caminho de escrita que dependa de rede — o momento em que o sinal falha é exatamente o momento em que ela está com a cliente na frente, e uma tela de erro ali é o que faz voltar para o caderno.
@@ -93,6 +98,7 @@ Não é preciso configurar nada além disso **hoje**: a sincronização com o Su
 | `bun run preview:lan` | Serve o build de produção com HTTPS na rede local |
 | `bun run test` | Testes de unidade, com o runner do Bun |
 | `bun run check` | Typecheck + lint + testes. É o portão de qualquer mudança |
+| `bun run prototipo` | Protótipo das telas em `prototipo/`, na porta 5174 (HTTP, sem service worker) |
 
 ## Testando no celular
 
