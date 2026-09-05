@@ -1,0 +1,117 @@
+/* Estilos do spike E-00. Descartáveis: o estilo do produto nasce em E-01 com Tailwind (D-023). */
+
+:root {
+  --fundo: #f7f7f8;
+  --papel: #ffffff;
+  --tinta: #16181d;
+  --suave: #61656e;
+  --borda: #e3e5ea;
+  --ok: #167c4a;
+  --falhou: #b3261e;
+  --indisponivel: #8a6d1f;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fundo: #101216;
+    --papel: #191c22;
+    --tinta: #f2f3f5;
+    --suave: #a0a5b0;
+    --borda: #2b2f38;
+    --ok: #5ed39b;
+    --falhou: #ff9d95;
+    --indisponivel: #e3c46a;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--fundo);
+  color: var(--tinta);
+  font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+.painel {
+  max-width: 40rem;
+  margin: 0 auto;
+  /* env(safe-area-inset-*) importa: instalado em tela cheia, o iPhone não reserva a barra. */
+  padding: max(1rem, env(safe-area-inset-top)) 1rem max(2rem, env(safe-area-inset-bottom));
+}
+
+.etiqueta {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--suave);
+}
+
+h1 { margin: 0.25rem 0 0.5rem; font-size: 1.5rem; }
+h2 { margin: 1.5rem 0 0.5rem; font-size: 1rem; }
+.resumo { margin: 0 0 1.5rem; color: var(--suave); }
+
+.lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+
+.item {
+  display: grid;
+  grid-template-columns: 1.75rem 1fr;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: var(--papel);
+  border: 1px solid var(--borda);
+  border-radius: 0.75rem;
+}
+
+.simbolo { font-size: 1.25rem; font-weight: 700; line-height: 1.2; }
+.item.ok .simbolo { color: var(--ok); }
+.item.falhou .simbolo { color: var(--falhou); }
+.item.indisponivel .simbolo { color: var(--indisponivel); }
+
+.item p { margin: 0; }
+.titulo { font-weight: 600; }
+.detalhe { color: var(--suave); font-size: 0.9rem; }
+.origem { margin-top: 0.25rem; font-size: 0.75rem; color: var(--suave); opacity: 0.8; }
+
+.acoes { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1.5rem 0; }
+
+button {
+  /* 44px de altura mínima já aqui: é o alvo de toque que RNF-03 vai exigir do produto. */
+  min-height: 44px;
+  padding: 0 1rem;
+  font: inherit;
+  font-weight: 600;
+  color: var(--tinta);
+  background: var(--papel);
+  border: 1px solid var(--borda);
+  border-radius: 0.75rem;
+}
+
+button:disabled { opacity: 0.45; }
+
+.registro { list-style: none; margin: 0; padding: 0; font-size: 0.85rem; color: var(--suave); }
+.registro li { padding: 0.25rem 0; border-bottom: 1px solid var(--borda); }
+
+.aviso {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: var(--papel);
+  border: 1px solid var(--borda);
+  border-radius: 0.75rem;
+}
+
+pre {
+  overflow-x: auto;
+  padding: 0.75rem;
+  font-size: 0.8rem;
+  background: var(--fundo);
+  border-radius: 0.5rem;
+}
+
+code { font-size: 0.85em; }
+
+footer { margin-top: 2rem; font-size: 0.85rem; color: var(--suave); }
