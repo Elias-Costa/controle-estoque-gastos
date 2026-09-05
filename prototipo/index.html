@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Protótipo E-02 — fichinhas</title>
+    <link rel="stylesheet" href="estilo.css" />
+  </head>
+
+  <!--
+    Protótipo navegável de E-02. Não é o aplicativo: não salva nada, não tem banco,
+    não tem rede, e é descartado depois da sessão com a usuária (D-023, emenda de 2026-09-05).
+
+    De propósito **não existe tarja de "protótipo" na tela**: RT-14 mede o que ela faz diante
+    da tela sem instrução, e um aviso técnico no topo é jargão (RI-07) e ruído na medição.
+    Quem avisa que nada fica salvo é o mantenedor, em voz alta, antes de começar — está no
+    roteiro da sessão, em docs/roteiro-sessao-e02.md.
+  -->
+  <body>
+    <!-- ================= TELA INICIAL =================
+         Existe porque RNF-02 conta os toques "a partir da tela inicial". Sem ela o cronômetro
+         não tem começo e o critério de aceite da etapa não é mensurável.
+         Conteúdo conforme E-09: quem deve e quanto, com busca (RF-01, RF-10).
+         Sem total agregado — "a receber na rua" é RF-19, fase F4. -->
+    <section class="tela" id="tela-inicio">
+      <header class="topo">
+        <h1>Fichinhas</h1>
+      </header>
+
+      <input
+        id="busca"
+        class="busca"
+        type="search"
+        inputmode="search"
+        placeholder="Procurar pelo nome"
+        aria-label="Procurar pelo nome"
+      />
+
+      <ul class="lista" id="lista-fichas"></ul>
+
+      <div class="rodape-acao">
+        <button type="button" class="botao-principal" data-ir="tela-venda-cliente">Nova venda</button>
+      </div>
+    </section>
+
+    <!-- ================= FICHA =================
+         RF-02. O topo mostra, sem rolagem, quanto ela deve hoje e qual a próxima parcela.
+         O histórico vem abaixo, em ordem cronológica inversa. Parcela vencida é destacada. -->
+    <section class="tela" id="tela-ficha" hidden>
+      <header class="topo">
+        <button type="button" class="voltar" data-ir="tela-inicio" aria-label="Voltar">&lsaquo;</button>
+        <h1 id="ficha-nome">&mdash;</h1>
+      </header>
+
+      <div class="cartao-saldo">
+        <p class="rotulo">Deve</p>
+        <p class="valor-grande" id="ficha-saldo">&mdash;</p>
+        <p class="proxima" id="ficha-proxima">&mdash;</p>
+      </div>
+
+      <button type="button" class="botao-principal botao-recebi" id="botao-recebi">Recebi</button>
+
+      <h2 class="titulo-secao">O que aconteceu</h2>
+      <ul class="historico" id="ficha-historico"></ul>
+
+      <div class="rodape-acao">
+        <button type="button" class="botao-secundario" id="botao-venda-daqui">Vender fiado para ela</button>
+      </div>
+    </section>
+
+    <!-- ================= RECEBIMENTO =================
+         RF-06. O valor já vem preenchido com a parcela em aberto mais antiga (D-006) e o
+         abatimento é automático: nenhuma decisão sobre onde abater é pedida a ela (RI-08).
+         Caminho projetado: ficha (1) -> Recebi (2) -> Confirmar (3). Três toques.
+         **Projetado, não medido** — quem mede é ela (AGENTS.md §8). -->
+    <section class="tela" id="tela-recebimento" hidden>
+      <header class="topo">
+        <button type="button" class="voltar" data-ir="tela-ficha" aria-label="Voltar">&lsaquo;</button>
+        <h1 id="recebimento-titulo">Recebi</h1>
+      </header>
+
+      <label class="rotulo-campo" for="recebimento-valor">Quanto ela pagou</label>
+      <div class="campo-dinheiro">
+        <span class="prefixo">R$</span>
+        <input
+          id="recebimento-valor"
+          class="entrada-dinheiro"
+          type="text"
+          inputmode="decimal"
+          autocomplete="off"
+        />
+      </div>
+
+      <fieldset class="escolha">
+        <legend class="rotulo-campo">Como</legend>
+        <label class="opcao"><input type="radio" name="forma" value="Pix" checked /><span>Pix</span></label>
+        <label class="opcao"><input type="radio" name="forma" value="dinheiro" /><span>Dinheiro</span></label>
+      </fieldset>
+
+      <fieldset class="escolha">
+        <legend class="rotulo-campo">Quando</legend>
+        <label class="opcao"><input type="radio" name="quando-recebi" value="hoje" checked /><span>Hoje</span></label>
+        <label class="opcao"><input type="radio" name="quando-recebi" value="ontem" /><span>Ontem</span></label>
+        <label class="opcao"><input type="radio" name="quando-recebi" value="outro" /><span>Outro dia</span></label>
+      </fieldset>
+
+      <div class="rodape-acao">
+        <button type="button" class="botao-principal" id="botao-confirmar-recebimento">Confirmar</button>
+      </div>
+    </section>
+
+    <!-- ================= CONFIRMAÇÃO DO RECEBIMENTO =================
+         É o que ela vai conferir em voz alta com a cliente: quanto entrou e quanto ficou.
+         Sem botão de WhatsApp: recibo é RF-09, escopo de E-12, não das três telas de E-02. -->
+    <section class="tela tela-confirmacao" id="tela-recebido" hidden>
+      <p class="marca-certo" aria-hidden="true">&check;</p>
+      <p class="confirmacao-linha" id="recebido-linha">&mdash;</p>
+      <p class="confirmacao-saldo" id="recebido-saldo">&mdash;</p>
+      <div class="rodape-acao">
+        <button type="button" class="botao-principal" data-ir="tela-ficha">Ver a fichinha</button>
+        <button type="button" class="botao-secundario" data-ir="tela-inicio">Voltar para o começo</button>
+      </div>
+    </section>
+
+    <!-- ================= NOVA VENDA: PARA QUEM =================
+         Separada da tela de itens de propósito: escolher a pessoa e listar o que ela levou
+         são dois momentos, e juntá-los numa tela só encheria a primeira dobra. -->
+    <section class="tela" id="tela-venda-cliente" hidden>
+      <header class="topo">
+        <button type="button" class="voltar" data-ir="tela-inicio" aria-label="Voltar">&lsaquo;</button>
+        <h1>Para quem?</h1>
+      </header>
+
+      <input
+        id="busca-venda"
+        class="busca"
+        type="search"
+        inputmode="search"
+        placeholder="Procurar pelo nome"
+        aria-label="Procurar pelo nome"
+      />
+
+      <ul class="lista" id="lista-venda"></ul>
+
+      <div class="rodape-acao">
+        <button type="button" class="botao-secundario" id="botao-cliente-nova">+ É uma cliente nova</button>
+      </div>
+    </section>
+
+    <!-- ================= NOVA VENDA: O QUE LEVOU =================
+         RF-03, RF-04, RF-05, RN-09. Item com descrição livre, porque em F1 não existe cadastro
+         de produto (D-004). O preço é digitado por ela — revendedora faz preço diferente para
+         quem ela quer (briefing §3). -->
+    <section class="tela" id="tela-venda" hidden>
+      <header class="topo">
+        <button type="button" class="voltar" data-ir="tela-venda-cliente" aria-label="Voltar">&lsaquo;</button>
+        <h1 id="venda-titulo">O que ela levou</h1>
+      </header>
+
+      <ul class="itens" id="venda-itens"></ul>
+
+      <button type="button" class="botao-secundario largura-cheia" id="botao-mais-item">+ Mais um</button>
+
+      <p class="total-linha">Total <strong id="venda-total">R$ 0,00</strong></p>
+
+      <fieldset class="escolha">
+        <legend class="rotulo-campo">Como ela vai pagar</legend>
+        <label class="opcao"><input type="radio" name="pagamento" value="fiado" checked /><span>Fiado</span></label>
+        <label class="opcao"><input type="radio" name="pagamento" value="avista" /><span>Pagou agora</span></label>
+      </fieldset>
+
+      <div id="bloco-parcelas">
+        <p class="rotulo-campo">Em quantas vezes</p>
+        <div class="vezes" id="venda-vezes">
+          <button type="button" class="vez ativa" data-vezes="1">1&times;</button>
+          <button type="button" class="vez" data-vezes="2">2&times;</button>
+          <button type="button" class="vez" data-vezes="3">3&times;</button>
+          <button type="button" class="vez" data-vezes="4">4&times;</button>
+        </div>
+        <ul class="parcelas" id="venda-parcelas"></ul>
+      </div>
+
+      <fieldset class="escolha">
+        <legend class="rotulo-campo">Quando foi</legend>
+        <label class="opcao"><input type="radio" name="quando-venda" value="hoje" checked /><span>Hoje</span></label>
+        <label class="opcao"><input type="radio" name="quando-venda" value="ontem" /><span>Ontem</span></label>
+        <label class="opcao"><input type="radio" name="quando-venda" value="outro" /><span>Outro dia</span></label>
+      </fieldset>
+
+      <div class="rodape-acao">
+        <button type="button" class="botao-principal" id="botao-salvar-venda">Pronto</button>
+      </div>
+    </section>
+
+    <!-- ================= CONFIRMAÇÃO DA VENDA ================= -->
+    <section class="tela tela-confirmacao" id="tela-vendido" hidden>
+      <p class="marca-certo" aria-hidden="true">&check;</p>
+      <p class="confirmacao-linha" id="vendido-linha">&mdash;</p>
+      <p class="confirmacao-saldo" id="vendido-saldo">&mdash;</p>
+      <div class="rodape-acao">
+        <button type="button" class="botao-principal" data-ir="tela-ficha">Ver a fichinha</button>
+        <button type="button" class="botao-secundario" data-ir="tela-inicio">Voltar para o começo</button>
+      </div>
+    </section>
+
+    <script src="prototipo.js"></script>
+  </body>
+</html>

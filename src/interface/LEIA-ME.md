@@ -17,4 +17,6 @@ Regras que valem aqui e não são negociáveis por tela:
 `number` é legítimo aqui, na borda de formatação — e é por isso que a guarda de lint de EL-03 fica no
 domínio e não solta pelo projeto.
 
-Preenchida a partir de **E-02** (protótipo validado com a usuária) e **E-09**.
+Preenchida a partir de **E-09**, e não de E-02: pela emenda de `D-023` (2026-09-05), o protótipo de E-02
+é descartável e mora em `prototipo/`, fora de `src/`. O que E-02 entrega para cá não é código — é o
+achado da sessão com a usuária, e E-09 precisa justificar por escrito toda divergência em relação a ele.

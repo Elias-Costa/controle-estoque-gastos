@@ -9,6 +9,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "preview:lan": "LAN=1 vite preview --host --port 5173",
+    "prototipo": "vite prototipo --port 5174 --host",
     "typecheck": "tsc -b --noEmit",
     "lint": "oxlint",
     "test": "bun test",

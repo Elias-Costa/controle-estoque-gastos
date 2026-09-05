@@ -1,0 +1,505 @@
+/*
+ * Estilo do protótipo de E-02.
+ *
+ * Não é o sistema visual do produto — D-023 decidiu Tailwind com componentes próprios, e
+ * eles nascem em E-09. Aqui só importa que a tela na mão dela tenha o tamanho e o contraste
+ * de verdade: um protótipo com fonte pequena mede a vista dela, não o fluxo.
+ *
+ * O que **é** requisito e está reproduzido fielmente:
+ * - alvo de toque de no mínimo 44x44 pt (RNF-03);
+ * - tipografia grande por padrão (RNF-03);
+ * - contraste alto, claro e escuro (RNF-03).
+ */
+
+:root {
+  --fundo: #f7f7f8;
+  --papel: #ffffff;
+  --tinta: #16181d;
+  --suave: #555961;
+  --borda: #d9dbe0;
+  --acento: #0b5f3a;
+  --acento-tinta: #ffffff;
+  --atraso: #9a1b1b;
+  --atraso-fundo: #fdeaea;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fundo: #101216;
+    --papel: #191c22;
+    --tinta: #f2f3f5;
+    --suave: #a8adb8;
+    --borda: #2c313a;
+    --acento: #2f9e6b;
+    --acento-tinta: #06120c;
+    --atraso: #ff8f8f;
+    --atraso-fundo: #3a1c1c;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--fundo);
+  color: var(--tinta);
+  /* 18px: o público é uma pessoa que não usa aplicativos e vai ler isso sem óculos de perto. */
+  font: 18px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Instalado em tela cheia, o iPhone não reserva a barra de status: a área segura é nossa. */
+.tela {
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: max(0.75rem, env(safe-area-inset-top)) 1rem 7rem;
+}
+
+.tela[hidden] {
+  display: none;
+}
+
+/* ---------- topo ---------- */
+
+.topo {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.topo h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  line-height: 1.2;
+}
+
+.voltar {
+  /* 44px por RNF-03, e não por acaso: é o alvo que a mão dela acerta de primeira. */
+  min-width: 44px;
+  min-height: 44px;
+  margin-left: -0.5rem;
+  border: 0;
+  background: none;
+  color: var(--tinta);
+  font-size: 2rem;
+  line-height: 1;
+}
+
+/* ---------- busca e listas ---------- */
+
+.busca {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 0.875rem;
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  background: var(--papel);
+  color: var(--tinta);
+  font: inherit;
+}
+
+.lista {
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lista button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  /* 60px de altura de linha: a lista é o primeiro toque de todo caminho cronometrado. */
+  min-height: 60px;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  margin-bottom: 0.5rem;
+  background: var(--papel);
+  color: var(--tinta);
+  font: inherit;
+  text-align: left;
+}
+
+.lista .nome {
+  font-weight: 600;
+}
+
+.lista .referencia {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 400;
+  color: var(--suave);
+}
+
+.lista .quanto {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.lista .em-atraso .quanto,
+.lista .em-atraso .aviso-atraso {
+  color: var(--atraso);
+}
+
+.aviso-atraso {
+  display: block;
+  font-size: 0.8rem;
+}
+
+/* ---------- ficha ---------- */
+
+/*
+ * RF-02 exige saldo e próxima parcela "no topo e sem rolagem". O cartão é curto de propósito:
+ * o que compete com ele por espaço é o histórico, e o histórico pode rolar.
+ */
+.cartao-saldo {
+  padding: 1rem 1.125rem 1.125rem;
+  border-radius: 16px;
+  background: var(--papel);
+  border: 1px solid var(--borda);
+}
+
+.rotulo {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--suave);
+}
+
+.valor-grande {
+  margin: 0.125rem 0 0;
+  font-size: 2.75rem;
+  font-weight: 700;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+
+.proxima {
+  margin: 0.5rem 0 0;
+  font-size: 1rem;
+  color: var(--suave);
+}
+
+.proxima.vencida {
+  padding: 0.375rem 0.625rem;
+  border-radius: 8px;
+  background: var(--atraso-fundo);
+  color: var(--atraso);
+  font-weight: 600;
+}
+
+.titulo-secao {
+  margin: 1.75rem 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--suave);
+}
+
+.historico {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.historico li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--borda);
+}
+
+.historico .data {
+  flex: none;
+  width: 4.25rem;
+  color: var(--suave);
+  font-variant-numeric: tabular-nums;
+}
+
+.historico .descricao {
+  flex: 1;
+}
+
+.historico .cifra {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.historico .paga {
+  color: var(--suave);
+}
+
+.historico .vencida .descricao,
+.historico .vencida .cifra {
+  color: var(--atraso);
+  font-weight: 600;
+}
+
+/* ---------- campos ---------- */
+
+.rotulo-campo {
+  display: block;
+  margin: 1.25rem 0 0.375rem;
+  font-size: 0.95rem;
+  color: var(--suave);
+}
+
+.campo-dinheiro {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.875rem;
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  background: var(--papel);
+}
+
+.campo-dinheiro .prefixo {
+  font-size: 1.5rem;
+  color: var(--suave);
+}
+
+/*
+ * O valor é o campo mais importante da tela mais frequente do sistema (RF-06).
+ * Ele é grande para ela conferir de relance, com a cliente na frente.
+ */
+.entrada-dinheiro {
+  width: 100%;
+  min-height: 64px;
+  border: 0;
+  background: none;
+  color: var(--tinta);
+  /*
+   * Propriedades separadas, e não o atalho `font:`. No atalho, `inherit` não é família válida
+   * e o navegador descarta a declaração inteira em silêncio — o campo volta ao tamanho padrão
+   * do sistema. Foi o que aconteceu na primeira versão desta folha, e só apareceu na captura.
+   */
+  font-family: inherit;
+  font-size: 2.25rem;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.entrada-dinheiro:focus,
+.busca:focus,
+.texto-item:focus {
+  outline: 2px solid var(--acento);
+  outline-offset: 2px;
+}
+
+.escolha {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.escolha legend {
+  float: left;
+  width: 100%;
+  margin: 1.25rem 0 0.375rem;
+  padding: 0;
+  font-size: 0.95rem;
+  color: var(--suave);
+}
+
+.opcao {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 48px;
+  padding: 0 1rem;
+  border: 1px solid var(--borda);
+  border-radius: 999px;
+  background: var(--papel);
+}
+
+.opcao input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--acento);
+}
+
+.opcao:has(input:checked) {
+  border-color: var(--acento);
+  box-shadow: inset 0 0 0 1px var(--acento);
+  font-weight: 600;
+}
+
+/* ---------- itens da venda ---------- */
+
+.itens {
+  margin: 0.5rem 0 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+
+.itens li {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.texto-item {
+  flex: 1;
+  min-width: 0;
+  min-height: 52px;
+  padding: 0 0.75rem;
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  background: var(--papel);
+  color: var(--tinta);
+  font: inherit;
+}
+
+.texto-item.preco {
+  flex: none;
+  width: 6.5rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.total-linha {
+  display: flex;
+  justify-content: space-between;
+  margin: 0.5rem 0 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--borda);
+  font-size: 1.25rem;
+}
+
+.total-linha strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.vezes {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.vez {
+  flex: 1;
+  min-height: 52px;
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  background: var(--papel);
+  color: var(--tinta);
+  font: inherit;
+}
+
+.vez.ativa {
+  border-color: var(--acento);
+  box-shadow: inset 0 0 0 1px var(--acento);
+  font-weight: 700;
+}
+
+.parcelas {
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.parcelas li {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--borda);
+  font-variant-numeric: tabular-nums;
+}
+
+.parcelas .quando {
+  color: var(--suave);
+}
+
+/* ---------- botões ---------- */
+
+.botao-principal,
+.botao-secundario {
+  width: 100%;
+  /* 56px: acima do mínimo de 44 de propósito. Este é o botão que o polegar procura correndo. */
+  min-height: 56px;
+  padding: 0 1rem;
+  border-radius: 14px;
+  /* Separadas pelo mesmo motivo do campo de dinheiro: `font:` com `inherit` é inválido. */
+  font-family: inherit;
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.botao-principal {
+  border: 0;
+  background: var(--acento);
+  color: var(--acento-tinta);
+}
+
+.botao-secundario {
+  border: 1px solid var(--borda);
+  background: var(--papel);
+  color: var(--tinta);
+}
+
+.largura-cheia {
+  margin-bottom: 0.75rem;
+}
+
+/* O botão de recebimento é o caminho mais frequente do sistema (RF-06): fica na primeira dobra. */
+.botao-recebi {
+  margin-top: 0.75rem;
+  min-height: 64px;
+  font-size: 1.25rem;
+}
+
+/*
+ * Ação principal ancorada embaixo, ao alcance do polegar, e não no fim de uma rolagem.
+ * Numa tela de 812 pt segurada com uma mão só, o topo é a região mais cara de alcançar.
+ */
+.rodape-acao {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: 0.75rem 1rem max(0.75rem, env(safe-area-inset-bottom));
+  background: linear-gradient(to top, var(--fundo) 72%, transparent);
+}
+
+/* ---------- confirmação ---------- */
+
+.tela-confirmacao {
+  padding-top: 3.5rem;
+  text-align: center;
+}
+
+.marca-certo {
+  margin: 0;
+  color: var(--acento);
+  font-size: 3.5rem;
+  line-height: 1;
+}
+
+.confirmacao-linha {
+  margin: 1rem 0 0;
+  font-size: 1.375rem;
+}
+
+.confirmacao-saldo {
+  margin: 0.5rem 0 0;
+  font-size: 1.75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
