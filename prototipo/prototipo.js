@@ -36,7 +36,7 @@ function emReais(centavos) {
 /**
  * Lê o que ela digitou e devolve centavos em bigint.
  *
- * Aceita "30", "30,00", "30.00" e "1.250,00" — porque não sabemos ainda como ela digita, e
+ * Aceita "30", "30,00", "30.00", "1.250" e "1.250,00" — porque não sabemos ainda como ela digita, e
  * recusar um formato no meio da tarefa cronometrada mediria o campo, não o fluxo.
  *
  * **Atenção, e é `D-034` (EM ABERTO):** aqui "3990" vira **R$ 3.990,00**, não R$ 39,90. Boa parte dos
@@ -46,13 +46,25 @@ function emReais(centavos) {
  *
  * O protótipo deixa **de propósito** como está: a sessão de E-02 existe para ver o que ela digita
  * quando ninguém explicou nada. Corrigir aqui seria responder `D-034` sem perguntar a ela.
+ *
+ * **O que foi corrigido na revisão de 2026-09-05, e não é `D-034`:** "1.250" voltava R$ 1,25, porque
+ * o último separador era tratado como decimal sempre. Isso não é convenção de digitação em aberto —
+ * é gramática de pt-BR, onde "1.250" é mil duzentos e cinquenta —, e o erro era de **1000×**, na
+ * direção contrária ao de `D-034`. A regra agora é assimétrica porque a língua é: **vírgula é sempre
+ * decimal; ponto é decimal exceto quando vem seguido de exatamente três dígitos.** Nenhum dos casos
+ * que `D-034` registra mudou de resultado.
  */
 function centavosDeTexto(texto) {
   const limpo = String(texto).replace(/[^\d,.]/g, '')
-  // O último separador é o decimal; os anteriores são milhar.
-  const ultimoSeparador = Math.max(limpo.lastIndexOf(','), limpo.lastIndexOf('.'))
-  const parteInteira = (ultimoSeparador === -1 ? limpo : limpo.slice(0, ultimoSeparador)).replace(/\D/g, '')
-  const parteDecimal = ultimoSeparador === -1 ? '' : limpo.slice(ultimoSeparador + 1).replace(/\D/g, '')
+  const virgula = limpo.lastIndexOf(',')
+  const ponto = limpo.lastIndexOf('.')
+  // Três dígitos depois do ponto é milhar, nunca centavo: dinheiro não tem três casas decimais.
+  // A vírgula não passa por essa peneira — "39,900" continua R$ 39,90, que é o erro de digitação
+  // mais provável no teclado dela; "1.250" vira R$ 1.250,00.
+  const pontoEhDecimal = ponto !== -1 && limpo.length - ponto - 1 !== 3
+  const separador = virgula !== -1 ? virgula : pontoEhDecimal ? ponto : -1
+  const parteInteira = (separador === -1 ? limpo : limpo.slice(0, separador)).replace(/\D/g, '')
+  const parteDecimal = separador === -1 ? '' : limpo.slice(separador + 1).replace(/\D/g, '')
   const centavos = (parteDecimal + '00').slice(0, 2)
   return BigInt(parteInteira || '0') * 100n + BigInt(centavos)
 }
