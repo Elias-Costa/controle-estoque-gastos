@@ -97,10 +97,44 @@ function repartirEmParcelas(totalCentavos, vezes) {
  * Datas em ISO por dentro e "dd/mm" na tela. O ISO existe por um motivo prático: ordenar o
  * histórico em ordem cronológica inversa (RF-02) e decidir o que está vencido são comparações
  * de texto, sem biblioteca e sem fuso.
+ *
+ * **Tudo aqui é relativo ao relógio do aparelho, e isso é correção da revisão de 2026-09-05.**
+ * As datas eram fixas em 05/09/2026. E-02 está bloqueada esperando o iPhone dela e a agenda dela
+ * (`AGENTS.md` §6), então **o dia da sessão é desconhecido**: com datas fixas, no primeiro dia
+ * seguinte a ficha passa a anunciar "Próxima: R$ 30,00 em 10/09" para uma data já vencida, os
+ * lançamentos que ela criar durante a tarefa aparecem carimbados com um dia que não é hoje, e as
+ * parcelas sugeridas de uma venda nova caem no passado. Nenhuma dessas três coisas é defeito do
+ * produto — são defeitos do **instrumento**, do mesmo tipo do saldo guardado à mão que a revisão
+ * anterior pegou, e produziriam falha falsa de EL-08 na única sessão que mede EL-08.
  */
-const HOJE = '2026-09-05'
-const ONTEM = '2026-09-04'
-const OUTRO_DIA = '2026-08-30'
+const AGORA = new Date()
+
+/** Uma data local vira "2026-09-05". Montada campo a campo, para não passar por fuso nenhum. */
+function iso(data) {
+  const mes = String(data.getMonth() + 1).padStart(2, '0')
+  const dia = String(data.getDate()).padStart(2, '0')
+  return `${data.getFullYear()}-${mes}-${dia}`
+}
+
+/** O ISO de N dias a partir de hoje. Negativo é passado. */
+const emDias = (quantidade) => iso(new Date(AGORA.getFullYear(), AGORA.getMonth(), AGORA.getDate() + quantidade))
+
+/**
+ * O ISO de N meses a partir de hoje, preso ao último dia quando o mês é mais curto.
+ *
+ * Sem o grampo, uma venda feita em 31/01 sugeriria a parcela em 03/03 — o estouro natural do
+ * `Date` —, e ela leria isso como erro do sistema no meio da tarefa.
+ */
+function emMeses(quantidade) {
+  const alvo = new Date(AGORA.getFullYear(), AGORA.getMonth() + quantidade, 1)
+  const ultimoDoMes = new Date(alvo.getFullYear(), alvo.getMonth() + 1, 0).getDate()
+  alvo.setDate(AGORA.getDate() < ultimoDoMes ? AGORA.getDate() : ultimoDoMes)
+  return iso(alvo)
+}
+
+const HOJE = emDias(0)
+const ONTEM = emDias(-1)
+const OUTRO_DIA = emDias(-6)
 
 /** "2026-09-28" -> "28/09". */
 const comoEla = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
@@ -108,61 +142,83 @@ const comoEla = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
 /** Vencida é a parcela cuja data já passou. Comparação de texto ISO, que ordena igual à data. */
 const estaVencida = (parcela) => parcela.restante > 0n && parcela.data < HOJE
 
+/**
+ * Há quantos dias a parcela venceu — é o que RF-10 pede na linha da lista.
+ *
+ * As duas datas são medidas ao meio-dia de propósito: na virada do horário de verão o dia tem 23
+ * ou 25 horas, e a divisão por 24 h a partir da meia-noite erraria um dia inteiro.
+ */
+function diasDeAtraso(parcela) {
+  const meioDia = (data) => new Date(`${data}T12:00:00`).getTime()
+  return Math.round((meioDia(HOJE) - meioDia(parcela.data)) / 86400000)
+}
+
 /** Datas sugeridas para parcelas novas: de mês em mês (RF-05). */
-const DATAS_SUGERIDAS = ['2026-10-05', '2026-11-05', '2026-12-05', '2027-01-05']
+const DATAS_SUGERIDAS = [emMeses(1), emMeses(2), emMeses(3), emMeses(4)]
 
 // ---------------------------------------------------------------------------
 // Dados falsos
 // ---------------------------------------------------------------------------
 
 /*
- * Nomes e valores inventados, montados em torno de HOJE = 05/09: a Cláudia tem parcela vencida
- * (RF-02 exige que vencida seja visualmente distinta) e as demais estão a vencer.
+ * Nomes e valores inventados. **As datas são deslocamentos em dias a partir de hoje**, e não datas
+ * fixas: o que precisa valer no dia da sessão não é "28/08", é que **a Cláudia esteja vencida** —
+ * RF-02 exige que parcela vencida apareça distinta, e a tarefa 1 do roteiro é justamente ela.
+ *
+ * Cada ficha existe para encenar um caso: Rosa está em dia e já pagou uma parcela; Cláudia está
+ * atrasada; Vera tem parcela única a vencer (é a cliente da tarefa 2); Marlene não deve nada;
+ * Ivone tem três parcelas em aberto. Mexer nos números muda o que a sessão consegue observar.
  *
  * `parcelas` está sempre em ordem de vencimento — é o que faz o abatimento de RN-02 percorrer da
  * mais antiga para a mais nova sem precisar reordenar nada.
  */
 const FICHAS = [
   {
+    // Em dia: comprou há 26 dias em 4×, já pagou a primeira, a próxima vence daqui a 5 dias.
     id: 'rosa',
     nome: 'Dona Rosa',
     referencia: 'vizinha do 302',
     parcelas: [
-      { valor: 3000n, restante: 0n, data: '2026-08-10', ordem: 1, de: 4 },
-      { valor: 3000n, restante: 3000n, data: '2026-09-10', ordem: 2, de: 4 },
-      { valor: 3000n, restante: 3000n, data: '2026-10-10', ordem: 3, de: 4 },
-      { valor: 3000n, restante: 3000n, data: '2026-11-10', ordem: 4, de: 4 },
+      { valor: 3000n, restante: 0n, data: emDias(-26), ordem: 1, de: 4 },
+      { valor: 3000n, restante: 3000n, data: emDias(5), ordem: 2, de: 4 },
+      { valor: 3000n, restante: 3000n, data: emDias(35), ordem: 3, de: 4 },
+      { valor: 3000n, restante: 3000n, data: emDias(66), ordem: 4, de: 4 },
     ],
     eventos: [
-      { data: '2026-08-28', descricao: 'Pagou no Pix', valor: -3000n, tipo: 'recebimento' },
-      { data: '2026-08-10', descricao: 'Creme, perfume e sabonete', valor: 12000n, tipo: 'venda' },
+      { data: emDias(-8), descricao: 'Pagou no Pix', valor: -3000n, tipo: 'recebimento' },
+      { data: emDias(-26), descricao: 'Creme, perfume e sabonete', valor: 12000n, tipo: 'venda' },
     ],
   },
   {
+    // A cliente da tarefa 1 (roteiro §4). A primeira parcela está **vencida há 8 dias**, e é ela
+    // que o botão "Recebi R$ 30,00" propõe abater. Deve R$ 60,00 no total: depois do recebimento
+    // da tarefa, a confirmação diz "ainda deve R$ 30,00" — que é o que ela vai conferir na ficha.
     id: 'claudia',
     nome: 'Cláudia',
     referencia: 'do salão',
     parcelas: [
-      { valor: 3000n, restante: 3000n, data: '2026-08-28', ordem: 1, de: 2 },
-      { valor: 3000n, restante: 3000n, data: '2026-09-28', ordem: 2, de: 2 },
+      { valor: 3000n, restante: 3000n, data: emDias(-8), ordem: 1, de: 2 },
+      { valor: 3000n, restante: 3000n, data: emDias(23), ordem: 2, de: 2 },
     ],
-    eventos: [{ data: '2026-07-28', descricao: 'Shampoo e condicionador', valor: 6000n, tipo: 'venda' }],
+    eventos: [{ data: emDias(-39), descricao: 'Shampoo e condicionador', valor: 6000n, tipo: 'venda' }],
   },
   {
+    // A cliente da tarefa 2 (roteiro §5): parcela única a vencer, ficha curta, nada atrasado.
     id: 'vera',
     nome: 'Vera',
     referencia: 'irmã da Sandra',
-    parcelas: [{ valor: 4500n, restante: 4500n, data: '2026-09-15', ordem: 1, de: 1 }],
-    eventos: [{ data: '2026-08-15', descricao: 'Kit de maquiagem', valor: 4500n, tipo: 'venda' }],
+    parcelas: [{ valor: 4500n, restante: 4500n, data: emDias(10), ordem: 1, de: 1 }],
+    eventos: [{ data: emDias(-21), descricao: 'Kit de maquiagem', valor: 4500n, tipo: 'venda' }],
   },
   {
+    // Quitada: a lista precisa ter alguém "em dia" para o vermelho das outras significar alguma coisa.
     id: 'marlene',
     nome: 'Marlene',
     referencia: 'da igreja',
-    parcelas: [{ valor: 8000n, restante: 0n, data: '2026-08-30', ordem: 1, de: 1 }],
+    parcelas: [{ valor: 8000n, restante: 0n, data: emDias(-6), ordem: 1, de: 1 }],
     eventos: [
-      { data: '2026-08-30', descricao: 'Pagou tudo, em dinheiro', valor: -8000n, tipo: 'recebimento' },
-      { data: '2026-08-02', descricao: 'Hidratante e batom', valor: 8000n, tipo: 'venda' },
+      { data: emDias(-6), descricao: 'Pagou tudo, em dinheiro', valor: -8000n, tipo: 'recebimento' },
+      { data: emDias(-34), descricao: 'Hidratante e batom', valor: 8000n, tipo: 'venda' },
     ],
   },
   {
@@ -170,11 +226,11 @@ const FICHAS = [
     nome: 'Ivone',
     referencia: 'do trabalho do Zé',
     parcelas: [
-      { valor: 4000n, restante: 4000n, data: '2026-09-12', ordem: 1, de: 3 },
-      { valor: 4000n, restante: 4000n, data: '2026-10-12', ordem: 2, de: 3 },
-      { valor: 4000n, restante: 4000n, data: '2026-11-12', ordem: 3, de: 3 },
+      { valor: 4000n, restante: 4000n, data: emDias(7), ordem: 1, de: 3 },
+      { valor: 4000n, restante: 4000n, data: emDias(37), ordem: 2, de: 3 },
+      { valor: 4000n, restante: 4000n, data: emDias(68), ordem: 3, de: 3 },
     ],
-    eventos: [{ data: '2026-08-20', descricao: 'Quatro coisas do catálogo', valor: 12000n, tipo: 'venda' }],
+    eventos: [{ data: emDias(-16), descricao: 'Quatro coisas do catálogo', valor: 12000n, tipo: 'venda' }],
   },
 ]
 
@@ -246,6 +302,15 @@ const estado = {
     { descricao: '', preco: '' },
     { descricao: '', preco: '' },
   ],
+  /*
+   * Para onde o "voltar" da tela de venda leva.
+   *
+   * A tela de venda tem duas portas de entrada — a lista "Para quem?" e o botão "Vender fiado para
+   * ela", dentro da ficha —, e o botão de voltar apontava fixo para a primeira. Quem entrava pela
+   * ficha e desistia caía numa tela que **nunca tinha visto**, procurando o caminho de volta para a
+   * ficha da cliente. Achado na revisão de 2026-09-05, por execução.
+   */
+  voltarDaVenda: 'tela-venda-cliente',
 }
 
 const elemento = (id) => document.getElementById(id)
@@ -319,9 +384,12 @@ function desenharLista(alvo, filtro, aoEscolher) {
     quanto.className = 'quanto'
     quanto.textContent = saldo === 0n ? 'em dia' : emReais(saldo)
     if (atrasada) {
+      // "há quantos dias" é literal de RF-10, e não enfeite: é o que ordena a cobrança dela na
+      // rua. A versão anterior dizia só "atrasada", que não distingue um dia de dois meses.
+      const dias = diasDeAtraso(proxima)
       const aviso = document.createElement('span')
       aviso.className = 'aviso-atraso'
-      aviso.textContent = 'atrasada'
+      aviso.textContent = dias === 1 ? 'atrasada há 1 dia' : `atrasada há ${dias} dias`
       quanto.append(aviso)
     }
 
@@ -511,9 +579,15 @@ function desenharItens() {
   })
 }
 
-/** Abre a venda para uma cliente já escolhida. */
-function abrirVenda(ficha) {
+/**
+ * Abre a venda para uma cliente já escolhida.
+ *
+ * `origem` é a tela para onde o botão de voltar leva — ver `estado.voltarDaVenda`. O padrão serve
+ * a chamada que vem da lista, que é a que `desenharLista` faz com um argumento só.
+ */
+function abrirVenda(ficha, origem = 'tela-venda-cliente') {
   estado.fichaAberta = ficha
+  estado.voltarDaVenda = origem
   estado.vezes = 1
   estado.itens = [
     { descricao: '', preco: '' },
@@ -528,12 +602,18 @@ function abrirVenda(ficha) {
   mostrarTela('tela-venda')
 }
 
-/** Junta o que ela digitou numa frase para o histórico: "Hidratante e batom". */
+/**
+ * Junta o que ela digitou numa frase para o histórico: "Hidratante e Batom".
+ *
+ * O texto sai como ela escreveu. A versão anterior passava só o último item para minúscula, e o
+ * resultado era "Creme, Perfume e sabonete" — uma inconsistência visível na tela dela, produzida
+ * pelo protótipo e não por ela.
+ */
 function descricaoDosItens() {
   const nomes = estado.itens.map((i) => i.descricao.trim()).filter((d) => d !== '')
   if (nomes.length === 0) return `Levou ${estado.itens.length} coisas`
   if (nomes.length === 1) return nomes[0]
-  return `${nomes.slice(0, -1).join(', ')} e ${nomes[nomes.length - 1].toLowerCase()}`
+  return `${nomes.slice(0, -1).join(', ')} e ${nomes[nomes.length - 1]}`
 }
 
 /** Fecha a venda: cria as parcelas, lança o evento e mostra o saldo novo. */
@@ -588,8 +668,12 @@ elemento('botao-recebi').addEventListener('click', abrirRecebimento)
 elemento('botao-confirmar-recebimento').addEventListener('click', confirmarRecebimento)
 elemento('botao-salvar-venda').addEventListener('click', salvarVenda)
 elemento('botao-venda-daqui').addEventListener('click', () => {
-  if (estado.fichaAberta !== null) abrirVenda(estado.fichaAberta)
+  // Entrou pela ficha, então o voltar devolve à ficha — e não à lista "Para quem?", que ela
+  // não chegou a ver por este caminho.
+  if (estado.fichaAberta !== null) abrirVenda(estado.fichaAberta, 'tela-ficha')
 })
+
+elemento('botao-voltar-venda').addEventListener('click', () => mostrarTela(estado.voltarDaVenda))
 
 elemento('botao-mais-item').addEventListener('click', () => {
   estado.itens.push({ descricao: '', preco: '' })
@@ -601,9 +685,22 @@ elemento('botao-mais-item').addEventListener('click', () => {
  * precisa mostrar **se ela procura por ele** durante a venda — se procurar, o cadastro tem que
  * caber no caminho da venda, e isso é achado, não suposição. A ficha criada entra na lista para
  * que o resto do fluxo continue coerente.
+ *
+ * O nome vem do que ela **já digitou na busca**: quem toca neste botão acabou de procurar alguém e
+ * não achou, e o nome está na tela. Sem isso o protótipo batizava a ficha de "Cliente nova" e as
+ * telas seguintes falavam de uma pessoa que não existe — a observação morria no primeiro toque,
+ * que é justamente o que o botão foi posto ali para enxergar. Nome é o único campo obrigatório de
+ * RF-01; o resto do cadastro continua fora do protótipo, e continua sendo E-09.
  */
 elemento('botao-cliente-nova').addEventListener('click', () => {
-  const nova = { id: `nova-${FICHAS.length}`, nome: 'Cliente nova', referencia: '', parcelas: [], eventos: [] }
+  const digitado = elemento('busca-venda').value.trim()
+  const nova = {
+    id: `nova-${FICHAS.length}`,
+    nome: digitado === '' ? 'Cliente nova' : digitado,
+    referencia: '',
+    parcelas: [],
+    eventos: [],
+  }
   FICHAS.push(nova)
   abrirVenda(nova)
 })

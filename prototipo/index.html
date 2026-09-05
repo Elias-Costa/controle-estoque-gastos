@@ -154,7 +154,9 @@
          quem ela quer (briefing §3). -->
     <section class="tela" id="tela-venda" hidden>
       <header class="topo">
-        <button type="button" class="voltar" data-ir="tela-venda-cliente" aria-label="Voltar">&lsaquo;</button>
+        <!-- Sem `data-ir`: esta tela tem duas portas de entrada (a lista "Para quem?" e a ficha),
+             e o destino do voltar depende de por onde ela entrou. Ver `estado.voltarDaVenda`. -->
+        <button type="button" class="voltar" id="botao-voltar-venda" aria-label="Voltar">&lsaquo;</button>
         <h1 id="venda-titulo">O que ela levou</h1>
       </header>
 
