@@ -328,6 +328,21 @@ const elemento = (id) => document.getElementById(id)
 const escolhido = (nome) => document.querySelector(`input[name="${nome}"]:checked`).value
 
 /**
+ * Devolve um grupo de rádio à opção que o HTML declara `checked`.
+ *
+ * Existe porque **nenhum grupo de rádio se reinicializava** entre uma entrada e outra na mesma
+ * carga da página: o que ela escolheu num lançamento continuava marcado no seguinte, sem ela
+ * escolher de novo. Achado na revisão de 2026-09-05, por execução.
+ *
+ * Só quem chama decide o que reinicializar — "Como" (Pix/Dinheiro) fica de fora de propósito,
+ * por decisão do mantenedor: forma de pagamento não é data, e a confirmação já diz em voz alta
+ * "Pagou em dinheiro", então ela enxerga o que ficou marcado.
+ */
+function marcar(nome, valor) {
+  document.querySelector(`input[name="${nome}"][value="${valor}"]`).checked = true
+}
+
+/**
  * Troca a tela visível **e redesenha o que ela mostra**.
  *
  * O redesenho mora aqui, e não em cada botão, por causa do defeito que a primeira versão tinha:
@@ -487,6 +502,10 @@ function abrirRecebimento() {
 
   elemento('recebimento-titulo').textContent = `Recebi da ${ficha.nome}`
   elemento('recebimento-valor').value = emReais(proxima.restante).replace('R$ ', '')
+  // Todo recebimento nasce como "Hoje". Sem isto o "Ontem" de um lançamento anterior seguia
+  // marcado e o seguinte era carimbado com uma data que ela não escolheu **para ele** — a mesma
+  // classe do botão "Outro dia" que a revisão anterior retirou (RF-05, escopo de E-10).
+  marcar('quando-recebi', 'hoje')
   atualizarRecebimento()
   mostrarTela('tela-recebimento')
 }
@@ -623,6 +642,19 @@ function abrirVenda(ficha, origem = 'tela-venda-cliente') {
     { descricao: '', preco: '' },
   ]
   elemento('venda-titulo').textContent = `O que a ${ficha.nome} levou`
+  /*
+   * Toda venda nasce **fiado** e **hoje** — as duas opções que o HTML declara `checked`.
+   *
+   * Os rádios não se reinicializavam: depois de uma venda à vista, entrar de novo por "Vender
+   * fiado para ela" abria a tela com "À vista" marcado e o bloco "Em quantas vezes" **oculto**.
+   * O botão que ela acabou de tocar dizia fiado e a tela entregava o contrário, sem parcela
+   * nenhuma. "Quando foi" tinha o mesmo problema do recebimento — ver `abrirRecebimento`.
+   * Achado na revisão de 2026-09-05, por execução.
+   *
+   * Precisa vir antes de `atualizarVenda()`, que lê estes dois rádios para decidir o que mostrar.
+   */
+  marcar('pagamento', 'fiado')
+  marcar('quando-venda', 'hoje')
   for (const botao of document.querySelectorAll('#venda-vezes .vez')) {
     botao.classList.toggle('ativa', botao.dataset.vezes === '1')
   }
