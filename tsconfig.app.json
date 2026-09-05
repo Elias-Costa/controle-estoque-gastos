@@ -17,6 +17,10 @@
     "jsx": "react-jsx",
 
     /* Linting */
+    "strict": true,
+    /* Fora de `strict`, e deliberado: parcelas são arrays, e `parcelas[0]` sem
+       verificação é exatamente a classe de erro que EL-02 pune (RN-01). */
+    "noUncheckedIndexedAccess": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
