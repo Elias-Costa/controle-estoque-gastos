@@ -2,7 +2,10 @@
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.testes.tsbuildinfo",
     "target": "es2023",
-    "lib": ["ES2023"],
+    /* `DOM` entrou em E-05 e é só por tipos: `fake-indexeddb` declara suas classes como
+       `typeof IDBFactory` etc., nomes que vivem na lib DOM. O runtime dos testes continua
+       sendo o Bun, sem `document` nem `window` — um teste que os use compila e quebra. */
+    "lib": ["ES2023", "DOM"],
     "types": ["bun"],
     "skipLibCheck": true,
 

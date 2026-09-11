@@ -52,10 +52,10 @@ As camadas são separadas por pasta, e a fronteira do domínio é aplicada por l
 
 ```
 src/dominio/          regras do negócio, puras. Só importa caminhos relativos
-src/dados/            base local (Dexie) e repositórios
+src/dados/            base local (Dexie), repositório e as operações que a tela chama
 src/sincronizacao/    fila de operações e envio
 src/interface/        as telas
-src/plataforma/       service worker e carimbo de versão
+src/plataforma/       service worker, carimbo de versão e pedido de persistência
 ```
 
 ## Stack
@@ -65,7 +65,7 @@ src/plataforma/       service worker e carimbo de versão
 | Interface | React + Vite + TypeScript, como SPA estática |
 | Base local | Dexie (IndexedDB) |
 | Nuvem | Supabase — Postgres, autenticação e Row Level Security |
-| Runtime e pacotes | Bun — e `bun test` para os testes de unidade |
+| Runtime e pacotes | Bun — e `bun test` para os testes de unidade, com `fake-indexeddb` como dublê da base local (prova a lógica de `src/dados`, não o WebKit) |
 | PWA | `vite-plugin-pwa` |
 
 Não há renderização no servidor: o app é instalado e funciona offline, então o artefato é estático.
