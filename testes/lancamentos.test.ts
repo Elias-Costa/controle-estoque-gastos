@@ -17,6 +17,7 @@ import {
   caminhoDeCorrecao,
   considerarPago,
   corrigir,
+  corrigirCliente,
   estornar,
   novaVendaAVista,
   novaVendaFiado,
@@ -386,5 +387,70 @@ describe('renegociação de parcelas (RN-08, D-012)', () => {
     const nova = ok(renegociarParcelas([papel], 's1', [parcela('n1', '2026-09-10', 6000n), parcela('n2', '2026-10-10', 6000n)], { sincronizado: false }))
     expect(nova.tipo).toBe('saldo-anterior')
     expect(saldo([nova])).toBe(12000n)
+  })
+})
+
+describe('cliente errado: mover um lançamento para a ficha certa (RF-08, D-013, D-040)', () => {
+  const MARIA = 'cliente-maria'
+  const venda = () => fiado('v1', '2026-09-01', [parcela('p1', '2026-10-01', 5000n), parcela('p2', '2026-11-01', 5000n)])
+  const vendaDaMaria = () =>
+    ok(novaVendaFiado({ id: 'm1', clienteId: MARIA, data: '2026-09-02', itens: [{ descricao: 'creme', preco: 3000n }], parcelas: [parcela('m1-p1', '2026-10-02', 3000n)] }))
+
+  test('a venda lançada na Vera vai para a Maria: mesmo id, cliente novo, a dívida vai junto', () => {
+    const v = venda()
+    const movida = ok(corrigirCliente([v], [], 'v1', MARIA, { sincronizado: false }))
+    expect(movida.id).toBe('v1')
+    expect(movida.clienteId).toBe(MARIA)
+    expect(movida.tipo).toBe('venda')
+    expect(saldo([movida])).toBe(10000n)
+    // O original não muda — lançamento é imutável; quem persiste grava o substituto sobre o id.
+    expect(v.clienteId).toBe(VERA)
+  })
+
+  test('um recebimento também se move, se couber na dívida da outra; acima dela é recusa, sem troco', () => {
+    const v = venda()
+    const r1 = recebi([v], 'r1', '2026-09-05', 2000n)
+    const movido = ok(corrigirCliente([v, r1], [vendaDaMaria()], 'r1', MARIA, { sincronizado: false }))
+    expect(saldo([vendaDaMaria(), movido])).toBe(1000n)
+    expect(saldo([v])).toBe(10000n)
+    const r2 = recebi([v], 'r2', '2026-09-05', 5000n)
+    expect(motivo(corrigirCliente([v, r2], [vendaDaMaria()], 'r2', MARIA, { sincronizado: false }))).toBe('ficha-ficaria-negativa')
+  })
+
+  test('saldo anterior e venda à vista se movem do mesmo jeito', () => {
+    const papel = ok(novoSaldoAnterior({ id: 's1', clienteId: VERA, data: '2026-06-10', parcelas: [parcela('s1-p1', '2026-09-10', 12000n)] }))
+    expect(ok(corrigirCliente([papel], [], 's1', MARIA, { sincronizado: false })).clienteId).toBe(MARIA)
+    const avista = ok(novaVendaAVista({ id: 'a1', clienteId: VERA, data: '2026-09-03', itens: [{ descricao: 'batom', preco: 2500n }], forma: 'pix' }))
+    const movida = ok(corrigirCliente([avista], [vendaDaMaria()], 'a1', MARIA, { sincronizado: false }))
+    expect(saldo([vendaDaMaria(), movida])).toBe(3000n)
+  })
+
+  test('segue a janela de D-013: depois de sincronizado, é estorno e relançamento', () => {
+    expect(motivo(corrigirCliente([venda()], [], 'v1', MARIA, { sincronizado: true }))).toBe('ja-sincronizado')
+  })
+
+  test('recusa: id inexistente, estorno, alvo já estornado, mesma cliente', () => {
+    const v = venda()
+    const r1 = recebi([v], 'r1', '2026-09-05', 500n)
+    const e1 = ok(estornar([v, r1], { id: 'e1', clienteId: VERA, data: '2026-09-06', estornaId: 'r1' }))
+    const ficha: Ficha = [v, r1, e1]
+    expect(motivo(corrigirCliente(ficha, [], 'x9', MARIA, { sincronizado: false }))).toBe('lancamento-nao-encontrado')
+    expect(motivo(corrigirCliente(ficha, [], 'e1', MARIA, { sincronizado: false }))).toBe('lancamento-e-estorno')
+    expect(motivo(corrigirCliente(ficha, [], 'r1', MARIA, { sincronizado: false }))).toBe('ja-estornado')
+    expect(motivo(corrigirCliente(ficha, [], 'v1', VERA, { sincronizado: false }))).toBe('mesmo-cliente')
+  })
+
+  test('débito com qualquer parte paga não se move: desfaz o recebimento antes (RN-08, D-039)', () => {
+    const v = venda()
+    const r1 = recebi([v], 'r1', '2026-09-05', 100n)
+    expect(motivo(corrigirCliente([v, r1], [], 'v1', MARIA, { sincronizado: false }))).toBe('parcela-paga-alterada')
+    const e1 = ok(estornar([v, r1], { id: 'e1', clienteId: VERA, data: '2026-09-06', estornaId: 'r1' }))
+    expect(motivo(corrigirCliente([v, r1, e1], [], 'v1', MARIA, { sincronizado: false }))).toBe('ok')
+  })
+
+  test('o destino é validado inteiro: um id que já existe lá é recusado', () => {
+    const v = venda()
+    const igual = ok(novaVendaFiado({ id: 'v1', clienteId: MARIA, data: '2026-09-02', itens: [{ descricao: 'creme', preco: 3000n }], parcelas: [parcela('q1', '2026-10-02', 3000n)] }))
+    expect(motivo(corrigirCliente([v], [igual], 'v1', MARIA, { sincronizado: false }))).toBe('id-repetido')
   })
 })

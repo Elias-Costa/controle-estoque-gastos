@@ -173,6 +173,8 @@ export type Motivo =
   | 'tipo-diferente'
   | 'parcela-paga-alterada'
   | 'nome-obrigatorio'
+  | 'mesmo-cliente'
+  | 'cliente-nao-encontrado'
 
 /**
  * O que toda operação da ficha devolve: o resultado, ou o motivo da recusa. Recusa é

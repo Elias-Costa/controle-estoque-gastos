@@ -306,6 +306,50 @@ export function corrigir<L extends Lancamento>(ficha: Ficha, substituto: L, corr
 }
 
 /**
+ * Cliente errado (RF-08, D-013, D-040): move um lançamento da ficha em que ela lançou por
+ * engano para a ficha certa, **só enquanto não sincronizou** — a mesma janela de `corrigir`,
+ * pelo mesmo motivo. O domínio é por ficha, então a correção atravessa duas: a origem precisa
+ * continuar válida **sem** o lançamento, e o destino precisa ser válido **com** ele. Quem
+ * persiste grava o substituto sobre o mesmo id, com o `clienteId` novo — uma linha só (E-05).
+ *
+ * Recusas próprias, antes de `validar`: já sincronizado; id que não existe na origem; estorno
+ * (anda junto do alvo, não se move sozinho); alvo já estornado (o estorno ficaria apontando
+ * para o nada); mesma cliente (não há o que corrigir); e débito com **qualquer parte paga** na
+ * origem (RN-08) — mover levaria a parcela paga para uma ficha onde ela não está, e o
+ * recebimento que a pagou escorreria em silêncio para outro débito. A saída, como em D-039, é
+ * desfazer o recebimento antes.
+ *
+ * O resto é `validar`, nos dois lados: a origem não fica negativa sem o lançamento (um
+ * recebimento que só tinha aquele débito para abater); o destino não fica negativo com ele
+ * (um recebimento maior que a dívida da outra cliente — sem troco aqui, é recusa).
+ */
+export function corrigirCliente(
+  origem: Ficha,
+  destino: Ficha,
+  lancamentoId: Id,
+  novoClienteId: Id,
+  correcao: Correcao,
+): Resultado<Lancamento> {
+  if (correcao.sincronizado) return recusado('ja-sincronizado')
+  const original = origem.find((lancamento) => lancamento.id === lancamentoId)
+  if (original === undefined) return recusado('lancamento-nao-encontrado')
+  if (original.tipo === 'estorno') return recusado('lancamento-e-estorno')
+  if (original.clienteId === novoClienteId) return recusado('mesmo-cliente')
+  if (origem.some((lancamento) => lancamento.tipo === 'estorno' && lancamento.estornaId === lancamentoId)) {
+    return recusado('ja-estornado')
+  }
+  if (ehDebito(original) && parcelas(origem).some((item) => item.debito.id === original.id && item.pago > 0n)) {
+    return recusado('parcela-paga-alterada')
+  }
+
+  const origemSemEle = validar(origem.filter((lancamento) => lancamento.id !== lancamentoId))
+  if (!origemSemEle.ok) return origemSemEle
+  const substituto: Lancamento = { ...original, clienteId: novoClienteId }
+  const destinoComEle = validar([...destino, substituto])
+  return destinoComEle.ok ? aceito(substituto) : destinoComEle
+}
+
+/**
  * Renegociação de parcelas (RN-08, D-012): troca as parcelas de um débito mantendo a soma
  * igual ao total e sem tocar parcela já paga. É `corrigir` restrito às parcelas, com as
  * mesmas regras e a mesma janela — no lugar enquanto não sincronizou, estorno depois.

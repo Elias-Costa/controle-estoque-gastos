@@ -73,6 +73,7 @@ parcelas nascem da mesma soma, então não têm como divergir (EL-02).
 | `caminhoDeCorrecao(sincronizado)` | `'corrigir'` antes de sincronizar, `'estornar'` depois — nunca os dois | `D-013` |
 | `corrigir(ficha, substituto, { sincronizado })` | substituição pelo mesmo id, só antes de sincronizar; parcela paga não muda | `D-013`, RN-08 |
 | `renegociarParcelas(ficha, id, parcelas, { sincronizado })` | `corrigir` restrito às parcelas: soma = total, paga intocada | RN-08, `D-012` |
+| `corrigirCliente(origem, destino, id, novoClienteId, { sincronizado })` | cliente errado: a origem valida sem o lançamento, o destino valida com ele; recusa débito com parte paga (E-05) | RF-08, `D-040` |
 
 **Três coisas que quem vai escrever E-05, E-10 e E-11 precisa saber:**
 
@@ -82,7 +83,8 @@ parcelas nascem da mesma soma, então não têm como divergir (EL-02).
   recebimento antes. Para renegociar uma venda **já sincronizada**: lança a venda nova, depois
   estorna a velha — os recebimentos escorrem para a nova pela ordem de vencimento.
 - **Corrigir "cliente errado" atravessa duas fichas.** O domínio é por ficha: `validar` na origem
-  sem o lançamento, `validar` no destino com ele. É E-05 quem faz os dois lados.
+  sem o lançamento, `validar` no destino com ele. É `corrigirCliente`, escrita em E-05 (`D-040`);
+  a persistência é uma linha só, regravada com o `clienteId` novo (`src/dados/operacoes.ts`).
 
 Testes: `testes/ficha.test.ts` (RT-02, RT-04 com a prova de EL-02 — 200 fichas × 60 operações
 ao acaso, saldo conferido contra duas somas independentes a cada passo) e
