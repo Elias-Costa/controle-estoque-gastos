@@ -32,7 +32,9 @@ O que existe hoje é a fundação: as fronteiras entre as camadas, a garantia de
 ponto flutuante, o mecanismo que leva uma versão nova ao aparelho, o domínio da ficha, a base local
 com a fila de envio, o esquema na nuvem com as invariantes financeiras e o isolamento por conta
 valendo no próprio banco, a sincronização entre aparelhos, e a prova de offline em navegador real
-(`bun run test:navegador`) — escrita, ainda não rodada verde: depende de um usuário de teste na nuvem.
+(`bun run test:navegador`): venda com a rede desligada que sobrevive a recarregar, reenvio que não
+duplica, dois aparelhos que convergem sem sumiço, base apagada que volta da nuvem — verde no
+Chromium de desktop em 2026-09-12.
 
 Há também um **protótipo navegável** em `prototipo/` — as telas de ficha, venda fiado e recebimento,
 clicáveis, com dados inventados e sem persistência nenhuma. Ele não é o aplicativo e não vira o
