@@ -2,7 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import { banco } from './dados/instancia'
-import { InvolucroMinimo } from './interface/InvolucroMinimo'
+import { Aplicativo } from './interface/Aplicativo'
 import { sincronizacao } from './sincronizacao/instancia'
 import { pedirVerificacaoDeVersao } from './plataforma/atualizacao'
 import { pedirPersistencia } from './plataforma/persistencia'
@@ -24,8 +24,8 @@ pedirPersistencia()
 // e falha de rede não vira tela (EL-06). Sem configuração da nuvem, o motor só conta a fila.
 sincronizacao.acordar()
 
-// O laboratório de E-08 (D-043): a prova de offline lança vendas e lê a ficha por ele, porque
-// não há tela até E-09. Só no build de laboratório (`bun run build:laboratorio`): em produção
+// O laboratório de E-08 (D-043): a prova de offline lança vendas e lê a ficha por ele, por
+// fora das telas. Só no build de laboratório (`bun run build:laboratorio`): em produção
 // a variável não existe, o ramo é morto e o chunk nem é emitido.
 if (import.meta.env.VITE_LABORATORIO === '1') void import('./plataforma/laboratorio')
 
@@ -36,6 +36,6 @@ if (!raiz) throw new Error('Elemento #root não encontrado em index.html')
 
 createRoot(raiz).render(
   <StrictMode>
-    <InvolucroMinimo />
+    <Aplicativo />
   </StrictMode>,
 )
