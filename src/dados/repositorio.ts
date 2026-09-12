@@ -32,39 +32,64 @@ export type Repositorio = {
   readonly gravarCliente: (cliente: Cliente) => Promise<void>
   /** Cria ou substitui pelo id (correção no lugar, D-013) e enfileira. */
   readonly gravarLancamento: (lancamento: Lancamento) => Promise<void>
+  /**
+   * "Já subiu?" (D-013): `true` quando não há item na fila para o registro — nem pendente, nem
+   * com problema. É o que a tela passa como `Correcao` ao domínio para decidir entre corrigir
+   * no lugar e estornar (`caminhoDeCorrecao`). A fila é a fonte; não há campo copiado (D-040).
+   */
+  readonly sincronizado: (id: Id) => Promise<boolean>
 }
 
 /**
- * O repositório sobre a base local. `agora` é o relógio para o `criadoEm` da fila; é
- * parâmetro só para os testes fixarem o instante.
+ * O repositório sobre a base local. `agora` é o relógio para o `criadoEm` da fila e para o
+ * `atualizadoEm` do cliente (D-042); é parâmetro só para os testes fixarem o instante.
+ * `aoEnfileirar` é chamado depois de cada gravação confirmada — é como a sincronização fica
+ * sabendo que há algo novo para subir, sem que esta pasta a conheça (a dependência é
+ * `sincronizacao → dados`, nunca o inverso).
  */
 export function criarRepositorioLocal(
   banco: BancoLocal,
   agora: () => string = () => new Date().toISOString(),
+  aoEnfileirar: () => void = () => undefined,
 ): Repositorio {
   /**
    * No máximo um item pendente por registro (D-040): se a linha já está na fila, regravá-la
    * antes de subir não cria um segundo item — o que sobe é a linha como estiver na hora do
-   * envio. Chamada sempre de dentro da transação de gravação.
+   * envio. O que muda ao regravar (D-042): a `versao` sobe, para que um envio em andamento
+   * não remova o item achando que subiu a versão certa; e um `problema` some — se ela mexeu,
+   * tenta de novo. Chamada sempre de dentro da transação de gravação.
    */
-  async function enfileirar(tabela: TabelaSincronizada, registroId: Id): Promise<void> {
+  async function enfileirar(tabela: TabelaSincronizada, registroId: Id, instante: string): Promise<void> {
     const pendente = await banco.fila.where('registroId').equals(registroId).first()
-    if (pendente === undefined) await banco.fila.add({ tabela, registroId, criadoEm: agora() })
+    if (pendente === undefined) {
+      await banco.fila.add({ tabela, registroId, criadoEm: instante, versao: 0 })
+      return
+    }
+    await banco.fila.update(pendente.ordem, { versao: (pendente.versao ?? 0) + 1, problema: undefined })
   }
 
   return {
     listarClientes: () => banco.clientes.toArray(),
     lerCliente: (id) => banco.clientes.get(id),
     lerFicha: (clienteId) => banco.lancamentos.where('clienteId').equals(clienteId).toArray(),
-    gravarCliente: (cliente) =>
-      banco.transaction('rw', banco.clientes, banco.fila, async () => {
-        await banco.clientes.put(cliente)
-        await enfileirar('clientes', cliente.id)
-      }),
-    gravarLancamento: (lancamento) =>
-      banco.transaction('rw', banco.lancamentos, banco.fila, async () => {
+    gravarCliente: async (cliente) => {
+      // Um instante por gravação: é o carimbo do último-que-escreve (relógio do aparelho,
+      // D-010, D-042) e o `criadoEm` da fila.
+      const instante = agora()
+      await banco.transaction('rw', banco.clientes, banco.fila, async () => {
+        await banco.clientes.put({ ...cliente, atualizadoEm: instante })
+        await enfileirar('clientes', cliente.id, instante)
+      })
+      aoEnfileirar()
+    },
+    gravarLancamento: async (lancamento) => {
+      const instante = agora()
+      await banco.transaction('rw', banco.lancamentos, banco.fila, async () => {
         await banco.lancamentos.put(lancamento)
-        await enfileirar('lancamentos', lancamento.id)
-      }),
+        await enfileirar('lancamentos', lancamento.id, instante)
+      })
+      aoEnfileirar()
+    },
+    sincronizado: async (id) => (await banco.fila.where('registroId').equals(id).count()) === 0,
   }
 }

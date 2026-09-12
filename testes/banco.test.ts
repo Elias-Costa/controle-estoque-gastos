@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import Dexie, { type DexieOptions } from 'dexie'
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb'
-import { BancoLocal, ESQUEMA_V1, NOME_DO_BANCO } from '../src/dados/banco.ts'
+import { BancoLocal, ESQUEMA_V1, ESQUEMA_V2, NOME_DO_BANCO } from '../src/dados/banco.ts'
 import type { Cliente, VendaFiado } from '../src/dominio/ficha.ts'
 
 /**
@@ -18,17 +18,20 @@ import type { Cliente, VendaFiado } from '../src/dominio/ficha.ts'
 /**
  * Cópia literal de cada versão **publicada** do esquema. Se `banco.ts` divergir daqui, alguém
  * editou uma versão que já existe em aparelho — e o caminho certo é acrescentar a próxima.
- * Quando houver v2, ela entra aqui como `2: {...}` e a v1 fica como está.
+ * A v2 entrou em E-07 (tabela `sincronizacao`, D-042) e a v1 ficou como estava; a v3 entra
+ * aqui como `3: {...}` quando existir.
  */
 const ESQUEMAS_PUBLICADOS: Readonly<Record<number, Readonly<Record<string, string>>>> = {
   1: { clientes: 'id', lancamentos: 'id, clienteId', fila: '++ordem, registroId' },
+  2: { clientes: 'id', lancamentos: 'id, clienteId', fila: '++ordem, registroId', sincronizacao: 'chave' },
 }
 
 /**
  * Todo caminho de chave que pode virar índice. Dinheiro (`valor`, `preco`, `desconto`) nunca
- * entra aqui (D-022); um índice novo é acrescentado de propósito, com a versão nova.
+ * entra aqui (D-022); um índice novo é acrescentado de propósito, com a versão nova. `chave`
+ * é o nome da tabela no cursor de download (v2).
  */
-const INDICES_PERMITIDOS = new Set(['id', 'clienteId', 'ordem', 'registroId'])
+const INDICES_PERMITIDOS = new Set(['id', 'clienteId', 'ordem', 'registroId', 'chave'])
 
 /** Uma fábrica de IndexedDB de mentira por teste: nenhum estado atravessa de um para outro. */
 function abrir(nome = 'teste', indexedDB: DexieOptions['indexedDB'] = new IDBFactory()): BancoLocal {
@@ -61,10 +64,12 @@ describe('esquema local (D-020, D-040)', () => {
     banco.close()
   })
 
-  test('o literal exportado por banco.ts é a v1 publicada, sem edição', () => {
+  test('os literais exportados por banco.ts são as versões publicadas, sem edição', () => {
     const v1 = ESQUEMAS_PUBLICADOS[1]
-    if (v1 === undefined) throw new Error('sem v1')
+    const v2 = ESQUEMAS_PUBLICADOS[2]
+    if (v1 === undefined || v2 === undefined) throw new Error('sem v1 ou v2')
     expect(v1).toEqual({ ...ESQUEMA_V1 })
+    expect(v2).toEqual({ ...ESQUEMA_V2 })
   })
 
   test('todo índice está na lista de permissão — nenhum campo de dinheiro é chave (D-022)', async () => {
@@ -107,14 +112,22 @@ describe('esquema local (D-020, D-040)', () => {
     antiga.close()
 
     // A base atual, aberta sobre a mesma fábrica: é o que acontece no aparelho dela após atualizar.
+    // A v1 → v2 é a primeira migração real (E-07): a linha antiga não tem `atualizadoEm` nem
+    // `versao`, e o código lê as duas formas.
     const atual = abrir(nome, indexedDB)
     await atual.open()
-    expect(await atual.clientes.get('c1')).toEqual(vera)
+    expect(atual.verno).toBe(2)
+    const cliente: Cliente | undefined = await atual.clientes.get('c1')
+    expect(cliente).toEqual(vera)
     const lida = await atual.lancamentos.get('v1')
     expect(lida).toEqual(venda)
     if (lida?.tipo !== 'venda' || lida.pagamento !== 'fiado') throw new Error('tipo trocado na migração')
     expect(typeof lida.parcelas[0]?.valor).toBe('bigint')
     expect(await atual.fila.toArray()).toEqual([{ ordem: 1, tabela: 'lancamentos', registroId: 'v1', criadoEm: '2026-09-01T10:00:00.000Z' }])
+    // A tabela nova existe, vazia, e aceita o cursor.
+    expect(await atual.sincronizacao.count()).toBe(0)
+    await atual.sincronizacao.put({ chave: 'clientes', valor: '2026-09-12T00:00:00.000Z' })
+    expect((await atual.sincronizacao.get('clientes'))?.valor).toBe('2026-09-12T00:00:00.000Z')
     atual.close()
   })
 })

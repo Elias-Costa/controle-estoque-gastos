@@ -22,11 +22,18 @@ import type {
 
 const GRANDE = 9007199254740993n // 2^53 + 1: o menor inteiro que `number` não representa
 
-function preparar(): { banco: BancoLocal; repositorio: Repositorio } {
+function preparar(): { banco: BancoLocal; repositorio: Repositorio; avisos: () => number } {
   const banco = new BancoLocal('teste', { indexedDB: new IDBFactory(), IDBKeyRange })
   let tique = 0
-  const repositorio = criarRepositorioLocal(banco, () => `2026-09-11T10:00:0${tique++}.000Z`)
-  return { banco, repositorio }
+  let avisos = 0
+  const repositorio = criarRepositorioLocal(
+    banco,
+    () => `2026-09-11T10:00:0${tique++}.000Z`,
+    () => {
+      avisos += 1
+    },
+  )
+  return { banco, repositorio, avisos: () => avisos }
 }
 
 const vera: Cliente = { id: 'c-vera', nome: 'Vera', telefone: '(11) 9 8765-4321' }
@@ -64,13 +71,17 @@ const desconto: DescontoQuitacao = { tipo: 'desconto-quitacao', id: 'd1', client
 const estorno: Estorno = { tipo: 'estorno', id: 'e1', clienteId: 'c-vera', data: '2026-09-07', estornaId: 'r1', motivo: 'valor errado' }
 
 describe('ida e volta sem mapeamento (D-040)', () => {
-  test('cliente volta igual, com os campos opcionais que tinha', async () => {
-    const { repositorio } = preparar()
+  test('cliente volta igual, com os campos opcionais que tinha — mais o carimbo do aparelho (D-042)', async () => {
+    const { banco, repositorio } = preparar()
     await repositorio.gravarCliente(vera)
     await repositorio.gravarCliente(maria)
-    expect(await repositorio.lerCliente('c-vera')).toEqual(vera)
+    expect(await repositorio.lerCliente('c-vera')).toMatchObject(vera)
+    expect(await banco.clientes.get('c-vera')).toEqual({ ...vera, atualizadoEm: '2026-09-11T10:00:00.000Z' })
     expect(await repositorio.lerCliente('c-ninguem')).toBeUndefined()
     expect((await repositorio.listarClientes()).map((cliente) => cliente.nome).sort()).toEqual(['Maria', 'Vera'])
+    // O carimbo é o instante da gravação, e regravar o renova: é o "último que escreveu" de D-010.
+    await repositorio.gravarCliente({ ...vera, telefone: '(11) 9 0000-0000' })
+    expect((await banco.clientes.get('c-vera'))?.atualizadoEm).toBe('2026-09-11T10:00:02.000Z')
   })
 
   test('os cinco tipos de lançamento voltam iguais, e o dinheiro volta bigint exato — inclusive 2^53+1 numa parcela', async () => {
@@ -108,10 +119,20 @@ describe('a fila de sincronização acompanha toda gravação (RI-02, EL-01, D-0
     await repositorio.gravarLancamento(vendaFiado)
     await repositorio.gravarLancamento(recebimento)
     expect(await banco.fila.orderBy('ordem').toArray()).toEqual([
-      { ordem: 1, tabela: 'clientes', registroId: 'c-vera', criadoEm: '2026-09-11T10:00:00.000Z' },
-      { ordem: 2, tabela: 'lancamentos', registroId: 'v1', criadoEm: '2026-09-11T10:00:01.000Z' },
-      { ordem: 3, tabela: 'lancamentos', registroId: 'r1', criadoEm: '2026-09-11T10:00:02.000Z' },
+      { ordem: 1, tabela: 'clientes', registroId: 'c-vera', criadoEm: '2026-09-11T10:00:00.000Z', versao: 0 },
+      { ordem: 2, tabela: 'lancamentos', registroId: 'v1', criadoEm: '2026-09-11T10:00:01.000Z', versao: 0 },
+      { ordem: 3, tabela: 'lancamentos', registroId: 'r1', criadoEm: '2026-09-11T10:00:02.000Z', versao: 0 },
     ])
+  })
+
+  test('cada gravação confirmada avisa quem se inscreveu — é como a sincronização acorda (E-07)', async () => {
+    const { repositorio, avisos } = preparar()
+    await repositorio.gravarCliente(vera)
+    await repositorio.gravarLancamento(vendaFiado)
+    await repositorio.gravarLancamento(vendaFiado)
+    expect(avisos()).toBe(3)
+    await repositorio.lerFicha('c-vera')
+    expect(avisos()).toBe(3)
   })
 
   test('regravar o mesmo id substitui a linha (D-013) e NÃO cria segundo item: um pendente por registro', async () => {
@@ -131,6 +152,32 @@ describe('a fila de sincronização acompanha toda gravação (RI-02, EL-01, D-0
     expect(fila.map((item) => item.registroId)).toEqual(['r1', 'c-vera'])
     // O item guarda o instante da PRIMEIRA entrada: ele nunca saiu da fila.
     expect(fila[0]?.criadoEm).toBe('2026-09-11T10:00:00.000Z')
+    // ...e conta as regravações: um envio em andamento saberá que subiu a versão 0, não a 1 (D-042).
+    expect(fila.map((item) => item.versao)).toEqual([1, 1])
+  })
+
+  test('regravar uma linha "com problema" limpa o problema: se ela mexeu, tenta de novo (D-042)', async () => {
+    const { banco, repositorio } = preparar()
+    await repositorio.gravarLancamento(recebimento)
+    await banco.fila.update(1, { problema: { codigo: '23000', constraint: 'lancamentos_imutavel', mensagem: 'x', em: '2026-09-11T11:00:00.000Z' } })
+    expect((await banco.fila.get(1))?.problema?.codigo).toBe('23000')
+    await repositorio.gravarLancamento({ ...recebimento, valor: 100n })
+    const item = await banco.fila.get(1)
+    expect(item?.problema).toBeUndefined()
+    expect(item?.versao).toBe(1)
+    expect(await banco.fila.count()).toBe(1)
+  })
+
+  test('sincronizado(id) é "não há item na fila", pendente ou com problema (D-013, D-040)', async () => {
+    const { banco, repositorio } = preparar()
+    expect(await repositorio.sincronizado('r1')).toBe(true)
+    await repositorio.gravarLancamento(recebimento)
+    expect(await repositorio.sincronizado('r1')).toBe(false)
+    await banco.fila.update(1, { problema: { codigo: '23000', mensagem: 'x', em: '2026-09-11T11:00:00.000Z' } })
+    expect(await repositorio.sincronizado('r1')).toBe(false)
+    // O que a sincronização faz ao concluir o envio (E-07): remove o item. Aí, sim, subiu.
+    await banco.fila.delete(1)
+    expect(await repositorio.sincronizado('r1')).toBe(true)
   })
 
   test('a ordem da fila é a ordem de entrada, atravessando tabelas', async () => {
@@ -160,6 +207,6 @@ describe('a fila de sincronização acompanha toda gravação (RI-02, EL-01, D-0
 describe('o que o repositório não tem, de propósito', () => {
   test('não há apagar: correção é estorno ou substituição pelo mesmo id (RI-03, D-013)', () => {
     const { repositorio } = preparar()
-    expect(Object.keys(repositorio).sort()).toEqual(['gravarCliente', 'gravarLancamento', 'lerCliente', 'lerFicha', 'listarClientes'])
+    expect(Object.keys(repositorio).sort()).toEqual(['gravarCliente', 'gravarLancamento', 'lerCliente', 'lerFicha', 'listarClientes', 'sincronizado'])
   })
 })
