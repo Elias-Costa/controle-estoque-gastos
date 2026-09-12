@@ -11,12 +11,42 @@ import type { Dia } from '../dominio/ficha.ts'
 /** Dois dígitos: `5` → `"05"`. */
 const doisDigitos = (valor: number): string => String(valor).padStart(2, '0')
 
+/** Um `Date` local vira `Dia`, campo a campo — nunca por `toISOString()`, que passa pelo UTC. */
+function comoDia(data: Date): Dia {
+  return `${data.getFullYear()}-${doisDigitos(data.getMonth() + 1)}-${doisDigitos(data.getDate())}`
+}
+
+/** Os três campos de um `Dia`, como números: ano, mês (1–12), dia. */
+function campos(dia: Dia): [number, number, number] {
+  const [ano, mes, d] = dia.split('-').map(Number)
+  return [ano ?? 0, mes ?? 1, d ?? 1]
+}
+
 /**
  * O dia de hoje pelo relógio do aparelho, montado campo a campo — `toISOString()` passaria
  * pelo UTC e, depois das 21h em Brasília, diria "amanhã" (regra herdada do protótipo de E-02).
  */
 export function hoje(relogio: Date = new Date()): Dia {
-  return `${relogio.getFullYear()}-${doisDigitos(relogio.getMonth() + 1)}-${doisDigitos(relogio.getDate())}`
+  return comoDia(relogio)
+}
+
+/** `dia` deslocado N dias pelo calendário local; negativo é passado. "Ontem" na venda é `diasDepois(hoje(), -1)`. */
+export function diasDepois(dia: Dia, quantidade: number): Dia {
+  const [ano, mes, d] = campos(dia)
+  return comoDia(new Date(ano, mes - 1, d + quantidade))
+}
+
+/**
+ * `dia` deslocado N meses, **preso ao último dia** quando o mês é mais curto: 31/01 + 1 é
+ * 28/02, não 03/03 (o estouro natural do `Date`, que ela leria como erro — regra do protótipo).
+ * É a sugestão mensal das parcelas (RF-05).
+ */
+export function mesesDepois(dia: Dia, quantidade: number): Dia {
+  const [ano, mes, d] = campos(dia)
+  const alvo = new Date(ano, mes - 1 + quantidade, 1)
+  const ultimoDoMes = new Date(alvo.getFullYear(), alvo.getMonth() + 1, 0).getDate()
+  alvo.setDate(d < ultimoDoMes ? d : ultimoDoMes)
+  return comoDia(alvo)
 }
 
 /** `"2026-09-28"` → `"28/09"`: como ela escreve a data na fichinha. */

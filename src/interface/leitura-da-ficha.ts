@@ -79,7 +79,11 @@ export function filtrarEOrdenar(resumos: readonly ResumoDaFicha[], busca: string
     .sort((a, b) => a.cliente.nome.localeCompare(b.cliente.nome, 'pt-BR'))
 }
 
-/** Uma linha do histórico da ficha. `chave` é estável para o React; `valor` é sempre positivo — a descrição diz o sentido. */
+/**
+ * Uma linha do histórico da ficha. `chave` é estável para o React; `valor` é sempre positivo — a
+ * descrição diz o sentido. `lancamentoId` só existe na linha que **abre a anotação** (E-10,
+ * D-045): a venda ainda não desfeita. Recebimento entra em E-11; saldo anterior, em E-14.
+ */
 export type LinhaDaFicha = {
   readonly chave: string
   readonly data: Dia
@@ -87,6 +91,7 @@ export type LinhaDaFicha = {
   readonly valor: Centavos
   readonly tipo: 'vencida' | 'a-vencer' | 'evento' | 'pagamento'
   readonly estornado: boolean
+  readonly lancamentoId?: Id
 }
 
 /**
@@ -124,6 +129,7 @@ export function linhasDaFicha(ficha: Ficha, hoje: Dia): LinhaDaFicha[] {
     valor,
     tipo: lancamento.tipo === 'recebimento' || lancamento.tipo === 'desconto-quitacao' ? 'pagamento' : 'evento',
     estornado,
+    ...(lancamento.tipo === 'venda' && !estornado && { lancamentoId: lancamento.id }),
   }))
 
   // Ordenação estável: no mesmo dia, parcela antes de evento — como o protótipo.
