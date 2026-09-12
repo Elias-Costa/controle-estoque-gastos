@@ -30,8 +30,9 @@ A arquitetura foi provada no aparelho real antes de o sistema ser escrito — no
 
 O que existe hoje é a fundação: as fronteiras entre as camadas, a garantia de que dinheiro nunca vira
 ponto flutuante, o mecanismo que leva uma versão nova ao aparelho, o domínio da ficha, a base local
-com a fila de envio, e o esquema na nuvem com as invariantes financeiras e o isolamento por conta
-valendo no próprio banco.
+com a fila de envio, o esquema na nuvem com as invariantes financeiras e o isolamento por conta
+valendo no próprio banco, a sincronização entre aparelhos, e a prova de offline em navegador real
+(`bun run test:navegador`) — escrita, ainda não rodada verde: depende de um usuário de teste na nuvem.
 
 Há também um **protótipo navegável** em `prototipo/` — as telas de ficha, venda fiado e recebimento,
 clicáveis, com dados inventados e sem persistência nenhuma. Ele não é o aplicativo e não vira o
@@ -100,6 +101,9 @@ Para o app **sincronizar com a nuvem** é preciso um `.env.local` na raiz com `V
 | `bun run test` | Testes de unidade, com o runner do Bun |
 | `bun run check` | Typecheck + lint + testes. É o portão de qualquer mudança |
 | `bun run test:integracao` | As suítes contra o projeto real. `nuvem.test.ts` tenta violar cada invariante direto no Postgres (precisa de `SUPABASE_DB_URL`; não deixa rastro). `sincronizacao.test.ts` sobe e baixa linhas pelo `supabase-js` com um usuário de teste (`SUPABASE_TESTE_EMAIL`/`SUPABASE_TESTE_SENHA`); **deixa linhas no banco**, sob o usuário de teste — limpeza em `nuvem/LEIA-ME.md` |
+| `bun run test:navegador` | A prova de offline (RT-07 a RT-10) no Chromium do Playwright, contra o build de laboratório. Precisa do mesmo usuário de teste; sem ele, pula. Uma vez: `bunx playwright install chromium`. Também deixa linhas no banco |
+| `bun run build:laboratorio` | O build de produção mais `window.laboratorio`, em `dist-laboratorio/` — só para os testes de navegador. `dist/` nunca o contém |
+| `bun run preview:laboratorio:lan` | Serve `dist-laboratorio/` com HTTPS na rede local, na 4174 — para o roteiro à mão no Android (`testes/navegador/LEIA-ME.md`) |
 | `bun run migrar` | Aplica no Supabase as migrations de `nuvem/migracoes/` que ainda não foram aplicadas |
 | `bun run migrar:reverter` | Reverte a última migration aplicada, pelo seu `.reverter.sql` |
 | `bun run prototipo` | Protótipo das telas em `prototipo/`, na porta 5174 (HTTP, sem service worker) |
@@ -118,6 +122,20 @@ Dois tropeços comuns:
 
 - **Windows classifica o Wi-Fi doméstico como rede Pública** e bloqueia a entrada. Libere a porta com `New-NetFirewallRule -DisplayName "Vite" -Direction Inbound -Protocol TCP -LocalPort 5173 -Action Allow` num PowerShell como Administrador.
 - **O service worker de desenvolvimento quase não faz cache.** Para testar comportamento offline de verdade, use `bun run build` seguido de `bun run preview:lan` — contra o servidor de desenvolvimento o teste falha por motivo errado.
+
+## Publicar
+
+O app é publicado no **Vercel**, sem domínio próprio, com deploy automático a cada push em `main` — todo commit chega ao aparelho dela na abertura seguinte (`D-026`, `D-032`, `D-043`). É uma SPA estática de uma rota: o preset Vite do Vercel basta, sem `vercel.json`.
+
+Uma vez, no painel do Vercel:
+
+1. *Add New → Project*, importar este repositório do GitHub.
+2. **Nome do projeto: `controle-fiado`.** O nome vira a origem (`https://controle-fiado.vercel.app`) e **a origem é a identidade do IndexedDB no aparelho dela: escolhido uma vez, nunca muda.** Se o subdomínio estiver tomado, escolha outro *antes* de instalar no aparelho e registre em `docs/decisions.md` (`D-043`).
+3. Framework preset *Vite*; build `bun run build`; output `dist`.
+4. *Environment Variables*: `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`, os mesmos de `.env.local`. (Sem eles o build sai sem nuvem: o app funciona só no aparelho e o indicador fica em "para enviar".)
+5. *Deploy*. Depois, cada push em `main` publica sozinho; build quebrado não publica e o anterior fica no ar.
+
+No iPhone dela: abrir o endereço no Safari e *Compartilhar → Adicionar à Tela de Início*. **Sem sessão e sem tarefa** (`D-036`): até E-13 não há login, e o app instalado cedo é o laboratório de "uma semana sem abrir" (RT-13) e da troca de versão (`D-032`). O carimbo `versão dd/mm, hh:mm` no rodapé diz qual build está no aparelho.
 
 ## Licença
 
