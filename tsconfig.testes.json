@@ -25,5 +25,7 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["testes"]
+  /* `nuvem` entrou em E-06: o runner de migrations e a suíte de integração são TypeScript que
+     roda no Bun, fora de `src` — mesmo runtime e mesmos tipos dos testes. */
+  "include": ["testes", "nuvem"]
 }

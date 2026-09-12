@@ -13,6 +13,9 @@
     "typecheck": "tsc -b --noEmit",
     "lint": "oxlint",
     "test": "bun test",
+    "test:integracao": "INTEGRACAO=1 bun --env-file=.env.local test --timeout 60000 testes/integracao",
+    "migrar": "bun run nuvem/migrar.ts",
+    "migrar:reverter": "bun run nuvem/migrar.ts reverter",
     "check": "bun run typecheck && bun run lint && bun run test"
   },
   "dependencies": {

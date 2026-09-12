@@ -29,7 +29,9 @@ A arquitetura foi provada no aparelho real antes de o sistema ser escrito — no
 - O reenvio da fila é idempotente: o mesmo item enviado duas vezes não vira duas linhas
 
 O que existe hoje é a fundação: as fronteiras entre as camadas, a garantia de que dinheiro nunca vira
-ponto flutuante e o mecanismo que leva uma versão nova ao aparelho.
+ponto flutuante, o mecanismo que leva uma versão nova ao aparelho, o domínio da ficha, a base local
+com a fila de envio, e o esquema na nuvem com as invariantes financeiras e o isolamento por conta
+valendo no próprio banco.
 
 Há também um **protótipo navegável** em `prototipo/` — as telas de ficha, venda fiado e recebimento,
 clicáveis, com dados inventados e sem persistência nenhuma. Ele não é o aplicativo e não vira o
@@ -46,7 +48,7 @@ Três consequências disso atravessam o código inteiro:
 - **Lançamento financeiro é imutável.** Venda e recebimento nunca são editados, só estornados. Além de auditoria, isso elimina a classe de conflito que importaria entre dois aparelhos: registros que só nascem não têm o que conflitar.
 - **Dinheiro é `bigint` de centavos.** Nunca ponto flutuante, em lugar nenhum — inclusive nos totais do painel. Dividir uma venda em parcelas não é divisão, é repartição: as partes precisam somar exatamente o total, e a sobra em centavos é distribuída explicitamente.
 
-As invariantes financeiras valem **no banco** (constraints e políticas de linha), não apenas no código do aplicativo.
+As invariantes financeiras valem **no banco** (constraints e políticas de linha), não apenas no código do aplicativo — e há uma suíte que tenta violar cada uma direto no Postgres, contornando o app, e espera a recusa.
 
 As camadas são separadas por pasta, e a fronteira do domínio é aplicada por lint — não por combinado:
 
@@ -56,6 +58,7 @@ src/dados/            base local (Dexie), repositório e as operações que a te
 src/sincronizacao/    fila de operações e envio
 src/interface/        as telas
 src/plataforma/       service worker, carimbo de versão e pedido de persistência
+nuvem/                o esquema do Supabase: migrations versionadas e reversíveis, e o runner que as aplica
 ```
 
 ## Stack
@@ -64,8 +67,8 @@ src/plataforma/       service worker, carimbo de versão e pedido de persistênc
 |---|---|
 | Interface | React + Vite + TypeScript, como SPA estática |
 | Base local | Dexie (IndexedDB) |
-| Nuvem | Supabase — Postgres, autenticação e Row Level Security |
-| Runtime e pacotes | Bun — e `bun test` para os testes de unidade, com `fake-indexeddb` como dublê da base local (prova a lógica de `src/dados`, não o WebKit) |
+| Nuvem | Supabase — Postgres, autenticação e Row Level Security. Migrations em `nuvem/migracoes/`, cada uma com o seu `.reverter.sql`, aplicadas por um runner próprio sobre `Bun.sql` |
+| Runtime e pacotes | Bun — e `bun test` para os testes de unidade, com `fake-indexeddb` como dublê da base local (prova a lógica de `src/dados`, não o WebKit); a suíte de integração fala com o Postgres real por `Bun.sql`, o cliente embutido |
 | PWA | `vite-plugin-pwa` |
 
 Não há renderização no servidor: o app é instalado e funciona offline, então o artefato é estático.
@@ -82,7 +85,9 @@ bun install
 bun run dev
 ```
 
-Não é preciso configurar nada além disso **hoje**: a sincronização com o Supabase ainda não está ligada, e até lá o app não toca a rede. Quando estiver, será um `.env.local` na raiz com `VITE_SUPABASE_URL` e a chave `anon` em `VITE_SUPABASE_ANON_KEY`.
+Não é preciso configurar nada além disso para rodar o app **hoje**: a sincronização com o Supabase ainda não está ligada, e até lá o app não toca a rede. Quando estiver, será um `.env.local` na raiz com `VITE_SUPABASE_URL` e a chave `anon` em `VITE_SUPABASE_ANON_KEY`.
+
+**Para mexer no esquema da nuvem** (`bun run migrar`, `bun run test:integracao`) é preciso mais uma variável no mesmo `.env.local`: `SUPABASE_DB_URL`, a conexão direta ao Postgres — no painel do Supabase, **Connect → Session pooler** (porta 5432), com o password do banco. É segredo e nunca entra no repositório; o runner e a suíte não o imprimem. Detalhes em `nuvem/LEIA-ME.md`.
 
 ## Comandos
 
@@ -94,6 +99,9 @@ Não é preciso configurar nada além disso **hoje**: a sincronização com o Su
 | `bun run preview:lan` | Serve o build de produção com HTTPS na rede local |
 | `bun run test` | Testes de unidade, com o runner do Bun |
 | `bun run check` | Typecheck + lint + testes. É o portão de qualquer mudança |
+| `bun run test:integracao` | A suíte contra o Postgres real: tenta violar cada invariante direto no banco. Precisa de `SUPABASE_DB_URL`; não deixa rastro (toda transação é desfeita) |
+| `bun run migrar` | Aplica no Supabase as migrations de `nuvem/migracoes/` que ainda não foram aplicadas |
+| `bun run migrar:reverter` | Reverte a última migration aplicada, pelo seu `.reverter.sql` |
 | `bun run prototipo` | Protótipo das telas em `prototipo/`, na porta 5174 (HTTP, sem service worker) |
 
 ## Testando no celular
