@@ -24,9 +24,11 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.115.0",
+    "@tailwindcss/vite": "^4.3.3",
     "dexie": "^4.4.5",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

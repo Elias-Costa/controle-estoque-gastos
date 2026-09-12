@@ -1,3 +1,4 @@
+import tailwindcss from '@tailwindcss/vite'
 import basicSsl from '@vitejs/plugin-basic-ssl'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
@@ -26,6 +27,8 @@ export default defineConfig(() => ({
   },
   plugins: [
     react(),
+    // Tailwind v4 (D-023): os tokens do protótipo vivem em `src/index.css`, em `@theme`.
+    tailwindcss(),
     VitePWA({
       /**
        * `prompt`, e não `autoUpdate`, por decisão explícita — D-032.

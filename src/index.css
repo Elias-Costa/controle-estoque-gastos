@@ -1,53 +1,111 @@
 /*
- * Base mínima do aplicativo.
+ * A base do sistema visual (D-023, confirmada em 2026-09-12): Tailwind v4 com os tokens do
+ * protótipo de E-02 — a mesma paleta, os mesmos tamanhos e os mesmos alvos que ela viu na
+ * sessão de 2026-09-08. O que o protótipo mediu está preservado aqui como **medida**, não
+ * como folha: as telas em `src/interface/` compõem com utilitários sobre estes tokens.
  *
- * Não é o sistema visual do produto: D-023 decidiu Tailwind com componentes próprios,
- * e ele nasce em E-02/E-09 junto das telas que a usuária vai ver. O que fica aqui é só
- * o que qualquer tela vai precisar embaixo — e o alvo de toque de 44px, que RNF-03 exige
- * e que precisa ser padrão do projeto, não decisão por tela.
+ * O que é requisito, e não gosto:
+ * - alvo de toque de no mínimo 44 px para todo controle, por padrão (RNF-03);
+ * - tipografia grande por padrão — 18 px no corpo, para ler sem óculos de perto (RNF-03);
+ * - contraste alto, claro e escuro, trocados num lugar só (RNF-03).
  */
+@import "tailwindcss";
 
+/*
+ * A paleta, em variáveis simples, para o escuro trocar só aqui. `@theme` abaixo aponta os
+ * tokens do Tailwind para estas variáveis — `bg-papel` vira `var(--color-papel)`, que vira
+ * `var(--papel)` — e é assim que um só conjunto de utilitários serve aos dois esquemas, sem
+ * `dark:` espalhado pelas telas.
+ *
+ * `rem` continua sendo 16 px (o `html` não muda): as medidas do protótipo (`2.75rem` no
+ * valor grande, `56px` no botão principal) valem aqui sem conversão.
+ */
 :root {
   --fundo: #f7f7f8;
+  --papel: #ffffff;
   --tinta: #16181d;
-  --suave: #61656e;
+  --suave: #555961;
+  --borda: #d9dbe0;
+  --acento: #0b5f3a;
+  --acento-tinta: #ffffff;
+  --atraso: #9a1b1b;
+  --atraso-fundo: #fdeaea;
   color-scheme: light dark;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     --fundo: #101216;
+    --papel: #191c22;
     --tinta: #f2f3f5;
-    --suave: #a0a5b0;
+    --suave: #a8adb8;
+    --borda: #2c313a;
+    --acento: #2f9e6b;
+    --acento-tinta: #06120c;
+    --atraso: #ff8f8f;
+    --atraso-fundo: #3a1c1c;
   }
 }
 
-* { box-sizing: border-box; }
-
-body {
-  margin: 0;
-  background: var(--fundo);
-  color: var(--tinta);
-  /* Tipografia grande por padrão (RNF-03): o público é uma pessoa que não usa apps. */
-  font: 17px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  -webkit-text-size-adjust: 100%;
+@theme {
+  --color-fundo: var(--fundo);
+  --color-papel: var(--papel);
+  --color-tinta: var(--tinta);
+  --color-suave: var(--suave);
+  --color-borda: var(--borda);
+  --color-acento: var(--acento);
+  --color-acento-tinta: var(--acento-tinta);
+  --color-atraso: var(--atraso);
+  --color-atraso-fundo: var(--atraso-fundo);
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 }
 
-/* Instalado em tela cheia, o iPhone não reserva a barra de status: a área segura é nossa. */
-.involucro {
-  max-width: 40rem;
-  margin: 0 auto;
-  padding: max(1rem, env(safe-area-inset-top)) 1rem max(2rem, env(safe-area-inset-bottom));
+@layer base {
+  body {
+    background: var(--fundo);
+    color: var(--tinta);
+    /* 18px: o público é uma pessoa que não usa aplicativos e vai ler isso sem óculos de perto. */
+    font-size: 18px;
+    line-height: 1.45;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* 44px é o mínimo de RNF-03, e vale para todo controle desde já — não por lembrança, por padrão. */
+  button,
+  input,
+  textarea {
+    min-height: 44px;
+  }
 }
 
-.aviso { color: var(--suave); }
-.carimbo { margin-top: 2rem; font-size: 0.8rem; color: var(--suave); }
-/* O indicador de RF-25: discreto, uma linha, sem cor de alarme — "com problema" é E-10 quem trata. */
-.indicador { font-size: 0.9rem; color: var(--suave); }
+/*
+ * Duas peças de layout que os utilitários expressam mal, em CSS comum dentro da camada de
+ * componentes: a área segura do iPhone instalado em tela cheia (ele não reserva a barra de
+ * status: a área é nossa) e o rodapé fixo com o degradê que separa a ação da lista.
+ */
+@layer components {
+  .tela {
+    max-width: 34rem;
+    margin: 0 auto;
+    /* 7rem embaixo: espaço para o rodapé fixo com até dois botões, sem esconder a última linha. */
+    padding: max(0.75rem, env(safe-area-inset-top)) 1rem 7rem;
+  }
 
-/* 44px é o mínimo de RNF-03, e vale para todo controle desde já. */
-button {
-  min-height: 44px;
-  padding: 0 1rem;
-  font: inherit;
+  /*
+   * Ação principal ancorada embaixo, ao alcance do polegar, e não no fim de uma rolagem.
+   * Numa tela de 812 pt segurada com uma mão só, o topo é a região mais cara de alcançar.
+   */
+  .rodape-acao {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-width: 34rem;
+    margin: 0 auto;
+    padding: 0.75rem 1rem max(0.75rem, env(safe-area-inset-bottom));
+    background: linear-gradient(to top, var(--fundo) 72%, transparent);
+  }
 }
