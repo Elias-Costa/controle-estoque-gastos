@@ -5,6 +5,7 @@ import { FORMATO_UUIDV7 } from '../src/dados/identidade.ts'
 import {
   cadastrarCliente,
   corrigirLancamento,
+  corrigirVenda,
   estornarLancamento,
   lancarSaldoAnterior,
   lancarVendaAVista,
@@ -199,6 +200,53 @@ describe('correções: a janela de D-013 entra como argumento; a fila não ganha
     expect(nova.parcelas[1]?.id).toMatch(FORMATO_UUIDV7)
     expect(nova.parcelas[1]?.id).not.toBe(paga.id)
     expect(saldo(await repositorio.lerFicha(cliente.id))).toBe(6660n)
+  })
+
+  test('corrigirVenda: mesma linha, parcela que ficou mantém o id, a nova ganha um; fiado vira à vista (E-10, D-045)', async () => {
+    const { banco, repositorio } = preparar()
+    const cliente = await vera(repositorio)
+    const fiado = await vendaEm3x(repositorio, cliente.id)
+    const primeira = fiado.parcelas[0]
+    if (primeira === undefined) throw new Error('sem parcela')
+
+    // Corrigiu o preço para R$ 80,00 em 2×: a 1ª continua a 1ª (mesmo id), a 2ª é nova.
+    const corrigida = ok(
+      await corrigirVenda(
+        repositorio,
+        {
+          ...fiado,
+          itens: [{ descricao: 'perfume', preco: 8000n }],
+          parcelas: [
+            { ...primeira, valor: 4000n },
+            { vencimento: '2026-11-01', valor: 4000n },
+          ],
+        },
+        { sincronizado: false },
+      ),
+    )
+    expect(corrigida.id).toBe(fiado.id)
+    if (corrigida.tipo !== 'venda' || corrigida.pagamento !== 'fiado') throw new Error('não é fiado')
+    expect(corrigida.parcelas[0]?.id).toBe(primeira.id)
+    expect(corrigida.parcelas[1]?.id).toMatch(FORMATO_UUIDV7)
+    expect(saldo(await repositorio.lerFicha(cliente.id))).toBe(8000n)
+    expect(await banco.lancamentos.count()).toBe(1)
+    expect(await banco.fila.count()).toBe(2)
+
+    // Era à vista, afinal: some a dívida, a linha continua uma só.
+    const aVista = ok(
+      await corrigirVenda(
+        repositorio,
+        { tipo: 'venda', pagamento: 'avista', id: fiado.id, clienteId: cliente.id, data: fiado.data, itens: fiado.itens, desconto: 0n, forma: 'dinheiro' },
+        { sincronizado: false },
+      ),
+    )
+    expect(aVista.id).toBe(fiado.id)
+    expect(saldo(await repositorio.lerFicha(cliente.id))).toBe(0n)
+    expect(await banco.lancamentos.count()).toBe(1)
+
+    // Depois de sincronizada, recusa sem tocar na linha.
+    expect(motivo(await corrigirVenda(repositorio, { ...fiado, parcelas: fiado.parcelas }, { sincronizado: true }))).toBe('ja-sincronizado')
+    expect(saldo(await repositorio.lerFicha(cliente.id))).toBe(0n)
   })
 
   test('moverParaOutraCliente: a venda sai da ficha da Vera e entra na da Maria, com o mesmo id', async () => {

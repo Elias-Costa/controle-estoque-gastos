@@ -180,6 +180,18 @@ describe('a fila de sincronização acompanha toda gravação (RI-02, EL-01, D-0
     expect(await repositorio.sincronizado('r1')).toBe(true)
   })
 
+  test('comProblema(id) só é verdadeiro com o item marcado pela nuvem; pendente e enviado são falsos (D-042, D-045)', async () => {
+    const { banco, repositorio } = preparar()
+    expect(await repositorio.comProblema('r1')).toBe(false)
+    await repositorio.gravarLancamento(recebimento)
+    expect(await repositorio.comProblema('r1')).toBe(false)
+    await banco.fila.update(1, { problema: { codigo: '23000', mensagem: 'x', em: '2026-09-11T11:00:00.000Z' } })
+    expect(await repositorio.comProblema('r1')).toBe(true)
+    // Regravar limpa o problema (teste acima); remover o item é "subiu".
+    await banco.fila.delete(1)
+    expect(await repositorio.comProblema('r1')).toBe(false)
+  })
+
   test('a ordem da fila é a ordem de entrada, atravessando tabelas', async () => {
     const { banco, repositorio } = preparar()
     await repositorio.gravarLancamento(saldoAnterior)
@@ -207,6 +219,14 @@ describe('a fila de sincronização acompanha toda gravação (RI-02, EL-01, D-0
 describe('o que o repositório não tem, de propósito', () => {
   test('não há apagar: correção é estorno ou substituição pelo mesmo id (RI-03, D-013)', () => {
     const { repositorio } = preparar()
-    expect(Object.keys(repositorio).sort()).toEqual(['gravarCliente', 'gravarLancamento', 'lerCliente', 'lerFicha', 'listarClientes', 'sincronizado'])
+    expect(Object.keys(repositorio).sort()).toEqual([
+      'comProblema',
+      'gravarCliente',
+      'gravarLancamento',
+      'lerCliente',
+      'lerFicha',
+      'listarClientes',
+      'sincronizado',
+    ])
   })
 })

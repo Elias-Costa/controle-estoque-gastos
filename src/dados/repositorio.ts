@@ -38,6 +38,12 @@ export type Repositorio = {
    * no lugar e estornar (`caminhoDeCorrecao`). A fila é a fonte; não há campo copiado (D-040).
    */
   readonly sincronizado: (id: Id) => Promise<boolean>
+  /**
+   * "A nuvem recusou?" (D-042, item 2): `true` quando o item do registro está na fila marcado
+   * "com problema". Para esse registro a tela oferece só "desfazer" (E-10, D-045): regravá-lo
+   * tentaria de novo o que a nuvem já recusou.
+   */
+  readonly comProblema: (id: Id) => Promise<boolean>
 }
 
 /**
@@ -91,5 +97,6 @@ export function criarRepositorioLocal(
       aoEnfileirar()
     },
     sincronizado: async (id) => (await banco.fila.where('registroId').equals(id).count()) === 0,
+    comProblema: async (id) => (await banco.fila.where('registroId').equals(id).first())?.problema !== undefined,
   }
 }

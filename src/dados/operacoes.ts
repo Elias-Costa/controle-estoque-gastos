@@ -13,7 +13,7 @@
  * contagem (`testes/operacoes.test.ts`), que nenhuma escrita acontece sem item na fila
  * (RI-02, EL-01) e que todo id persistido nasceu aqui.
  *
- * As três correções (`corrigirLancamento`, `renegociar`, `moverParaOutraCliente`) recebem
+ * As correções (`corrigirLancamento`, `corrigirVenda`, `renegociar`, `moverParaOutraCliente`) recebem
  * `{ sincronizado }` como argumento, igual ao domínio (D-013): quem responde "já subiu?" é a
  * fila, em E-07 — este arquivo não inventa a resposta.
  *
@@ -163,6 +163,21 @@ export async function corrigirLancamento<L extends Lancamento>(
   const ficha = await fichaDe(repositorio, substituto.clienteId)
   if (!ficha.ok) return ficha
   return gravar(repositorio, corrigir(ficha.valor, substituto, correcao))
+}
+
+/** A venda como a tela de correção a remonta (E-10): as parcelas que ficaram já têm id; as novas ganham um aqui. */
+export type VendaCorrigida = VendaAVista | (Omit<VendaFiado, 'parcelas'> & { readonly parcelas: readonly (Parcela | ParcelaNova)[] })
+
+/**
+ * Correção de uma venda (RF-08, D-013, D-045): `corrigirLancamento` com o id das parcelas
+ * resolvido — a tela mantém o id das parcelas pela posição, e é assim que o domínio confere
+ * que parcela já paga não mudou (RN-08). Fiado pode virar à vista e vice-versa: os dois são
+ * `tipo: 'venda'`.
+ */
+export async function corrigirVenda(repositorio: Repositorio, substituto: VendaCorrigida, correcao: Correcao): Promise<Resultado<Lancamento>> {
+  const venda: VendaAVista | VendaFiado =
+    substituto.pagamento === 'fiado' ? { ...substituto, parcelas: comIds(substituto.parcelas) } : substituto
+  return corrigirLancamento(repositorio, venda, correcao)
 }
 
 /**
