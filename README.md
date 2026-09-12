@@ -85,7 +85,7 @@ bun install
 bun run dev
 ```
 
-Não é preciso configurar nada além disso para rodar o app **hoje**: a sincronização com o Supabase ainda não está ligada, e até lá o app não toca a rede. Quando estiver, será um `.env.local` na raiz com `VITE_SUPABASE_URL` e a chave `anon` em `VITE_SUPABASE_ANON_KEY`.
+Para o app **sincronizar com a nuvem** é preciso um `.env.local` na raiz com `VITE_SUPABASE_URL` e a chave `anon` em `VITE_SUPABASE_ANON_KEY`. Sem eles o app roda inteiro no aparelho, não toca a rede e o indicador fica em "para enviar" — é o comportamento esperado, não um defeito. Com eles, a fila só sobe quando há sessão; até E-13 (login) a sessão vem de um usuário de teste (ver `nuvem/LEIA-ME.md`).
 
 **Para mexer no esquema da nuvem** (`bun run migrar`, `bun run test:integracao`) é preciso mais uma variável no mesmo `.env.local`: `SUPABASE_DB_URL`, a conexão direta ao Postgres — no painel do Supabase, **Connect → Session pooler** (porta 5432), com o password do banco. É segredo e nunca entra no repositório; o runner e a suíte não o imprimem. Detalhes em `nuvem/LEIA-ME.md`.
 
@@ -99,7 +99,7 @@ Não é preciso configurar nada além disso para rodar o app **hoje**: a sincron
 | `bun run preview:lan` | Serve o build de produção com HTTPS na rede local |
 | `bun run test` | Testes de unidade, com o runner do Bun |
 | `bun run check` | Typecheck + lint + testes. É o portão de qualquer mudança |
-| `bun run test:integracao` | A suíte contra o Postgres real: tenta violar cada invariante direto no banco. Precisa de `SUPABASE_DB_URL`; não deixa rastro (toda transação é desfeita) |
+| `bun run test:integracao` | As suítes contra o projeto real. `nuvem.test.ts` tenta violar cada invariante direto no Postgres (precisa de `SUPABASE_DB_URL`; não deixa rastro). `sincronizacao.test.ts` sobe e baixa linhas pelo `supabase-js` com um usuário de teste (`SUPABASE_TESTE_EMAIL`/`SUPABASE_TESTE_SENHA`); **deixa linhas no banco**, sob o usuário de teste — limpeza em `nuvem/LEIA-ME.md` |
 | `bun run migrar` | Aplica no Supabase as migrations de `nuvem/migracoes/` que ainda não foram aplicadas |
 | `bun run migrar:reverter` | Reverte a última migration aplicada, pelo seu `.reverter.sql` |
 | `bun run prototipo` | Protótipo das telas em `prototipo/`, na porta 5174 (HTTP, sem service worker) |

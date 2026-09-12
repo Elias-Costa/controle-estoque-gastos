@@ -1,40 +1,58 @@
 # `src/sincronizacao`
 
-A fila de operações e o envio para a nuvem (`D-003`, sincronização artesanal).
+A fila de operações subindo para a nuvem e o que o outro aparelho escreveu descendo (`D-003`,
+sincronização artesanal; `D-010`, conflito; `D-042`, o modelo). Preenchida em **E-07**.
 
 **A regra que atravessa tudo aqui:** nenhuma escrita depende de rede para concluir (RI-02). A
-escrita vai para a base local, entra na fila, e a rede acontece depois. Falha de envio não perde o
-dado e não trava a tela.
+escrita vai para a base local, entra na fila, e a rede acontece depois — ao lado, nunca na frente.
+Falha de envio não perde o dado, não trava a tela e não vira tela de erro (EL-06).
 
-O reenvio é idempotente pela chave estável que é o próprio id do registro (`D-029`, RI-05) — enviar
-duas vezes é um `upsert` sobre a mesma linha. É isso que fecha EL-04, e E-00 já provou no aparelho:
-3 itens reenviados 2× produziram `3 linhas / 3 ids distintos`.
+| Arquivo | O que é | Regra |
+|---|---|---|
+| `borda.ts` | Linha do domínio ↔ linha do Postgres: `camelCase`↔`snake_case`, `bigint`↔texto de dígitos, `null`↔ausente, carimbos em ISO UTC. Linha malformada **lança** | `D-022`, `D-041` |
+| `nuvem.ts` | Interface `Nuvem` e a implementação sobre `supabase-js`; **classifica a falha** (`rede` / `sessao` / `recusa`) por classe de SQLSTATE; download paginado com `::text` no dinheiro | `D-042` |
+| `sincronizacao.ts` | O motor: ciclo enviar → baixar, retentativa, cursor, estado do indicador. Relógio, timer, janela e documento injetáveis | `D-010`, `D-042` |
+| `instancia.ts` | O motor do app sobre `banco` e `nuvemDoApp`; inscreve `acordar()` em `aoEnfileirar`. Testes nunca importam | — |
 
-**`navigator.onLine` mente no iOS.** E-00 observou, ao sair do modo avião, `onLine === true` com a
-primeira sincronização morrendo em `TypeError: Load failed`, e a mesma operação funcionando 10 s
-depois. `onLine` serve para adiar tentativa, nunca para concluir que a rede funciona — só a resposta
-do servidor prova isso. Retentativa com espera crescente é obrigatória, não refinamento.
+**Como um item sobe.** Uma gravação em `src/dados` põe um item na fila e avisa `aoEnfileirar`; o
+motor acorda, lê a fila em `++ordem` (o cliente antes do lançamento que o cita), pula o que está
+"com problema", lê a linha **como estiver agora** (a fila é ponteiro), traduz na borda e sobe por
+`upsert` no id — o reenvio idempotente de RI-05, `D-029`. Sucesso remove o item **só se a `versao`
+for a que subiu**: uma correção feita durante o envio fica para a vez seguinte.
 
-**O que E-06 deixou na nuvem, e E-07 precisa saber** (`nuvem/LEIA-ME.md`, `D-041`):
+**O que cada falha faz** (`D-042`; a frase é *só o que o banco recusou de verdade é definitivo, o
+resto é tenta de novo*):
 
-- **A borda mapeia duas coisas:** `camelCase` ↔ `snake_case` (`clienteId` → `cliente_id`,
-  `estornaId` → `estorna_id`) e `bigint` ↔ texto de centavos (`D-022`). Dentro de `itens` e
-  `parcelas` o banco aceita número JSON ou texto de dígitos; texto é o que não passa por `number`
-  em lugar nenhum. Datas são `AAAA-MM-DD` nos dois sentidos.
-- **`dono` nunca é enviado.** O banco carimba com `auth.uid()`; enviar outro valor é recusa da
-  política (`42501`). Sem sessão, tudo é `42501` — é o estado "com problema" de RF-25, não retentativa.
-- **O reenvio é `insert … on conflict (id) do update`** com as colunas do domínio. Conteúdo idêntico
-  passa (RI-05). **Conteúdo diferente para um lançamento que já existe é erro `lancamentos_imutavel`**
-  (`23000`), não sobrescrita: a fila marca o item "com problema" e a correção vira estorno
-  (`D-013`, `D-041` item 2). Cliente pode mudar (`D-010`, último-que-escreve).
-- **O nome da constraint é o motivo em código** (`lancamentos_valor_invalido`,
-  `lancamentos_parcelas_nao_fecham`, `lancamentos_cliente`…): vem em `constraint` no erro do
-  Postgres e em `details`/`message` no PostgREST. É o diagnóstico; a tela põe as palavras.
-- **A FK exige o cliente antes do lançamento** e o alvo antes do estorno — a ordem da fila
-  (`++ordem`, `D-040`) já garante isso dentro de um aparelho.
-- **Não há `atualizado_em`:** o LWW de `D-010` para cadastros é decisão de E-07, e a coluna entra
-  por migration `0002` (`nuvem/LEIA-ME.md`, "Como acrescentar uma migration").
-- **Saldo ≥ 0 não é verificado na nuvem** (`D-041`): a união de dois aparelhos pode chegar fora de
-  ordem, e nenhum item legítimo pode ficar preso por isso.
+- **`rede`** (`code` vazio — é como o `supabase-js` engole a falha de `fetch`, verificado com host
+  inalcançável; HTML de gateway; `08*`/`53*`/`57*`): para o ciclo, nada é marcado, retentativa com
+  espera crescente — 5 s dobrando até 5 min, zerada por escrita local, `online`, aba visível ou
+  sessão. **`navigator.onLine` não é consultado**: no iOS ele mente (`AGENTS.md` §2.1); a prova de
+  rede é a resposta.
+- **`sessao`** (`42501`, `PGRST3xx`): para o ciclo e espera `onAuthStateChange`. Sem sessão o
+  motor **nem tenta**. Nada vira "com problema" por sessão (`D-005`).
+- **`recusa`** (`22*`, `23*`, `42*`): `23503` (o pai ainda não chegou do outro aparelho) pula e
+  retenta; qualquer outra é **definitiva** — o item ganha `problema` (SQLSTATE, constraint,
+  mensagem, instante), fica parado, não prende os demais, e só volta a tentar se a linha for
+  regravada. `lancamentos_imutavel` (reenvio com conteúdo diferente, `D-041`) e
+  `lancamentos_um_estorno_por_alvo` são os casos concretos; a saída é estorno, em E-10.
 
-Preenchida em **E-07**.
+**Como o que o outro aparelho escreveu desce.** Depois de enviar, o motor pede a cada tabela o
+que chegou desde o cursor guardado (`recebido_em` em clientes, `criado_em` em lançamentos —
+carimbos do **servidor**, tabela `sincronizacao`, Dexie v2) menos um minuto de margem, em páginas
+de 500. **Lançamento é união** (`D-010`): entra se não existir, e nunca por cima de uma linha com
+item na fila. **Cadastro é último-que-escreve pelo relógio do aparelho** (`D-042`): entra só se o
+`atualizadoEm` da nuvem for mais novo que o local — o mesmo `>=` do gatilho na nuvem. Nada que
+desce enfileira. Cursor ausente (base zerada) = tudo desce: é o mecanismo de RT-10.
+
+**O estado** (`estado()`, `assinar()`) alimenta o indicador de RF-25 (`src/interface`): `pendentes`,
+`comProblema`, `enviando`, `sessao`, `ultimaFalha`, `ultimoSucessoEm`. Mesma referência enquanto
+nada muda, para `useSyncExternalStore`. "Já subiu?" (`D-013`) não mora aqui: é
+`repositorio.sincronizado(id)`.
+
+**Antes de E-13 não há login no app.** O motor só faz algo com `supabase.auth.getSession()`
+preenchida; E-08 entra com o usuário de teste (`nuvem/LEIA-ME.md`).
+
+**Testes:** `testes/borda.test.ts`, `testes/sincronizacao.test.ts` (motor sobre `fake-indexeddb` e
+uma `NuvemDeMentira` com as regras do banco — é onde RT-08 do lado da fila mora),
+`testes/integracao/sincronizacao.test.ts` (transporte real, deixa linhas no banco). Nada disso é
+afirmação sobre o WebKit.

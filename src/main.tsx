@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import { banco } from './dados/instancia'
 import { InvolucroMinimo } from './interface/InvolucroMinimo'
+import { sincronizacao } from './sincronizacao/instancia'
 import { pedirVerificacaoDeVersao } from './plataforma/atualizacao'
 import { pedirPersistencia } from './plataforma/persistencia'
 
@@ -17,6 +18,11 @@ pedirVerificacaoDeVersao()
 // na abertura (EL-06).
 void banco.open().catch(() => undefined)
 pedirPersistencia()
+
+// A sincronização acorda na abertura e depois sozinha — a cada gravação, ao voltar a rede, ao
+// voltar à aba, ao entrar a sessão (E-07). Nunca é aguardada por ninguém: escrita é local (RI-02)
+// e falha de rede não vira tela (EL-06). Sem configuração da nuvem, o motor só conta a fila.
+sincronizacao.acordar()
 
 // Sem `!` e sem `as`: se o elemento não existir, o erro precisa dizer o que houve
 // (AGENTS.md §4). Silenciar o compilador aqui esconderia um index.html quebrado.

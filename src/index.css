@@ -42,6 +42,8 @@ body {
 
 .aviso { color: var(--suave); }
 .carimbo { margin-top: 2rem; font-size: 0.8rem; color: var(--suave); }
+/* O indicador de RF-25: discreto, uma linha, sem cor de alarme — "com problema" é E-10 quem trata. */
+.indicador { font-size: 0.9rem; color: var(--suave); }
 
 /* 44px é o mínimo de RNF-03, e vale para todo controle desde já. */
 button {

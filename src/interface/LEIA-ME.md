@@ -20,3 +20,8 @@ domínio e não solta pelo projeto.
 Preenchida a partir de **E-09**, e não de E-02: pela emenda de `D-023` (2026-09-05), o protótipo de E-02
 é descartável e mora em `prototipo/`, fora de `src/`. O que E-02 entrega para cá não é código — é o
 achado da sessão com a usuária, e E-09 precisa justificar por escrito toda divergência em relação a ele.
+
+**Uma exceção, de E-07:** `IndicadorDeEnvio.tsx` (o indicador de RF-25, uma linha passiva sobre
+`useSyncExternalStore`) e `palavras-do-envio.ts` (as palavras — "Tudo em dia" / "Enviando…" /
+"N para enviar" / "N com problema" — **hipótese** até E-15, `D-042`). Moram no `InvolucroMinimo`
+até E-09 decidir onde ficam; as palavras se trocam num lugar só.
