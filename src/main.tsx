@@ -24,6 +24,11 @@ pedirPersistencia()
 // e falha de rede não vira tela (EL-06). Sem configuração da nuvem, o motor só conta a fila.
 sincronizacao.acordar()
 
+// O laboratório de E-08 (D-043): a prova de offline lança vendas e lê a ficha por ele, porque
+// não há tela até E-09. Só no build de laboratório (`bun run build:laboratorio`): em produção
+// a variável não existe, o ramo é morto e o chunk nem é emitido.
+if (import.meta.env.VITE_LABORATORIO === '1') void import('./plataforma/laboratorio')
+
 // Sem `!` e sem `as`: se o elemento não existir, o erro precisa dizer o que houve
 // (AGENTS.md §4). Silenciar o compilador aqui esconderia um index.html quebrado.
 const raiz = document.getElementById('root')

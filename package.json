@@ -7,13 +7,17 @@
     "dev": "vite",
     "dev:lan": "LAN=1 vite --host",
     "build": "tsc -b && vite build",
+    "build:laboratorio": "VITE_LABORATORIO=1 vite build --outDir dist-laboratorio",
     "preview": "vite preview",
     "preview:lan": "LAN=1 vite preview --host --port 5173",
+    "preview:laboratorio": "vite preview --outDir dist-laboratorio --port 4174 --strictPort",
+    "preview:laboratorio:lan": "LAN=1 vite preview --outDir dist-laboratorio --host --port 4174 --strictPort",
     "prototipo": "vite prototipo --port 5174 --host",
     "typecheck": "tsc -b --noEmit",
     "lint": "oxlint",
     "test": "bun test",
     "test:integracao": "INTEGRACAO=1 bun --env-file=.env.local test --timeout 60000 testes/integracao",
+    "test:navegador": "bun run typecheck && bun run build:laboratorio && bunx playwright test",
     "migrar": "bun run nuvem/migrar.ts",
     "migrar:reverter": "bun run nuvem/migrar.ts reverter",
     "check": "bun run typecheck && bun run lint && bun run test"
@@ -25,6 +29,7 @@
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/bun": "^1.4.1",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
