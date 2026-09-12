@@ -2,9 +2,11 @@ import { useEffect } from 'react'
 import { repositorio } from '../dados/instancia.ts'
 import { emReais } from '../dominio/dinheiro.ts'
 import type { Id } from '../dominio/ficha.ts'
+import { Botao } from './Botao.tsx'
 import { diaCurto, hoje } from './datas.ts'
 import { linhasDaFicha, resumir, type LinhaDaFicha, type ResumoDaFicha } from './leitura-da-ficha.ts'
 import { linhaDaProxima, PALAVRAS } from './palavras-da-ficha.ts'
+import { PALAVRAS_DA_VENDA } from './palavras-da-venda.ts'
 import { Topo } from './Topo.tsx'
 import { useLeitura } from './useLeitura.ts'
 
@@ -13,11 +15,21 @@ import { useLeitura } from './useLeitura.ts'
  * deve hoje e qual a próxima parcela — vencida em destaque; abaixo, o histórico em ordem
  * cronológica inversa. Tudo derivado (RN-01): nenhum número aqui é lido de um campo.
  *
- * Fiel ao protótipo validado em 2026-09-08. O que falta é de outras etapas, de propósito
- * (D-044): "Recebi" é E-11 e "Vender fiado para ela" é E-10 — um botão que não faz nada
- * é defeito, não promessa.
+ * Fiel ao protótipo validado em 2026-09-08. "Vender fiado para ela" no rodapé é E-10 (D-044);
+ * a linha de uma venda ainda não desfeita é tocável e abre a anotação (D-045) — é por ali que
+ * ela corrige ou desfaz. "Recebi" é E-11: um botão que não faz nada é defeito, não promessa.
  */
-export function TelaFicha({ clienteId, aoVoltar }: { clienteId: Id; aoVoltar: () => void }) {
+export function TelaFicha({
+  clienteId,
+  aoVoltar,
+  aoVender,
+  aoAbrirLancamento,
+}: {
+  clienteId: Id
+  aoVoltar: () => void
+  aoVender: () => void
+  aoAbrirLancamento: (lancamentoId: Id) => void
+}) {
   const leitura = useLeitura(async () => {
     const cliente = await repositorio.lerCliente(clienteId)
     if (cliente === undefined) return null
@@ -47,7 +59,12 @@ export function TelaFicha({ clienteId, aoVoltar }: { clienteId: Id; aoVoltar: ()
       <Topo titulo={resumo.cliente.nome} subtitulo={resumo.cliente.apelido} aoVoltar={aoVoltar} />
       <CartaoDeSaldo resumo={resumo} />
       <h2 className="mt-7 mb-2 text-[1rem] font-semibold text-suave">{PALAVRAS.oQueAconteceu}</h2>
-      <Historico linhas={linhas} />
+      <Historico linhas={linhas} aoAbrir={aoAbrirLancamento} />
+      <div className="rodape-acao">
+        <Botao tipo="secundario" aoTocar={aoVender}>
+          {PALAVRAS_DA_VENDA.venderFiado}
+        </Botao>
+      </div>
     </main>
   )
 }
@@ -77,8 +94,12 @@ function CartaoDeSaldo({ resumo }: { resumo: ResumoDaFicha }) {
   )
 }
 
-/** O histórico: data, o que foi, quanto. Vencida em vermelho; pagamento em cinza; estornado riscado (RN-07). */
-function Historico({ linhas }: { linhas: LinhaDaFicha[] }) {
+/**
+ * O histórico: data, o que foi, quanto. Vencida em vermelho; pagamento em cinza; estornado
+ * riscado (RN-07). A linha com `lancamentoId` é um botão que abre a anotação (D-045), com o
+ * "›" à direita dizendo que abre — a mesma linha, o mesmo tamanho, sem cartão a mais.
+ */
+function Historico({ linhas, aoAbrir }: { linhas: LinhaDaFicha[]; aoAbrir: (lancamentoId: Id) => void }) {
   if (linhas.length === 0) return <p className="m-0 text-suave">{PALAVRAS.nadaAnotado}</p>
   return (
     <ul className="m-0 list-none p-0">
@@ -86,11 +107,27 @@ function Historico({ linhas }: { linhas: LinhaDaFicha[] }) {
         const destaque = linha.tipo === 'vencida' ? 'font-semibold text-atraso' : ''
         const apagado = linha.tipo === 'pagamento' ? 'text-suave' : ''
         const riscado = linha.estornado ? 'line-through text-suave' : ''
-        return (
-          <li key={linha.chave} className={`flex justify-between gap-3 border-b border-borda py-3 ${apagado} ${riscado}`}>
+        const conteudo = (
+          <>
             <span className="w-[4.25rem] flex-none text-suave tabular-nums">{diaCurto(linha.data)}</span>
             <span className={`flex-1 ${destaque}`}>{linha.descricao}</span>
             <span className={`flex-none whitespace-nowrap tabular-nums ${destaque}`}>{emReais(linha.valor)}</span>
+          </>
+        )
+        const classes = `flex w-full items-center justify-between gap-3 border-b border-borda py-3 ${apagado} ${riscado}`
+        const lancamentoId = linha.lancamentoId
+        return (
+          <li key={linha.chave}>
+            {lancamentoId === undefined ? (
+              <div className={classes}>{conteudo}</div>
+            ) : (
+              <button type="button" className={`${classes} border-x-0 border-t-0 bg-transparent px-0 text-left text-tinta`} onClick={() => aoAbrir(lancamentoId)}>
+                {conteudo}
+                <span className="flex-none text-suave" aria-hidden="true">
+                  &rsaquo;
+                </span>
+              </button>
+            )}
           </li>
         )
       })}

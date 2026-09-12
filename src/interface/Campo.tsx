@@ -1,8 +1,15 @@
 import { useId } from 'react'
 
-/** As classes de todo campo de texto do kit: 52 px, borda, papel, e o foco em verde. */
-export const CLASSES_DE_CAMPO =
-  'w-full min-h-[52px] rounded-xl border border-borda bg-papel px-3 text-tinta focus:outline-2 focus:outline-offset-2 focus:outline-acento'
+/**
+ * As classes de todo campo de texto do kit, sem largura: 52 px, borda, papel, e o foco em
+ * verde. É a base dos campos compactos da venda (preço do item, valor da parcela), que têm
+ * largura própria — `w-full` e `w-[6.5rem]` juntos deixariam o Tailwind decidir qual vale.
+ */
+export const CLASSES_DE_CAMPO_COMPACTO =
+  'min-h-[52px] rounded-xl border border-borda bg-papel px-3 text-tinta focus:outline-2 focus:outline-offset-2 focus:outline-acento'
+
+/** As classes de todo campo de texto do kit, na largura inteira. */
+export const CLASSES_DE_CAMPO = `w-full ${CLASSES_DE_CAMPO_COMPACTO}`
 
 /** O rótulo acima de um campo, em cinza, com o espaço do protótipo. */
 export function Rotulo({ para, children }: { para?: string; children: string }) {

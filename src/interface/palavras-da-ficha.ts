@@ -78,7 +78,8 @@ export function descricaoDosItens(itens: readonly ItemVenda[]): string {
   return `${nomes.slice(0, -1).join(', ')} e ${nomes[nomes.length - 1]}`
 }
 
-function comoPagou(forma: FormaDePagamento): string {
+/** "Pagou no Pix" / "Pagou em dinheiro": a linha do recebimento no histórico e a forma na anotação da venda à vista (E-10). */
+export function comoPagou(forma: FormaDePagamento): string {
   switch (forma) {
     case 'pix':
       return 'Pagou no Pix'

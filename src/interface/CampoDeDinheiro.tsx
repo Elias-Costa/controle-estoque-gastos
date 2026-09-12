@@ -23,29 +23,64 @@ export function CampoDeDinheiro({
   aoMudar: (texto: string) => void
 }) {
   const id = useId()
-  const lido = lerDinheiro(texto)
-  const vazio = texto.trim() === ''
   return (
     <>
       <Rotulo para={id}>{rotulo}</Rotulo>
       <div className="flex items-center gap-2 rounded-xl border border-borda bg-papel px-3.5 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-acento">
         <span className="text-2xl text-suave">R$</span>
-        <input
+        <EntradaDeDinheiro
           id={id}
           className="min-h-16 w-full border-0 bg-transparent text-[2.25rem] leading-none font-bold text-tinta tabular-nums outline-none"
-          type="text"
-          inputMode="decimal"
-          autoComplete="off"
-          value={texto}
-          onChange={(evento) => aoMudar(evento.target.value)}
+          texto={texto}
+          aoMudar={aoMudar}
         />
       </div>
-      {/* A leitura do domínio, grande, enquanto ela digita (D-034). Some quando o campo está vazio. */}
-      {!vazio && (
-        <p className={`m-0 mt-1.5 text-[1.25rem] font-semibold tabular-nums ${lido === null ? 'text-atraso' : 'text-suave'}`}>
-          {lido === null ? 'Não entendi o valor' : emReais(lido)}
-        </p>
-      )}
+      <LeituraDoValor texto={texto} className="mt-1.5 text-[1.25rem]" />
     </>
+  )
+}
+
+/**
+ * Só a entrada, sem rótulo nem leitura: para os lugares em que o campo é compacto — o preço
+ * de cada item e o valor de cada parcela na venda (E-10). O teclado é o decimal (D-034).
+ */
+export function EntradaDeDinheiro({
+  texto,
+  aoMudar,
+  className,
+  id,
+  exemplo,
+  rotuloAcessivel,
+}: {
+  texto: string
+  aoMudar: (texto: string) => void
+  className: string
+  id?: string
+  exemplo?: string
+  rotuloAcessivel?: string
+}) {
+  return (
+    <input
+      id={id}
+      className={className}
+      type="text"
+      inputMode="decimal"
+      autoComplete="off"
+      placeholder={exemplo}
+      aria-label={rotuloAcessivel}
+      value={texto}
+      onChange={(evento) => aoMudar(evento.target.value)}
+    />
+  )
+}
+
+/** A leitura do domínio para o que ela digitou (D-034). Some quando o campo está vazio. */
+export function LeituraDoValor({ texto, className }: { texto: string; className: string }) {
+  if (texto.trim() === '') return null
+  const lido = lerDinheiro(texto)
+  return (
+    <p className={`m-0 font-semibold tabular-nums ${lido === null ? 'text-atraso' : 'text-suave'} ${className}`}>
+      {lido === null ? 'Não entendi o valor' : emReais(lido)}
+    </p>
   )
 }
