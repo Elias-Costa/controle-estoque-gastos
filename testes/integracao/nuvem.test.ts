@@ -593,22 +593,119 @@ describe.skipIf(!LIGADA)('a nuvem recusa o que o app não pode gravar (E-06, RI-
   })
 
   describe('reversibilidade (E-06): o reverter desfaz, a migration refaz', () => {
-    test('reverter → tabelas somem → aplicar → tabelas voltam, tudo numa transação desfeita no fim', async () => {
-      const ultima = migracoes.at(-1)
-      if (ultima === undefined) throw new Error('sem migration')
+    test('reverter todas, da última à primeira → tabelas somem → aplicar todas → voltam, numa transação desfeita no fim', async () => {
+      if (migracoes.length === 0) throw new Error('sem migration')
       const existe = async (tx: SQL, tabela: string): Promise<boolean> => {
         const [linha] = await tx<{ existe: boolean }[]>`select to_regclass(${`public.${tabela}`}) is not null as existe`
         return linha?.existe === true
       }
+      const coluna = async (tx: SQL, tabela: string, nome: string): Promise<boolean> => {
+        const [linha] = await tx<{ existe: boolean }[]>`select exists (
+          select 1 from information_schema.columns
+          where table_schema = 'public' and table_name = ${tabela} and column_name = ${nome}) as existe`
+        return linha?.existe === true
+      }
       await numaTransacao(async (tx) => {
         expect(await existe(tx, 'lancamentos')).toBe(true)
-        await tx.unsafe(ultima.reverter)
+        expect(await coluna(tx, 'clientes', 'atualizado_em')).toBe(true)
+        // Cada reverter desfaz só a sua migration: depois da 0002, a 0001 ainda está lá.
+        for (const migracao of [...migracoes].reverse()) await tx.unsafe(migracao.reverter)
         expect(await existe(tx, 'lancamentos')).toBe(false)
         expect(await existe(tx, 'clientes')).toBe(false)
-        await tx.unsafe(ultima.aplicar)
+        for (const migracao of migracoes) await tx.unsafe(migracao.aplicar)
         expect(await existe(tx, 'lancamentos')).toBe(true)
         expect(await existe(tx, 'clientes')).toBe(true)
+        expect(await coluna(tx, 'clientes', 'atualizado_em')).toBe(true)
+        expect(await coluna(tx, 'clientes', 'recebido_em')).toBe(true)
         expect(await existe(tx, 'spike_sondas')).toBe(false)
+      })
+    })
+
+    test('a 0002 sozinha: reverter tira as colunas e o gatilho e deixa a 0001 de pé; aplicar devolve', async () => {
+      const segunda = migracoes.find((migracao) => migracao.nome.startsWith('0002_'))
+      if (segunda === undefined) throw new Error('sem 0002')
+      await numaTransacao(async (tx) => {
+        await tx.unsafe(segunda.reverter)
+        const [colunas] = await tx<{ n: number }[]>`select count(*)::int as n from information_schema.columns
+          where table_schema = 'public' and table_name = 'clientes' and column_name in ('atualizado_em', 'recebido_em')`
+        expect(colunas?.n).toBe(0)
+        const [gatilhos] = await tx<{ n: number }[]>`select count(*)::int as n from pg_trigger where tgname = 'clientes_ultimo_que_escreve'`
+        expect(gatilhos?.n).toBe(0)
+        // A 0001 continua inteira: dá para inserir um cliente e um lançamento.
+        await assumir(tx, CONTA_A)
+        const clienteId = uuidv7()
+        await criarCliente(tx, clienteId)
+        await inserir(tx, recebimento(clienteId))
+        expect(await contagem(tx)).toEqual({ linhas: 1, ids: 1 })
+        await comoPostgres(tx)
+        await tx.unsafe(segunda.aplicar)
+        const [depois] = await tx<{ n: number }[]>`select count(*)::int as n from information_schema.columns
+          where table_schema = 'public' and table_name = 'clientes' and column_name in ('atualizado_em', 'recebido_em')`
+        expect(depois?.n).toBe(2)
+      })
+    })
+  })
+
+  describe('último-que-escreve de cadastro (D-010, D-042, migration 0002)', () => {
+    /** O `atualizado_em` e o `recebido_em` de um cliente, como ISO. */
+    async function carimbos(tx: SQL, id: string): Promise<{ atualizado: string; recebido: string }> {
+      const [linha] = await tx<{ atualizado: string; recebido: string }[]>`
+        select to_char(atualizado_em at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as atualizado,
+               to_char(recebido_em at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as recebido
+        from public.clientes where id = ${id}::uuid`
+      if (linha === undefined) throw new Error('cliente não encontrado')
+      return linha
+    }
+
+    /** O upsert que a fila de E-07 manda para um cliente, com o carimbo do aparelho. */
+    async function enviarCliente(tx: SQL, id: string, nome: string, atualizadoEm: string): Promise<number> {
+      const linhas = await tx`insert into public.clientes (id, nome, atualizado_em)
+        values (${id}::uuid, ${nome}, ${atualizadoEm}::timestamptz)
+        on conflict (id) do update set nome = excluded.nome, atualizado_em = excluded.atualizado_em
+        returning id`
+      return linhas.length
+    }
+
+    test('a versão mais antiga é descartada em silêncio; a mais nova e a igual passam; recebido_em é do servidor', async () => {
+      await numaTransacao(async (tx) => {
+        await assumir(tx, CONTA_A)
+        const id = uuidv7()
+        expect(await enviarCliente(tx, id, 'Vera', '2026-09-12T10:05:00.000Z')).toBe(1)
+        const primeiro = await carimbos(tx, id)
+        expect(primeiro.atualizado).toBe('2026-09-12T10:05:00.000Z')
+        // `recebido_em` é `now()` do servidor — não é o carimbo do aparelho, e é de hoje, não de 10h05.
+        expect(primeiro.recebido).not.toBe(primeiro.atualizado)
+
+        // O iPhone que editou ANTES (10h00) e só chegou agora: sucesso sem erro, zero linhas, nada muda.
+        expect(await enviarCliente(tx, id, 'Vera (do iPhone)', '2026-09-12T10:00:00.000Z')).toBe(0)
+        const depoisDoAntigo = await carimbos(tx, id)
+        expect(depoisDoAntigo).toEqual(primeiro)
+        const [nome] = await tx<{ nome: string }[]>`select nome from public.clientes where id = ${id}::uuid`
+        expect(nome?.nome).toBe('Vera')
+
+        // O reenvio idempotente (RI-05): mesmo carimbo, mesmo conteúdo — passa, e `recebido_em` anda.
+        expect(await enviarCliente(tx, id, 'Vera', '2026-09-12T10:05:00.000Z')).toBe(1)
+        expect((await carimbos(tx, id)).atualizado).toBe('2026-09-12T10:05:00.000Z')
+
+        // A edição mais nova vence.
+        expect(await enviarCliente(tx, id, 'Vera Lúcia', '2026-09-12T10:10:00.000Z')).toBe(1)
+        const [novo] = await tx<{ nome: string }[]>`select nome from public.clientes where id = ${id}::uuid`
+        expect(novo?.nome).toBe('Vera Lúcia')
+        expect((await carimbos(tx, id)).atualizado).toBe('2026-09-12T10:10:00.000Z')
+      })
+    })
+
+    test('o gatilho vale para qualquer papel, e os índices do download existem', async () => {
+      await numaTransacao(async (tx) => {
+        // A linha nasce como conta (`dono` vem de `auth.uid()`); o descarte é provado como `postgres`.
+        await assumir(tx, CONTA_A)
+        const id = uuidv7()
+        expect(await enviarCliente(tx, id, 'Como conta', '2026-09-12T12:00:00.000Z')).toBe(1)
+        await comoPostgres(tx)
+        expect(await enviarCliente(tx, id, 'Mais antigo, como postgres', '2026-09-12T11:00:00.000Z')).toBe(0)
+        const indices = await tx<{ indexname: string }[]>`select indexname from pg_indexes
+          where schemaname = 'public' and indexname in ('clientes_por_chegada', 'lancamentos_por_chegada') order by indexname`
+        expect(indices.map((indice) => indice.indexname)).toEqual(['clientes_por_chegada', 'lancamentos_por_chegada'])
       })
     })
   })

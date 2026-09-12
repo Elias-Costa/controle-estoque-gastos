@@ -9,8 +9,11 @@ Preenchida em **E-06**; o modelo está em `D-041`.
 |---|---|
 | `migracoes/0001_fichas.sql` | `clientes` e `lancamentos`, com as invariantes, os gatilhos e as políticas de linha |
 | `migracoes/0001_fichas.reverter.sql` | desfaz a 0001 inteira, na ordem inversa |
+| `migracoes/0002_ultimo-que-escreve.sql` | `atualizado_em` (relógio do aparelho) e `recebido_em` (servidor) em `clientes`, o gatilho de último-que-escreve e os índices do download (E-07, `D-042`) |
+| `migracoes/0002_ultimo-que-escreve.reverter.sql` | desfaz a 0002 |
 | `migrar.ts` | o runner: `bun run migrar` aplica o que falta; `bun run migrar:reverter` volta uma |
-| `../testes/integracao/nuvem.test.ts` | a prova: tenta violar cada invariante direto no banco e espera a recusa |
+| `../testes/integracao/nuvem.test.ts` | a prova: tenta violar cada invariante direto no banco e espera a recusa; desde E-07, também o gatilho da 0002 |
+| `../testes/integracao/sincronizacao.test.ts` | o transporte real (E-07): `supabase-js` → PostgREST com um usuário de teste. **Deixa linhas no banco** — ver abaixo |
 
 ## Como o esquema é
 
@@ -36,7 +39,15 @@ dois aparelhos a nuvem recebe a união em ordem arbitrária (`D-010`) — o sald
 aparelho (`D-039`).
 
 **Dinheiro** é `bigint` de centavos nas colunas (`D-022`). Dentro do `jsonb`, `valor` e `preco` são
-inteiros não negativos, aceitos como número JSON ou texto de dígitos; `39.9` é recusado.
+inteiros não negativos, aceitos como número JSON ou texto de dígitos; `39.9` é recusado. Na volta,
+o app pede as colunas `bigint` com `::text` — o PostgREST as serializaria como número JSON.
+
+**Último-que-escreve de cadastro (`0002`, `D-010`, `D-042`):** `clientes.atualizado_em` é o
+relógio do **aparelho**, enviado pelo app; o gatilho `clientes_ultimo_que_escreve` descarta em
+silêncio um update com carimbo mais antigo que o guardado (o `upsert` responde sucesso, a linha não
+muda) e carimba `recebido_em` com `now()` do **servidor** em todo insert e update aceito.
+`recebido_em` (e `criado_em`, em lançamentos) é o cursor do download. Lançamento não tem
+`atualizado_em`: é imutável.
 
 ## Como rodar
 
@@ -56,6 +67,17 @@ bun run test:integracao
 o nome. `migrar:reverter` roda o `.reverter.sql` da última registrada, na mesma transação em que
 apaga o registro. A suíte só roda com `INTEGRACAO=1` (o script já passa) e carrega `.env.local`
 pelo nome — **`bun test` sozinho não o carrega**.
+
+**Para a suíte do transporte real** (`sincronizacao.test.ts`) é preciso, além disso, um **usuário
+de teste** (`D-042`, item 4): no painel, Authentication → Users → Add user (com auto-confirm), e em
+`.env.local` as chaves `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` (as mesmas do app),
+`SUPABASE_TESTE_EMAIL` e `SUPABASE_TESTE_SENHA`. Sem elas a suíte pula e diz por quê.
+
+**Essa suíte deixa linhas no banco, e é por decisão** (`D-042`): lançamento é imutável e ninguém
+apaga (RI-03), então as linhas de teste ficam — sob o `dono` do usuário de teste, invisíveis à conta
+dela pela RLS. Cada rodada usa ids novos. **Limpeza, antes de E-15:** `bun run migrar:reverter`
+duas vezes (0002, depois 0001 — apaga as tabelas inteiras) e `bun run migrar`. É o mesmo reset que
+E-06 fez uma vez antes de haver dado. E-08 vai deixar mais linhas pelo mesmo motivo.
 
 ## Como acrescentar uma migration
 
@@ -82,7 +104,8 @@ DDL no início de cada transação de teste e o desfaz com ela. Cinco mutações
 imutabilidade; check de soma; política de leitura aberta; FK sem o dono; índice de um estorno por
 alvo) derrubaram 2, 1, 1, 1 e 1 testes.
 
-**O que ela não prova:** que a fila sobe (E-07), que o dado volta ao aparelho (RT-10, E-08), e
-nada sobre o WebKit. E um detalhe que E-07 precisa saber: para o papel do app, `delete` sem
+**O que ela não prova:** que o dado volta ao aparelho de ponta a ponta (RT-10, E-08), e nada sobre
+o WebKit. Que a fila sobe é `testes/sincronizacao.test.ts` (lógica) e
+`testes/integracao/sincronizacao.test.ts` (transporte real), desde E-07. E um detalhe que E-07 precisa saber: para o papel do app, `delete` sem
 política é um "0 linhas" **silencioso** — a linha nem chega ao gatilho. O erro só aparece para quem
 ignora RLS.
