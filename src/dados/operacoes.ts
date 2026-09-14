@@ -180,6 +180,17 @@ export async function corrigirVenda(repositorio: Repositorio, substituto: VendaC
   return corrigirLancamento(repositorio, venda, correcao)
 }
 
+/** O saldo anterior como a tela de correção o remonta (E-14): as parcelas que ficaram já têm id; as novas ganham um aqui. */
+export type SaldoAnteriorCorrigido = Omit<SaldoAnterior, 'parcelas'> & { readonly parcelas: readonly (Parcela | ParcelaNova)[] }
+
+/**
+ * Correção de um saldo anterior (RF-07, D-013, D-049): o mesmo `corrigirLancamento` da venda,
+ * com o id das parcelas resolvido pela posição — parcela já paga precisa continuar igual (RN-08).
+ */
+export async function corrigirSaldoAnterior(repositorio: Repositorio, substituto: SaldoAnteriorCorrigido, correcao: Correcao): Promise<Resultado<SaldoAnterior>> {
+  return corrigirLancamento(repositorio, { ...substituto, parcelas: comIds(substituto.parcelas) }, correcao)
+}
+
 /**
  * Renegociação de parcelas (RN-08, D-012): parcela que já existia mantém o id (é assim que
  * "parcela paga não muda" tem o que comparar); parcela nova ganha um.

@@ -95,9 +95,12 @@ export function datasSugeridas(dataDaVenda: Dia, vezes: number): Dia[] {
  * mexeu dividem o resto por `repartir` (D-030). Data editada vale; vazia volta à sugerida.
  * Quando não há o que absorver — editou todas, ou o resto ficaria negativo — as parcelas
  * não fecham o total, e é a guarda `parcelas-nao-fecham` que diz isso.
+ *
+ * As datas sugeridas vêm de fora (D-049, item 2): a venda passa `datasSugeridas` (do mês
+ * seguinte à venda); o saldo anterior passa `datasAPartirDe` (de "vence em" em diante).
+ * O número de parcelas é o das datas.
  */
-export function montarParcelas(total: Centavos, dataDaVenda: Dia, vezes: number, edicoes: readonly EdicaoDeParcela[]): ParcelaMontada[] {
-  const datas = datasSugeridas(dataDaVenda, vezes)
+export function montarParcelas(total: Centavos, datas: readonly Dia[], edicoes: readonly EdicaoDeParcela[]): ParcelaMontada[] {
   const base = datas.map((sugerida, posicao): ParcelaMontada => {
     const edicao = edicoes[posicao]
     const vencimento = edicao?.vencimento !== undefined && edicao.vencimento !== '' ? edicao.vencimento : sugerida
@@ -142,7 +145,8 @@ export function conferir(rascunho: Rascunho, hoje: Dia): Conferencia {
   const total = desconto > somaDosItens ? 0n : somaDosItens - desconto
   if (itensDaVenda.length === 0 || total === 0n) guardas.push('sem-valor')
 
-  const parcelas = rascunho.pagamento === 'fiado' ? montarParcelas(total, rascunho.data === '' ? hoje : rascunho.data, rascunho.vezes, rascunho.edicoes) : []
+  const parcelas =
+    rascunho.pagamento === 'fiado' ? montarParcelas(total, datasSugeridas(rascunho.data === '' ? hoje : rascunho.data, rascunho.vezes), rascunho.edicoes) : []
   if (parcelas.some((parcela) => parcela.ilegivel)) guardas.push('parcela-ilegivel')
   else if (parcelas.length > 0 && somar(parcelas.map((parcela) => parcela.valor)) !== total) guardas.push('parcelas-nao-fecham')
 

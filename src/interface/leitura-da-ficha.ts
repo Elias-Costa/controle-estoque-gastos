@@ -120,7 +120,7 @@ export function devedoras(resumos: readonly ResumoDaFicha[], filtro: FiltroDeDev
 /**
  * Uma linha do histórico da ficha. `chave` é estável para o React; `valor` é sempre positivo — a
  * descrição diz o sentido. `lancamentoId` só existe na linha que **abre a anotação** (E-10,
- * D-045; E-11, D-046): a venda ou o recebimento ainda não desfeito. Saldo anterior entra em E-14.
+ * D-045; E-11, D-046; E-14, D-049): a venda, o recebimento ou o saldo anterior ainda não desfeito.
  */
 export type LinhaDaFicha = {
   readonly chave: string
@@ -167,7 +167,8 @@ export function linhasDaFicha(ficha: Ficha, hoje: Dia): LinhaDaFicha[] {
     valor,
     tipo: lancamento.tipo === 'recebimento' || lancamento.tipo === 'desconto-quitacao' ? 'pagamento' : 'evento',
     estornado,
-    ...((lancamento.tipo === 'venda' || lancamento.tipo === 'recebimento') && !estornado && { lancamentoId: lancamento.id }),
+    ...((lancamento.tipo === 'venda' || lancamento.tipo === 'recebimento' || lancamento.tipo === 'saldo-anterior') &&
+      !estornado && { lancamentoId: lancamento.id }),
   }))
 
   // Ordenação estável: no mesmo dia, parcela antes de evento — como o protótipo.

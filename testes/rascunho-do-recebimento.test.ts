@@ -99,6 +99,14 @@ describe('"Quando foi" (extraído da venda em E-11)', () => {
     expect(diaDoQuando({ escolha: 'outro', outroDia: '2026-09-01' }, HOJE)).toBe('2026-09-01')
     expect(diaDoQuando({ escolha: 'outro', outroDia: '' }, HOJE)).toBe('')
   })
+
+  test('a última data digitada preenche "Outro dia" do lançamento novo, e só dele; o padrão continua "Hoje" (D-049, RN-09)', () => {
+    expect(quandoDe(undefined, HOJE, '2026-08-20')).toEqual({ escolha: 'hoje', outroDia: '2026-08-20' })
+    expect(diaDoQuando(quandoDe(undefined, HOJE, '2026-08-20'), HOJE)).toBe(HOJE)
+    // A correção mostra a data gravada, nunca a lembrada.
+    expect(quandoDe('2026-09-01', HOJE, '2026-08-20')).toEqual({ escolha: 'outro', outroDia: '2026-09-01' })
+    expect(quandoDe(HOJE, HOJE, '2026-08-20')).toEqual({ escolha: 'hoje', outroDia: '' })
+  })
 })
 
 describe('as palavras do recebimento (RI-07, protótipo de 2026-09-08)', () => {

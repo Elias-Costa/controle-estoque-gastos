@@ -215,7 +215,7 @@ describe('linhasDaFicha — o histórico como o protótipo mostra (RF-02)', () =
     ])
   })
 
-  test('só a venda e o recebimento ainda não desfeitos abrem a anotação (E-10, D-045; E-11, D-046): parcela, estorno, venda ou recebimento estornado e saldo anterior não', () => {
+  test('só a venda, o recebimento e o saldo anterior ainda não desfeitos abrem a anotação (D-045, D-046, D-049): parcela, estorno e lançamento estornado não', () => {
     const avista = ok(novaVendaAVista({ id: 'a1', clienteId: 'c8', data: '2026-09-10', itens: [{ descricao: 'Perfume', preco: 9900n }], forma: 'pix' }))
     const papel = anterior('c8', 's2', '2026-06-01', [parcela('p10', '2026-09-30', 5000n)])
     const fiada = fiado('c8', 'v9', '2026-09-09', ['Batom'], [parcela('p11', '2026-10-09', 2500n)])
@@ -234,7 +234,15 @@ describe('linhasDaFicha — o histórico como o protótipo mostra (RF-02)', () =
       ['Batom', 'v9'],
       ['Pagou no Pix', 'r1'],
       ['Pagou em dinheiro', undefined],
-      ['Já devia', undefined],
+      ['Já devia', 's2'],
+    ])
+
+    // Saldo anterior desfeito (E-14): a linha continua, riscada, e não abre mais nada.
+    const soPapel: Ficha = [anterior('c9', 's3', '2026-06-01', [parcela('p12', '2026-09-30', 5000n)])]
+    const papelDesfeito = ok(estornar(soPapel, { id: 'e3', clienteId: 'c9', data: '2026-09-11', estornaId: 's3' }))
+    expect(linhasDaFicha([...soPapel, papelDesfeito], HOJE).map((l) => [l.descricao, l.estornado, l.lancamentoId])).toEqual([
+      ['Desfez: Já devia', false, undefined],
+      ['Já devia', true, undefined],
     ])
   })
 

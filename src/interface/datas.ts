@@ -79,9 +79,15 @@ export type Quando = {
   readonly outroDia: Dia
 }
 
-/** Hoje, ontem ou outro dia, a partir de uma data já gravada — ou hoje, quando não há nenhuma. */
-export function quandoDe(data: Dia | undefined, hoje: Dia): Quando {
-  if (data === undefined || data === hoje) return { escolha: 'hoje', outroDia: '' }
+/**
+ * Hoje, ontem ou outro dia, a partir de uma data já gravada — ou hoje, quando não há nenhuma.
+ * Sem data gravada, "Outro dia" já vem com a última que ela digitou nesta sessão (`lembrado`,
+ * D-049 item 1): na migração ela ajusta o dia em vez de digitar a data inteira. O padrão
+ * continua "Hoje" (RN-09); a lembrança só preenche o campo que ela abre.
+ */
+export function quandoDe(data: Dia | undefined, hoje: Dia, lembrado: Dia = ''): Quando {
+  if (data === undefined) return { escolha: 'hoje', outroDia: lembrado }
+  if (data === hoje) return { escolha: 'hoje', outroDia: '' }
   if (data === diasDepois(hoje, -1)) return { escolha: 'ontem', outroDia: '' }
   return { escolha: 'outro', outroDia: data }
 }

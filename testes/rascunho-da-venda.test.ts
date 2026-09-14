@@ -98,14 +98,14 @@ describe('parcelas — datas de mês em mês a partir da venda; a editada fica, 
   })
 
   test('sem edição é a divisão automática de D-030: R$ 64,90 em 3× → 21,70 / 21,60 / 21,60', () => {
-    const parcelas = montarParcelas(6490n, HOJE, 3, [])
+    const parcelas = montarParcelas(6490n, datasSugeridas(HOJE, 3), [])
     expect(parcelas.map((p) => p.valor)).toEqual([2170n, 2160n, 2160n])
     expect(parcelas.map((p) => p.vencimento)).toEqual(['2026-10-12', '2026-11-12', '2026-12-12'])
     expect(parcelas.every((p) => !p.editada && !p.ilegivel)).toBe(true)
   })
 
   test('"paga 30 agora e o resto depois": a 1ª fica em 30,00 e as outras dividem os 34,90 ("30" seria R$ 0,30, D-034)', () => {
-    const parcelas = montarParcelas(6490n, HOJE, 3, [{ valorTexto: '30,00' }])
+    const parcelas = montarParcelas(6490n, datasSugeridas(HOJE, 3), [{ valorTexto: '30,00' }])
     expect(parcelas.map((p) => [p.valor, p.editada])).toEqual([
       [3000n, true],
       [1745n, false],
@@ -115,14 +115,14 @@ describe('parcelas — datas de mês em mês a partir da venda; a editada fica, 
   })
 
   test('valor que ela digita não precisa ser múltiplo de 5; o resto continua sendo (D-012)', () => {
-    const parcelas = montarParcelas(10000n, HOJE, 3, [{}, { valorTexto: '33,33' }])
+    const parcelas = montarParcelas(10000n, datasSugeridas(HOJE, 3), [{}, { valorTexto: '33,33' }])
     expect(parcelas.map((p) => p.valor)).toEqual([3337n, 3333n, 3330n])
     expect(somar(parcelas.map((p) => p.valor))).toBe(10000n)
     expect(repartir(6667n, 2)).toEqual([3337n, 3330n])
   })
 
   test('data editada vale; data vazia volta à sugerida; edição de valor vazia é "não mexeu"', () => {
-    const parcelas = montarParcelas(6000n, HOJE, 2, [{ vencimento: '2026-09-20' }, { vencimento: '', valorTexto: '  ' }])
+    const parcelas = montarParcelas(6000n, datasSugeridas(HOJE, 2), [{ vencimento: '2026-09-20' }, { vencimento: '', valorTexto: '  ' }])
     expect(parcelas.map((p) => [p.vencimento, p.valor, p.editada])).toEqual([
       ['2026-09-20', 3000n, false],
       ['2026-11-12', 3000n, false],
@@ -234,7 +234,7 @@ describe('de volta ao rascunho — a correção (D-013, D-045)', () => {
     const avista = ok(novaVendaAVista({ id: 'a1', clienteId: 'c1', data: '2026-09-01', itens: [{ descricao: 'Batom', preco: 2500n }], forma: 'pix' }))
     expect(rascunhoDaVenda(avista)).toMatchObject({ pagamento: 'avista', forma: 'pix', vezes: 1, edicoes: [] })
 
-    const montadas = montarParcelas(9000n, HOJE, 3, [])
+    const montadas = montarParcelas(9000n, datasSugeridas(HOJE, 3), [])
     const originais = [parcela('p1', '2026-10-01', 4500n), parcela('p2', '2026-11-01', 4500n)]
     expect(parcelasCorrigidas(montadas, originais)).toEqual([
       { id: 'p1', vencimento: '2026-10-12', valor: 3000n },

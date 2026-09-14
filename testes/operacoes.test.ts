@@ -5,6 +5,7 @@ import { FORMATO_UUIDV7 } from '../src/dados/identidade.ts'
 import {
   cadastrarCliente,
   corrigirLancamento,
+  corrigirSaldoAnterior,
   corrigirVenda,
   estornarLancamento,
   lancarSaldoAnterior,
@@ -247,6 +248,49 @@ describe('correções: a janela de D-013 entra como argumento; a fila não ganha
     // Depois de sincronizada, recusa sem tocar na linha.
     expect(motivo(await corrigirVenda(repositorio, { ...fiado, parcelas: fiado.parcelas }, { sincronizado: true }))).toBe('ja-sincronizado')
     expect(saldo(await repositorio.lerFicha(cliente.id))).toBe(0n)
+  })
+
+  test('corrigirSaldoAnterior: mesma linha, a parcela paga continua com o id e o valor; a nova ganha um id (E-14, D-049, RN-08)', async () => {
+    const { banco, repositorio } = preparar()
+    const cliente = await vera(repositorio)
+    const papel = ok(
+      await lancarSaldoAnterior(repositorio, {
+        clienteId: cliente.id,
+        data: '2026-06-01',
+        parcelas: [
+          { vencimento: '2026-07-01', valor: 5000n },
+          { vencimento: '2026-08-01', valor: 5000n },
+        ],
+      }),
+    )
+    ok(await receber(repositorio, { clienteId: cliente.id, data: '2026-07-01', valor: 5000n, forma: 'dinheiro' }))
+    const [paga, segunda] = papel.parcelas
+    if (paga === undefined || segunda === undefined) throw new Error('sem parcela')
+    expect(await banco.fila.count()).toBe(3)
+
+    // Era R$ 150,00 em 3×, afinal: a 1ª (paga) fica como está; as outras vêm da tela pela posição.
+    const corrigido = ok(
+      await corrigirSaldoAnterior(
+        repositorio,
+        { ...papel, parcelas: [paga, { ...segunda, valor: 5000n }, { vencimento: '2026-09-01', valor: 5000n }] },
+        { sincronizado: false },
+      ),
+    )
+    expect(corrigido.id).toBe(papel.id)
+    expect(corrigido.parcelas.map((parcela) => parcela.id)[0]).toBe(paga.id)
+    expect(corrigido.parcelas[1]?.id).toBe(segunda.id)
+    expect(corrigido.parcelas[2]?.id).toMatch(FORMATO_UUIDV7)
+    expect(saldo(await repositorio.lerFicha(cliente.id))).toBe(10000n)
+    expect(await banco.lancamentos.count()).toBe(2)
+    expect(await banco.fila.count()).toBe(3)
+
+    // A parcela paga mudou de valor: recusa sem tocar na linha.
+    expect(
+      motivo(await corrigirSaldoAnterior(repositorio, { ...papel, parcelas: [{ ...paga, valor: 4000n }, { vencimento: '2026-08-01', valor: 6000n }] }, { sincronizado: false })),
+    ).toBe('parcela-paga-alterada')
+    // Depois de sincronizado, recusa.
+    expect(motivo(await corrigirSaldoAnterior(repositorio, { ...papel, parcelas: papel.parcelas }, { sincronizado: true }))).toBe('ja-sincronizado')
+    expect(saldo(await repositorio.lerFicha(cliente.id))).toBe(10000n)
   })
 
   test('moverParaOutraCliente: a venda sai da ficha da Vera e entra na da Maria, com o mesmo id', async () => {
