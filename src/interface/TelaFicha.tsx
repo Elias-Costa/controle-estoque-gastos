@@ -4,14 +4,16 @@ import { quitar } from '../dados/operacoes.ts'
 import { emReais } from '../dominio/dinheiro.ts'
 import type { Id } from '../dominio/ficha.ts'
 import { podeConsiderarPago } from '../dominio/lancamentos.ts'
-import { Botao } from './Botao.tsx'
+import { Botao, BotaoLink } from './Botao.tsx'
 import { diaCurto, hoje } from './datas.ts'
 import { linhasDaFicha, resumir, type LinhaDaFicha, type ResumoDaFicha } from './leitura-da-ficha.ts'
+import { mensagemDeCobranca, PALAVRAS_DA_COBRANCA } from './palavras-da-cobranca.ts'
 import { linhaDaProxima, PALAVRAS } from './palavras-da-ficha.ts'
 import { fraseDaRecusa, PALAVRAS_DA_VENDA } from './palavras-da-venda.ts'
 import { botaoRecebi, PALAVRAS_DO_RECEBIMENTO } from './palavras-do-recebimento.ts'
 import { Topo } from './Topo.tsx'
 import { useLeitura } from './useLeitura.ts'
+import { linkDoWhatsApp } from './whatsapp.ts'
 
 /**
  * A ficha (RF-02): a tela que substitui a página do caderno. No topo, sem rolagem, quanto ela
@@ -23,7 +25,7 @@ import { useLeitura } from './useLeitura.ts'
  * para ela" (E-10, D-044). Quando o que falta é de até R$ 0,10, "Considerar pago" toma o
  * lugar de "Recebi" (D-031, D-046): um toque, e a ficha relê. A linha de uma venda ou de um
  * recebimento ainda não desfeito é tocável e abre a anotação (D-045) — é por ali que ela
- * corrige ou desfaz.
+ * corrige ou desfaz. "Cobrar no WhatsApp" (E-12, RF-09) fica no cartão do saldo (D-047).
  */
 export function TelaFicha({
   clienteId,
@@ -87,7 +89,7 @@ export function TelaFicha({
   return (
     <main className="tela">
       <Topo titulo={resumo.cliente.nome} subtitulo={resumo.cliente.apelido} aoVoltar={aoVoltar} />
-      <CartaoDeSaldo resumo={resumo} />
+      <CartaoDeSaldo resumo={resumo} cobravel={!podeQuitar} />
       <h2 className="mt-7 mb-2 text-[1rem] font-semibold text-suave">{PALAVRAS.oQueAconteceu}</h2>
       <Historico linhas={linhas} aoAbrir={aoAbrirLancamento} />
       {erro !== null && <p className="mt-4 mb-0 font-semibold text-atraso">{erro}</p>}
@@ -114,8 +116,13 @@ export function TelaFicha({
 /**
  * RF-02 exige saldo e próxima parcela "no topo e sem rolagem". O cartão é curto de propósito:
  * o que compete com ele por espaço é o histórico, e o histórico pode rolar.
+ *
+ * "Cobrar no WhatsApp" (RF-09, E-12) mora aqui, sob o número que ela vai cobrar (D-047 item 4),
+ * e só quando há o que cobrar: some sem parcela em aberto e quando `cobravel` é falso (saldo
+ * de até R$ 0,10 — ninguém cobra três centavos; a ficha oferece "Considerar pago"). É um link:
+ * o app monta o texto, ela envia (D-007). Sem telefone legível, abre o WhatsApp sem número.
  */
-function CartaoDeSaldo({ resumo }: { resumo: ResumoDaFicha }) {
+function CartaoDeSaldo({ resumo, cobravel }: { resumo: ResumoDaFicha; cobravel: boolean }) {
   const vencida = resumo.proxima?.vencida === true
   return (
     <div className="rounded-2xl border border-borda bg-papel px-[1.125rem] pt-4 pb-[1.125rem]">
@@ -132,6 +139,24 @@ function CartaoDeSaldo({ resumo }: { resumo: ResumoDaFicha }) {
       >
         {linhaDaProxima(resumo.proxima, resumo.vazia)}
       </p>
+      {resumo.proxima !== null && cobravel && (
+        <BotaoLink
+          tipo="secundario"
+          className="mt-4"
+          href={linkDoWhatsApp(
+            resumo.cliente.telefone,
+            mensagemDeCobranca({
+              nome: resumo.cliente.nome,
+              restante: resumo.proxima.restante,
+              vencimento: resumo.proxima.vencimento,
+              vencida: resumo.proxima.vencida,
+              saldo: resumo.saldo,
+            }),
+          )}
+        >
+          {PALAVRAS_DA_COBRANCA.cobrar}
+        </BotaoLink>
+      )}
     </div>
   )
 }

@@ -9,6 +9,8 @@ import { PALAVRAS_DA_VENDA } from './palavras-da-venda.ts'
  * "Ver a fichinha" / "Voltar para o começo". Uma tela pode pôr **uma** ação própria acima
  * deles (o "Considerar pago", D-046); ela passa a ser o botão principal e "Ver a fichinha"
  * desce para secundário — dois botões verdes empilhados não dizem qual é o de agora.
+ * Um `complemento` opcional fica **sob as linhas**, no corpo (o recibo, D-047): o rodapé
+ * já pode ter três botões, e quatro empilhados não dizem qual é o de agora.
  * O que as linhas dizem é de cada tela; o número vem sempre **relido da base** (RN-01).
  */
 export function Confirmacao({
@@ -16,6 +18,7 @@ export function Confirmacao({
   segunda,
   terceira,
   aviso,
+  complemento,
   acaoPropria,
   aoVerFicha,
   aoVoltarAoInicio,
@@ -25,6 +28,7 @@ export function Confirmacao({
   terceira?: string
   /** Uma frase de recusa ou falha, em palavras dela, quando a ação própria não conseguiu. */
   aviso?: string | null
+  complemento?: ReactNode
   acaoPropria?: ReactNode
   aoVerFicha: () => void
   aoVoltarAoInicio: () => void
@@ -39,6 +43,7 @@ export function Confirmacao({
       <p className="mt-2 mb-0 text-[1.75rem] font-bold tabular-nums">{segunda}</p>
       {terceira !== undefined && <p className="mt-2 mb-0 text-[1.25rem] tabular-nums">{terceira}</p>}
       {aviso != null && <p className="mt-4 mb-0 font-semibold text-atraso">{aviso}</p>}
+      {complemento !== undefined && <div className="mt-8">{complemento}</div>}
       <div className="rodape-acao">
         {acaoPropria}
         <Botao tipo={acaoPropria === undefined ? 'principal' : 'secundario'} aoTocar={aoVerFicha}>

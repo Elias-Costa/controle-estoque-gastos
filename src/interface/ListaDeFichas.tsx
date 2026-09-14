@@ -1,8 +1,7 @@
-import { repositorio } from '../dados/instancia.ts'
 import type { Id } from '../dominio/ficha.ts'
 import { CLASSES_DE_CAMPO } from './Campo.tsx'
-import { hoje } from './datas.ts'
-import { filtrarEOrdenar, resumir, type ResumoDaFicha } from './leitura-da-ficha.ts'
+import { lerResumos } from './ler-resumos.ts'
+import { filtrarEOrdenar, type ResumoDaFicha } from './leitura-da-ficha.ts'
 import { avisoDeAtraso, PALAVRAS, quantoDeve } from './palavras-da-ficha.ts'
 import { useLeitura } from './useLeitura.ts'
 
@@ -23,12 +22,7 @@ export function ListaDeFichas({
   aoAbrir: (clienteId: Id) => void
   chave: string
 }) {
-  // Todas as clientes cabem em memória (RNF-05): uma leitura por ficha é o suficiente em F1.
-  const leitura = useLeitura(async () => {
-    const dia = hoje()
-    const clientes = await repositorio.listarClientes()
-    return Promise.all(clientes.map(async (cliente) => resumir(cliente, await repositorio.lerFicha(cliente.id), dia)))
-  }, chave)
+  const leitura = useLeitura(lerResumos, chave)
 
   return (
     <>
@@ -43,16 +37,22 @@ export function ListaDeFichas({
         onChange={(evento) => aoBuscar(evento.target.value)}
       />
 
-      {leitura.estado === 'lido' && <Lista resumos={filtrarEOrdenar(leitura.valor, busca)} haFichas={leitura.valor.length > 0} aoAbrir={aoAbrir} />}
+      {leitura.estado === 'lido' && (
+        <Lista resumos={filtrarEOrdenar(leitura.valor, busca)} vazia={leitura.valor.length > 0 ? PALAVRAS.ninguemComEsseNome : PALAVRAS.nenhumaFicha} aoAbrir={aoAbrir} />
+      )}
       {leitura.estado === 'falhou' && <p className="mt-3 text-atraso">{PALAVRAS.naoDeuParaAbrir}</p>}
     </>
   )
 }
 
-/** A lista tocável: nome e apelido à esquerda; "em dia" ou quanto deve à direita, em vermelho se atrasada. */
-function Lista({ resumos, haFichas, aoAbrir }: { resumos: ResumoDaFicha[]; haFichas: boolean; aoAbrir: (clienteId: Id) => void }) {
+/**
+ * A lista tocável: nome e apelido à esquerda; "em dia" ou quanto deve à direita, em vermelho se
+ * atrasada, com "atrasada há N dias" (RF-10). `vazia` é o que dizer quando não há linha — cada
+ * tela sabe o motivo. A mesma linha serve à lista de devedores (E-12).
+ */
+export function Lista({ resumos, vazia, aoAbrir }: { resumos: ResumoDaFicha[]; vazia: string; aoAbrir: (clienteId: Id) => void }) {
   if (resumos.length === 0) {
-    return <p className="mt-3 text-suave">{haFichas ? PALAVRAS.ninguemComEsseNome : PALAVRAS.nenhumaFicha}</p>
+    return <p className="mt-3 text-suave">{vazia}</p>
   }
   return (
     <ul className="m-0 mt-3 list-none p-0">

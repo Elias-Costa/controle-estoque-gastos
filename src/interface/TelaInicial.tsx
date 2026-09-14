@@ -3,13 +3,15 @@ import { CARIMBO_DE_BUILD } from '../plataforma/versao.ts'
 import { Botao } from './Botao.tsx'
 import { IndicadorDeEnvio } from './IndicadorDeEnvio.tsx'
 import { ListaDeFichas } from './ListaDeFichas.tsx'
+import { PALAVRAS_DA_COBRANCA } from './palavras-da-cobranca.ts'
 import { PALAVRAS } from './palavras-da-ficha.ts'
 import { PALAVRAS_DA_VENDA } from './palavras-da-venda.ts'
 
 /**
  * A tela inicial (E-09): a lista de fichinhas com busca — quem deve e quanto (RF-01, RF-10 em
- * versão de lista; a ordenação e o filtro de devedores são E-12). É por onde todo caminho
- * cronometrado começa (RNF-02), então o primeiro toque é uma linha da lista: 60 px de altura.
+ * versão de lista; a lista de devedores com ordem e filtro é "Quem está devendo", E-12, a um
+ * toque do cabeçalho). É por onde todo caminho cronometrado começa (RNF-02), então o primeiro
+ * toque é uma linha da lista: 60 px de altura.
  *
  * Fiel ao protótipo validado em 2026-09-08, com as divergências de D-044: o rodapé tem "Nova
  * venda" (principal, E-10) sobre "+ É uma cliente nova" (secundário), o indicador de RF-25 fica
@@ -22,17 +24,25 @@ export function TelaInicial({
   aoAbrirFicha,
   aoCadastrar,
   aoVender,
+  aoVerDevedoras,
 }: {
   busca: string
   aoBuscar: (texto: string) => void
   aoAbrirFicha: (clienteId: Id) => void
   aoCadastrar: (nomeSugerido: string) => void
   aoVender: () => void
+  aoVerDevedoras: () => void
 }) {
   return (
     <main className="tela">
       <header className="mb-3">
-        <h1 className="m-0 text-2xl leading-tight">{PALAVRAS.titulo}</h1>
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="m-0 text-2xl leading-tight">{PALAVRAS.titulo}</h1>
+          {/* A lista de devedores (RF-10, E-12) mora numa tela própria, aberta daqui: zero altura, o caminho cronometrado não muda (D-047). */}
+          <button type="button" className="min-h-11 flex-none border-0 bg-transparent px-1 py-0 text-[1rem] font-semibold text-acento" onClick={aoVerDevedoras}>
+            {PALAVRAS_DA_COBRANCA.quemEstaDevendo} <span aria-hidden="true">&rsaquo;</span>
+          </button>
+        </div>
         <IndicadorDeEnvio />
       </header>
 

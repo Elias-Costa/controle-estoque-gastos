@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import type { Centavos } from '../dominio/dinheiro.ts'
 import type { Id } from '../dominio/ficha.ts'
 import { TelaCadastro } from './TelaCadastro.tsx'
+import { TelaDevedoras } from './TelaDevedoras.tsx'
 import { TelaFicha } from './TelaFicha.tsx'
 import { TelaInicial } from './TelaInicial.tsx'
 import { TelaLancamento } from './TelaLancamento.tsx'
@@ -16,11 +17,13 @@ import { TelaVendido } from './TelaVendido.tsx'
  * tem três portas — "Para quem?", a ficha e a anotação (correção) — e `origem` diz para onde
  * o "‹" volta; o recebimento tem duas — a ficha e a anotação. O cadastro tem dois destinos
  * (D-045): a ficha nova, ou a venda para ela. A confirmação do recebimento carrega o `troco`,
- * que não é lançamento e a base não tem (D-016, D-046).
+ * que não é lançamento e a base não tem (D-016, D-046). A ficha sabe se veio da lista de
+ * devedores (E-12, D-047), para o "‹" devolver ela ao mesmo lugar.
  */
 type Rota =
   | { readonly tela: 'inicio' }
-  | { readonly tela: 'ficha'; readonly clienteId: Id }
+  | { readonly tela: 'devedoras' }
+  | { readonly tela: 'ficha'; readonly clienteId: Id; readonly origem?: 'devedoras' }
   | { readonly tela: 'cadastro'; readonly nome: string; readonly destino: 'ficha' | 'venda' }
   | { readonly tela: 'para-quem' }
   | { readonly tela: 'venda'; readonly clienteId: Id; readonly origem: 'para-quem' | 'ficha' | 'lancamento'; readonly corrigirId?: Id }
@@ -30,9 +33,9 @@ type Rota =
   | { readonly tela: 'lancamento'; readonly clienteId: Id; readonly lancamentoId: Id }
 
 /**
- * O aplicativo (E-09, E-10, E-11): a tela inicial, a ficha, o cadastro, as quatro telas da
- * venda e as duas do recebimento. Estado de navegação em memória — recarregar volta ao
- * início, e está bem: nenhuma tela guarda nada que a base não tenha.
+ * O aplicativo (E-09 a E-12): a tela inicial, a lista de devedores, a ficha, o cadastro, as
+ * quatro telas da venda e as duas do recebimento. Estado de navegação em memória — recarregar
+ * volta ao início, e está bem: nenhuma tela guarda nada que a base não tenha.
  *
  * A busca vive aqui, e não na tela inicial, para sobreviver à ida e volta da ficha: era assim
  * no protótipo (as seções eram escondidas, não destruídas) e é o que ela viu na sessão.
@@ -41,6 +44,7 @@ export function Aplicativo() {
   const [rota, setRota] = useState<Rota>({ tela: 'inicio' })
   const [busca, setBusca] = useState('')
   const irParaInicio = useCallback(() => setRota({ tela: 'inicio' }), [])
+  const irParaDevedoras = useCallback(() => setRota({ tela: 'devedoras' }), [])
   const irParaFicha = useCallback((clienteId: Id) => setRota({ tela: 'ficha', clienteId }), [])
 
   switch (rota.tela) {
@@ -52,13 +56,16 @@ export function Aplicativo() {
           aoAbrirFicha={irParaFicha}
           aoCadastrar={(nome) => setRota({ tela: 'cadastro', nome, destino: 'ficha' })}
           aoVender={() => setRota({ tela: 'para-quem' })}
+          aoVerDevedoras={() => setRota({ tela: 'devedoras' })}
         />
       )
+    case 'devedoras':
+      return <TelaDevedoras aoVoltar={irParaInicio} aoAbrirFicha={(clienteId) => setRota({ tela: 'ficha', clienteId, origem: 'devedoras' })} />
     case 'ficha':
       return (
         <TelaFicha
           clienteId={rota.clienteId}
-          aoVoltar={irParaInicio}
+          aoVoltar={rota.origem === 'devedoras' ? irParaDevedoras : irParaInicio}
           aoReceber={() => setRota({ tela: 'recebimento', clienteId: rota.clienteId, origem: 'ficha' })}
           aoVender={() => setRota({ tela: 'venda', clienteId: rota.clienteId, origem: 'ficha' })}
           aoAbrirLancamento={(lancamentoId) => setRota({ tela: 'lancamento', clienteId: rota.clienteId, lancamentoId })}

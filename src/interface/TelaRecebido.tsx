@@ -4,13 +4,15 @@ import { quitar } from '../dados/operacoes.ts'
 import type { Centavos } from '../dominio/dinheiro.ts'
 import { saldo, type Id } from '../dominio/ficha.ts'
 import { podeConsiderarPago } from '../dominio/lancamentos.ts'
-import { Botao } from './Botao.tsx'
+import { Botao, BotaoLink } from './Botao.tsx'
 import { Confirmacao } from './Confirmacao.tsx'
 import { hoje } from './datas.ts'
+import { mensagemDeRecibo, PALAVRAS_DA_COBRANCA } from './palavras-da-cobranca.ts'
 import { PALAVRAS } from './palavras-da-ficha.ts'
 import { fraseDaRecusa } from './palavras-da-venda.ts'
 import { fraseDoTroco, linhasDoRecebido, PALAVRAS_DO_RECEBIMENTO } from './palavras-do-recebimento.ts'
 import { useLeitura } from './useLeitura.ts'
+import { linkDoWhatsApp } from './whatsapp.ts'
 
 /**
  * A confirmação do recebimento (E-11), como no protótipo validado: "Anotado: R$ X da Rosa" e
@@ -22,6 +24,9 @@ import { useLeitura } from './useLeitura.ts'
  * Quando o que ficou é de até R$ 0,10, "Considerar pago" aparece aqui (D-031, D-046): é o
  * momento em que ela diria isso com a cliente na frente. Um toque, sem segunda confirmação
  * — ela decide —, e a mesma tela passa a dizer "Ela não deve mais nada".
+ *
+ * O recibo pelo WhatsApp (RF-09, E-12) fica sob as linhas (D-047): o app monta o texto com o
+ * que entrou e o que ficou, e ela envia (D-007). Nada sai daqui sozinho.
  */
 export function TelaRecebido({
   clienteId,
@@ -47,7 +52,7 @@ export function TelaRecebido({
     const ficha = await repositorio.lerFicha(clienteId)
     const recebimento = ficha.find((lancamento) => lancamento.id === recebimentoId)
     if (recebimento === undefined || recebimento.tipo !== 'recebimento') return null
-    return { nome: cliente.nome, valor: recebimento.valor, saldo: saldo(ficha), podeQuitar: podeConsiderarPago(ficha) }
+    return { nome: cliente.nome, telefone: cliente.telefone, valor: recebimento.valor, saldo: saldo(ficha), podeQuitar: podeConsiderarPago(ficha) }
   }, `${recebimentoId}:${releituras}`)
 
   // O recebimento não está lá (só por outro aparelho, entre gravar e ler): o começo é o lugar seguro.
@@ -77,13 +82,20 @@ export function TelaRecebido({
     return <main className="tela pt-14 text-center">{leitura.estado === 'falhou' && <p className="text-atraso">{PALAVRAS.naoDeuParaAbrir}</p>}</main>
   }
 
-  const [primeira, segunda] = linhasDoRecebido(leitura.valor.nome, leitura.valor.valor, leitura.valor.saldo)
+  const { nome, telefone, valor, saldo: saldoNovo } = leitura.valor
+  const [primeira, segunda] = linhasDoRecebido(nome, valor, saldoNovo)
   return (
     <Confirmacao
       primeira={primeira}
       segunda={segunda}
       terceira={troco > 0n ? fraseDoTroco(troco) : undefined}
       aviso={erro}
+      complemento={
+        // O recibo (RF-09, D-047): o mesmo número que ela acabou de conferir, com o saldo relido — depois de "Considerar pago", muda junto.
+        <BotaoLink tipo="secundario" href={linkDoWhatsApp(telefone, mensagemDeRecibo({ nome, valor, saldo: saldoNovo }))}>
+          {PALAVRAS_DA_COBRANCA.mandarRecibo}
+        </BotaoLink>
+      }
       acaoPropria={
         leitura.valor.podeQuitar ? (
           <Botao tipo="principal" aoTocar={() => void considerarPago()} desabilitado={quitando}>
