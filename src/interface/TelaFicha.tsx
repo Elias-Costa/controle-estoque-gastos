@@ -1,12 +1,15 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { repositorio } from '../dados/instancia.ts'
+import { quitar } from '../dados/operacoes.ts'
 import { emReais } from '../dominio/dinheiro.ts'
 import type { Id } from '../dominio/ficha.ts'
+import { podeConsiderarPago } from '../dominio/lancamentos.ts'
 import { Botao } from './Botao.tsx'
 import { diaCurto, hoje } from './datas.ts'
 import { linhasDaFicha, resumir, type LinhaDaFicha, type ResumoDaFicha } from './leitura-da-ficha.ts'
 import { linhaDaProxima, PALAVRAS } from './palavras-da-ficha.ts'
-import { PALAVRAS_DA_VENDA } from './palavras-da-venda.ts'
+import { fraseDaRecusa, PALAVRAS_DA_VENDA } from './palavras-da-venda.ts'
+import { botaoRecebi, PALAVRAS_DO_RECEBIMENTO } from './palavras-do-recebimento.ts'
 import { Topo } from './Topo.tsx'
 import { useLeitura } from './useLeitura.ts'
 
@@ -15,34 +18,61 @@ import { useLeitura } from './useLeitura.ts'
  * deve hoje e qual a próxima parcela — vencida em destaque; abaixo, o histórico em ordem
  * cronológica inversa. Tudo derivado (RN-01): nenhum número aqui é lido de um campo.
  *
- * Fiel ao protótipo validado em 2026-09-08. "Vender fiado para ela" no rodapé é E-10 (D-044);
- * a linha de uma venda ainda não desfeita é tocável e abre a anotação (D-045) — é por ali que
- * ela corrige ou desfaz. "Recebi" é E-11: um botão que não faz nada é defeito, não promessa.
+ * Fiel ao protótipo validado em 2026-09-08. No rodapé, "Recebi R$ X" (E-11, principal, com o
+ * que falta da próxima parcela — D-006; some quando não há o que receber) sobre "Vender fiado
+ * para ela" (E-10, D-044). Quando o que falta é de até R$ 0,10, "Considerar pago" toma o
+ * lugar de "Recebi" (D-031, D-046): um toque, e a ficha relê. A linha de uma venda ou de um
+ * recebimento ainda não desfeito é tocável e abre a anotação (D-045) — é por ali que ela
+ * corrige ou desfaz.
  */
 export function TelaFicha({
   clienteId,
   aoVoltar,
+  aoReceber,
   aoVender,
   aoAbrirLancamento,
 }: {
   clienteId: Id
   aoVoltar: () => void
+  aoReceber: () => void
   aoVender: () => void
   aoAbrirLancamento: (lancamentoId: Id) => void
 }) {
+  // Sobe a cada "Considerar pago" para a ficha reler: escrita própria não navega aqui.
+  const [releituras, setReleituras] = useState(0)
+  const [quitando, setQuitando] = useState(false)
+  const [erro, setErro] = useState<string | null>(null)
+
   const leitura = useLeitura(async () => {
     const cliente = await repositorio.lerCliente(clienteId)
     if (cliente === undefined) return null
     const ficha = await repositorio.lerFicha(clienteId)
     const dia = hoje()
-    return { resumo: resumir(cliente, ficha, dia), linhas: linhasDaFicha(ficha, dia) }
-  }, clienteId)
+    return { resumo: resumir(cliente, ficha, dia), linhas: linhasDaFicha(ficha, dia), podeQuitar: podeConsiderarPago(ficha) }
+  }, `${clienteId}:${releituras}`)
 
   // Cliente que sumiu entre um toque e outro (só por outro aparelho): a lista é o lugar certo.
   const sumiu = leitura.estado === 'lido' && leitura.valor === null
   useEffect(() => {
     if (sumiu) aoVoltar()
   }, [sumiu, aoVoltar])
+
+  async function considerarPago(): Promise<void> {
+    setQuitando(true)
+    setErro(null)
+    try {
+      const resultado = await quitar(repositorio, { clienteId, data: hoje() })
+      if (!resultado.ok) {
+        setErro(fraseDaRecusa(resultado.motivo))
+        return
+      }
+      setReleituras((atual) => atual + 1)
+    } catch {
+      setErro(PALAVRAS_DO_RECEBIMENTO.naoDeu)
+    } finally {
+      setQuitando(false)
+    }
+  }
 
   if (leitura.estado !== 'lido' || leitura.valor === null) {
     return (
@@ -53,14 +83,26 @@ export function TelaFicha({
     )
   }
 
-  const { resumo, linhas } = leitura.valor
+  const { resumo, linhas, podeQuitar } = leitura.valor
   return (
     <main className="tela">
       <Topo titulo={resumo.cliente.nome} subtitulo={resumo.cliente.apelido} aoVoltar={aoVoltar} />
       <CartaoDeSaldo resumo={resumo} />
       <h2 className="mt-7 mb-2 text-[1rem] font-semibold text-suave">{PALAVRAS.oQueAconteceu}</h2>
       <Historico linhas={linhas} aoAbrir={aoAbrirLancamento} />
+      {erro !== null && <p className="mt-4 mb-0 font-semibold text-atraso">{erro}</p>}
       <div className="rodape-acao">
+        {podeQuitar ? (
+          <Botao tipo="principal" aoTocar={() => void considerarPago()} desabilitado={quitando}>
+            {PALAVRAS_DO_RECEBIMENTO.considerarPago}
+          </Botao>
+        ) : (
+          resumo.proxima !== null && (
+            <Botao tipo="principal" aoTocar={aoReceber}>
+              {botaoRecebi(resumo.proxima.restante)}
+            </Botao>
+          )
+        )}
         <Botao tipo="secundario" aoTocar={aoVender}>
           {PALAVRAS_DA_VENDA.venderFiado}
         </Botao>

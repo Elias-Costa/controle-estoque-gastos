@@ -174,19 +174,25 @@ describe('linhasDaFicha — o histórico como o protótipo mostra (RF-02)', () =
     ])
   })
 
-  test('só a venda ainda não desfeita abre a anotação (E-10, D-045): parcela, estorno, venda estornada e saldo anterior não', () => {
+  test('só a venda e o recebimento ainda não desfeitos abrem a anotação (E-10, D-045; E-11, D-046): parcela, estorno, venda ou recebimento estornado e saldo anterior não', () => {
     const avista = ok(novaVendaAVista({ id: 'a1', clienteId: 'c8', data: '2026-09-10', itens: [{ descricao: 'Perfume', preco: 9900n }], forma: 'pix' }))
     const papel = anterior('c8', 's2', '2026-06-01', [parcela('p10', '2026-09-30', 5000n)])
     const fiada = fiado('c8', 'v9', '2026-09-09', ['Batom'], [parcela('p11', '2026-10-09', 2500n)])
-    const ficha: Ficha = [avista, papel, fiada]
+    const pagouParte = ok(registrarRecebimento([papel, fiada], { id: 'r1', clienteId: 'c8', data: '2026-09-08', valor: 1000n, forma: 'pix' })).recebimento
+    const pagouErrado = ok(registrarRecebimento([papel, fiada, pagouParte], { id: 'r2', clienteId: 'c8', data: '2026-09-07', valor: 500n, forma: 'dinheiro' })).recebimento
+    const ficha: Ficha = [avista, papel, fiada, pagouParte, pagouErrado]
     const desfeito = ok(estornar(ficha, { id: 'e1', clienteId: 'c8', data: '2026-09-11', estornaId: 'a1' }))
-    const linhas = linhasDaFicha([...ficha, desfeito], HOJE)
+    const desfezOErrado = ok(estornar([...ficha, desfeito], { id: 'e2', clienteId: 'c8', data: '2026-09-11', estornaId: 'r2' }))
+    const linhas = linhasDaFicha([...ficha, desfeito, desfezOErrado], HOJE)
     expect(linhas.map((l) => [l.descricao, l.lancamentoId])).toEqual([
       ['Parcela', undefined],
       ['Parcela', undefined],
+      ['Desfez: Pagou em dinheiro', undefined],
       ['Desfez: Perfume · pagou na hora', undefined],
       ['Perfume · pagou na hora', undefined],
       ['Batom', 'v9'],
+      ['Pagou no Pix', 'r1'],
+      ['Pagou em dinheiro', undefined],
       ['Já devia', undefined],
     ])
   })

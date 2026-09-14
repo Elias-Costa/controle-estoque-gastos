@@ -2,21 +2,26 @@ import { useEffect, useState } from 'react'
 import { repositorio } from '../dados/instancia.ts'
 import { estornarLancamento } from '../dados/operacoes.ts'
 import { emReais, somar } from '../dominio/dinheiro.ts'
-import type { Id, Venda } from '../dominio/ficha.ts'
+import type { Id, Recebimento, Venda } from '../dominio/ficha.ts'
 import { caminhoDeCorrecao } from '../dominio/lancamentos.ts'
 import { Botao } from './Botao.tsx'
 import { diaCurto, hoje } from './datas.ts'
 import { comoPagou, descricaoDosItens, PALAVRAS } from './palavras-da-ficha.ts'
 import { fraseDaRecusa, PALAVRAS_DA_VENDA, quandoDaParcela } from './palavras-da-venda.ts'
+import { PALAVRAS_DO_RECEBIMENTO } from './palavras-do-recebimento.ts'
 import { Topo } from './Topo.tsx'
 import { useLeitura } from './useLeitura.ts'
 
+/** O que a anotação abre: só o que a linha da ficha oferece (`linhasDaFicha`, `lancamentoId`). */
+type Anotado = Venda | Recebimento
+
 /**
- * A anotação de uma venda (E-10, RF-08, D-013, D-045): o que ela tocou na ficha, aberto —
- * data, itens, desconto, total, parcelas ou forma — e **um** botão, pelo `caminhoDeCorrecao`
- * do domínio: "Corrigir" enquanto a venda não subiu (a tela de venda reabre preenchida) ou
- * "Desfazer esta venda" depois (estorno, RI-03). Nunca os dois. Item que a nuvem recusou
- * ("com problema", D-042) só desfaz: regravar tentaria de novo o que já foi recusado.
+ * A anotação de uma venda (E-10, RF-08, D-013, D-045) ou de um recebimento (E-11, D-046): o
+ * que ela tocou na ficha, aberto — data, itens, desconto, total, parcelas ou forma; ou valor,
+ * forma e observação — e **um** botão, pelo `caminhoDeCorrecao` do domínio: "Corrigir"
+ * enquanto não subiu (a tela de venda ou de recebimento reabre preenchida) ou "Desfazer"
+ * depois (estorno, RI-03). Nunca os dois. Item que a nuvem recusou ("com problema", D-042)
+ * só desfaz: regravar tentaria de novo o que já foi recusado.
  *
  * "Desfazer" pede um segundo toque — é a única ação da tela que ela não desfaz com um "‹",
  * e a resposta fica visível: as duas linhas, na ficha. A janela de D-013 é lida ao abrir;
@@ -31,7 +36,7 @@ export function TelaLancamento({
   clienteId: Id
   lancamentoId: Id
   aoVoltar: () => void
-  aoCorrigir: () => void
+  aoCorrigir: (tipo: Anotado['tipo']) => void
 }) {
   const [confirmando, setConfirmando] = useState(false)
   const [desfazendo, setDesfazendo] = useState(false)
@@ -41,13 +46,13 @@ export function TelaLancamento({
     const cliente = await repositorio.lerCliente(clienteId)
     if (cliente === undefined) return null
     const ficha = await repositorio.lerFicha(clienteId)
-    const venda = ficha.find((lancamento) => lancamento.id === lancamentoId)
-    if (venda === undefined || venda.tipo !== 'venda') return null
+    const anotado = ficha.find((lancamento) => lancamento.id === lancamentoId)
+    if (anotado === undefined || (anotado.tipo !== 'venda' && anotado.tipo !== 'recebimento')) return null
     return {
       nome: cliente.nome,
-      venda,
-      desfeita: ficha.some((lancamento) => lancamento.tipo === 'estorno' && lancamento.estornaId === lancamentoId),
-      sincronizada: await repositorio.sincronizado(lancamentoId),
+      anotado,
+      desfeito: ficha.some((lancamento) => lancamento.tipo === 'estorno' && lancamento.estornaId === lancamentoId),
+      sincronizado: await repositorio.sincronizado(lancamentoId),
       comProblema: await repositorio.comProblema(lancamentoId),
     }
   }, lancamentoId)
@@ -66,9 +71,9 @@ export function TelaLancamento({
     )
   }
 
-  const { nome, venda, desfeita, sincronizada, comProblema } = leitura.valor
-  const fiado = venda.pagamento === 'fiado'
-  const caminho = comProblema ? 'estornar' : caminhoDeCorrecao(sincronizada)
+  const { nome, anotado, desfeito, sincronizado, comProblema } = leitura.valor
+  const caminho = comProblema ? 'estornar' : caminhoDeCorrecao(sincronizado)
+  const palavras = anotado.tipo === 'venda' ? PALAVRAS_DA_VENDA.anotacao : PALAVRAS_DO_RECEBIMENTO.anotacao
 
   async function desfazer(): Promise<void> {
     setDesfazendo(true)
@@ -89,24 +94,24 @@ export function TelaLancamento({
 
   return (
     <main className="tela">
-      <Topo titulo={nome} subtitulo={`${fiado ? PALAVRAS_DA_VENDA.anotacao.fiadoEm : PALAVRAS_DA_VENDA.anotacao.pagouNaHoraEm} ${diaCurto(venda.data)}`} aoVoltar={aoVoltar} />
+      <Topo titulo={nome} subtitulo={`${quandoFoi(anotado)} ${diaCurto(anotado.data)}`} aoVoltar={aoVoltar} />
 
-      <Detalhe venda={venda} />
+      {anotado.tipo === 'venda' ? <DetalheDaVenda venda={anotado} /> : <DetalheDoRecebimento recebimento={anotado} />}
 
-      {comProblema && <p className="mt-5 mb-0 font-semibold text-atraso">{PALAVRAS_DA_VENDA.anotacao.comProblema}</p>}
+      {comProblema && <p className="mt-5 mb-0 font-semibold text-atraso">{palavras.comProblema}</p>}
       {confirmando && <p className="mt-5 mb-0 font-semibold">{PALAVRAS_DA_VENDA.anotacao.desfazerMesmo}</p>}
       {erro !== null && <p className="mt-4 mb-0 font-semibold text-atraso">{erro}</p>}
 
-      {!desfeita && (
+      {!desfeito && (
         <div className="rodape-acao">
           {caminho === 'corrigir' && (
-            <Botao tipo="principal" aoTocar={aoCorrigir}>
+            <Botao tipo="principal" aoTocar={() => aoCorrigir(anotado.tipo)}>
               {PALAVRAS_DA_VENDA.anotacao.corrigir}
             </Botao>
           )}
           {caminho === 'estornar' && !confirmando && (
             <Botao tipo="secundario" aoTocar={() => setConfirmando(true)}>
-              {PALAVRAS_DA_VENDA.anotacao.desfazer}
+              {palavras.desfazer}
             </Botao>
           )}
           {caminho === 'estornar' && confirmando && (
@@ -125,8 +130,14 @@ export function TelaLancamento({
   )
 }
 
+/** "Fiado em", "Pagou na hora em" ou "Recebi em" — o subtítulo, antes da data. */
+function quandoFoi(anotado: Anotado): string {
+  if (anotado.tipo === 'recebimento') return PALAVRAS_DO_RECEBIMENTO.anotacao.recebiEm
+  return anotado.pagamento === 'fiado' ? PALAVRAS_DA_VENDA.anotacao.fiadoEm : PALAVRAS_DA_VENDA.anotacao.pagouNaHoraEm
+}
+
 /** Os itens, o desconto, o total e as parcelas (ou a forma), como na tela de venda — para ela reconhecer o que anotou. */
-function Detalhe({ venda }: { venda: Venda }) {
+function DetalheDaVenda({ venda }: { venda: Venda }) {
   const somaDosItens = somar(venda.itens.map((item) => item.preco))
   const linha = 'flex justify-between gap-3 border-b border-borda py-2 tabular-nums'
   return (
@@ -161,6 +172,17 @@ function Detalhe({ venda }: { venda: Venda }) {
       ) : (
         <p className="mt-4 mb-0 text-suave">{comoPagou(venda.forma)}</p>
       )}
+    </>
+  )
+}
+
+/** O valor grande, a forma e a observação, como na tela de recebimento (E-11). */
+function DetalheDoRecebimento({ recebimento }: { recebimento: Recebimento }) {
+  return (
+    <>
+      <p className="m-0 text-[2.25rem] leading-none font-bold tabular-nums">{emReais(recebimento.valor)}</p>
+      <p className="mt-3 mb-0 text-suave">{comoPagou(recebimento.forma)}</p>
+      {recebimento.observacao !== undefined && recebimento.observacao !== '' && <p className="mt-2 mb-0">{recebimento.observacao}</p>}
     </>
   )
 }

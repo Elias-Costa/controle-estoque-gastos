@@ -1,17 +1,22 @@
 import { useCallback, useState } from 'react'
+import type { Centavos } from '../dominio/dinheiro.ts'
 import type { Id } from '../dominio/ficha.ts'
 import { TelaCadastro } from './TelaCadastro.tsx'
 import { TelaFicha } from './TelaFicha.tsx'
 import { TelaInicial } from './TelaInicial.tsx'
 import { TelaLancamento } from './TelaLancamento.tsx'
 import { TelaParaQuem } from './TelaParaQuem.tsx'
+import { TelaRecebido } from './TelaRecebido.tsx'
+import { TelaRecebimento } from './TelaRecebimento.tsx'
 import { TelaVenda } from './TelaVenda.tsx'
 import { TelaVendido } from './TelaVendido.tsx'
 
 /**
  * Onde ela está. Sem roteador e sem URL: uma mão, o "‹" do topo (como o protótipo). A venda
  * tem três portas — "Para quem?", a ficha e a anotação (correção) — e `origem` diz para onde
- * o "‹" volta. O cadastro tem dois destinos (D-045): a ficha nova, ou a venda para ela.
+ * o "‹" volta; o recebimento tem duas — a ficha e a anotação. O cadastro tem dois destinos
+ * (D-045): a ficha nova, ou a venda para ela. A confirmação do recebimento carrega o `troco`,
+ * que não é lançamento e a base não tem (D-016, D-046).
  */
 type Rota =
   | { readonly tela: 'inicio' }
@@ -20,12 +25,14 @@ type Rota =
   | { readonly tela: 'para-quem' }
   | { readonly tela: 'venda'; readonly clienteId: Id; readonly origem: 'para-quem' | 'ficha' | 'lancamento'; readonly corrigirId?: Id }
   | { readonly tela: 'vendido'; readonly clienteId: Id; readonly vendaId: Id }
+  | { readonly tela: 'recebimento'; readonly clienteId: Id; readonly origem: 'ficha' | 'lancamento'; readonly corrigirId?: Id }
+  | { readonly tela: 'recebido'; readonly clienteId: Id; readonly recebimentoId: Id; readonly troco: Centavos }
   | { readonly tela: 'lancamento'; readonly clienteId: Id; readonly lancamentoId: Id }
 
 /**
- * O aplicativo (E-09, E-10): a tela inicial, a ficha, o cadastro e as quatro telas da venda.
- * Estado de navegação em memória — recarregar volta ao início, e está bem: nenhuma tela
- * guarda nada que a base não tenha.
+ * O aplicativo (E-09, E-10, E-11): a tela inicial, a ficha, o cadastro, as quatro telas da
+ * venda e as duas do recebimento. Estado de navegação em memória — recarregar volta ao
+ * início, e está bem: nenhuma tela guarda nada que a base não tenha.
  *
  * A busca vive aqui, e não na tela inicial, para sobreviver à ida e volta da ficha: era assim
  * no protótipo (as seções eram escondidas, não destruídas) e é o que ela viu na sessão.
@@ -52,6 +59,7 @@ export function Aplicativo() {
         <TelaFicha
           clienteId={rota.clienteId}
           aoVoltar={irParaInicio}
+          aoReceber={() => setRota({ tela: 'recebimento', clienteId: rota.clienteId, origem: 'ficha' })}
           aoVender={() => setRota({ tela: 'venda', clienteId: rota.clienteId, origem: 'ficha' })}
           aoAbrirLancamento={(lancamentoId) => setRota({ tela: 'lancamento', clienteId: rota.clienteId, lancamentoId })}
         />
@@ -95,13 +103,39 @@ export function Aplicativo() {
     }
     case 'vendido':
       return <TelaVendido clienteId={rota.clienteId} vendaId={rota.vendaId} aoVerFicha={() => irParaFicha(rota.clienteId)} aoVoltarAoInicio={irParaInicio} />
+    case 'recebimento': {
+      const { clienteId, origem, corrigirId } = rota
+      const voltar = (): void => {
+        if (origem === 'lancamento' && corrigirId !== undefined) setRota({ tela: 'lancamento', clienteId, lancamentoId: corrigirId })
+        else setRota({ tela: 'ficha', clienteId })
+      }
+      return (
+        <TelaRecebimento
+          clienteId={clienteId}
+          corrigirId={corrigirId}
+          aoVoltar={voltar}
+          aoReceber={(recebimentoId, troco) => setRota({ tela: 'recebido', clienteId, recebimentoId, troco })}
+          aoCorrigir={() => irParaFicha(clienteId)}
+        />
+      )
+    }
+    case 'recebido':
+      return (
+        <TelaRecebido
+          clienteId={rota.clienteId}
+          recebimentoId={rota.recebimentoId}
+          troco={rota.troco}
+          aoVerFicha={() => irParaFicha(rota.clienteId)}
+          aoVoltarAoInicio={irParaInicio}
+        />
+      )
     case 'lancamento':
       return (
         <TelaLancamento
           clienteId={rota.clienteId}
           lancamentoId={rota.lancamentoId}
           aoVoltar={() => irParaFicha(rota.clienteId)}
-          aoCorrigir={() => setRota({ tela: 'venda', clienteId: rota.clienteId, origem: 'lancamento', corrigirId: rota.lancamentoId })}
+          aoCorrigir={(tipo) => setRota({ tela: tipo === 'venda' ? 'venda' : 'recebimento', clienteId: rota.clienteId, origem: 'lancamento', corrigirId: rota.lancamentoId })}
         />
       )
   }

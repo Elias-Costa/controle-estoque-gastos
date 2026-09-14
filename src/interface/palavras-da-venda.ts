@@ -93,7 +93,11 @@ export function linhasDaConfirmacao(nome: string, fiado: boolean, total: Centavo
   return [primeira, fiado ? `Agora ela deve ${emReais(saldo)}` : `Ainda deve ${emReais(saldo)}`]
 }
 
-/** A recusa do domínio numa correção ou num estorno, em palavras dela (RI-07); o resto é "não deu". */
+/**
+ * A recusa do domínio numa correção, num estorno, num recebimento ou numa quitação, em
+ * palavras dela (RI-07); o resto é "não deu". As três últimas só acontecem se a ficha mudou
+ * por outro aparelho entre abrir a tela e tocar — a tela já não oferece o botão nesses casos.
+ */
 export function fraseDaRecusa(motivo: Motivo): string {
   switch (motivo) {
     case 'ja-sincronizado':
@@ -104,6 +108,11 @@ export function fraseDaRecusa(motivo: Motivo): string {
       return 'Ela já pagou parte. Desfaça o recebimento antes.'
     case 'ja-estornado':
       return 'Já foi desfeita.'
+    case 'nada-a-receber':
+    case 'nada-a-quitar':
+      return 'Ela não deve nada.'
+    case 'acima-do-limite-de-quitacao':
+      return 'Ainda falta mais de R$ 0,10.'
     default:
       return PALAVRAS_DA_VENDA.naoDeu
   }
