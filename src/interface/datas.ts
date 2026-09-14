@@ -68,3 +68,27 @@ export function diasDeAtraso(vencimento: Dia, referencia: Dia): number {
   const dias = diasEntre(vencimento, referencia)
   return dias > 0 ? dias : 0
 }
+
+/**
+ * O que ela escolheu em "Quando foi" (venda e recebimento): as duas opções do protótipo e a
+ * de RN-09, que abre o campo de data (D-045). `outroDia` só conta quando `escolha` é
+ * `'outro'`; fica guardado para a data não sumir se ela tocar "Hoje" e voltar.
+ */
+export type Quando = {
+  readonly escolha: 'hoje' | 'ontem' | 'outro'
+  readonly outroDia: Dia
+}
+
+/** Hoje, ontem ou outro dia, a partir de uma data já gravada — ou hoje, quando não há nenhuma. */
+export function quandoDe(data: Dia | undefined, hoje: Dia): Quando {
+  if (data === undefined || data === hoje) return { escolha: 'hoje', outroDia: '' }
+  if (data === diasDepois(hoje, -1)) return { escolha: 'ontem', outroDia: '' }
+  return { escolha: 'outro', outroDia: data }
+}
+
+/** A data que a escolha significa. `''` quando é "Outro dia" e ela ainda não escolheu qual — a guarda `falta-a-data` cobre. */
+export function diaDoQuando(quando: Quando, hoje: Dia): Dia {
+  if (quando.escolha === 'hoje') return hoje
+  if (quando.escolha === 'ontem') return diasDepois(hoje, -1)
+  return quando.outroDia
+}

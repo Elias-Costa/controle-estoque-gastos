@@ -146,10 +146,20 @@ export function conferir(rascunho: Rascunho, hoje: Dia): Conferencia {
   if (parcelas.some((parcela) => parcela.ilegivel)) guardas.push('parcela-ilegivel')
   else if (parcelas.length > 0 && somar(parcelas.map((parcela) => parcela.valor)) !== total) guardas.push('parcelas-nao-fecham')
 
-  if (rascunho.data === '') guardas.push('falta-a-data')
-  else if (rascunho.data > hoje) guardas.push('data-no-futuro')
+  const guardaDeData = guardaDaData(rascunho.data, hoje)
+  if (guardaDeData !== null) guardas.push(guardaDeData)
 
   return { itens, itensDaVenda, somaDosItens, desconto, total, parcelas, guardas }
+}
+
+/**
+ * O que falta na data de um lançamento (RN-09): "Outro dia" sem dia escolhido, ou um dia que
+ * ainda não chegou. A mesma regra para a venda e para o recebimento (E-11) — por isso mora aqui, uma vez.
+ */
+export function guardaDaData(data: Dia, hoje: Dia): 'falta-a-data' | 'data-no-futuro' | null {
+  if (data === '') return 'falta-a-data'
+  if (data > hoje) return 'data-no-futuro'
+  return null
 }
 
 /** `3990n` → `"39,90"`: centavos de volta ao texto que ela teria digitado, para preencher a correção. Sem ponto de milhar. */

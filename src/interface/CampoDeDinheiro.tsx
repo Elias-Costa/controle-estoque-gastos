@@ -17,10 +17,13 @@ export function CampoDeDinheiro({
   rotulo,
   texto,
   aoMudar,
+  selecionarAoFocar = false,
 }: {
   rotulo: string
   texto: string
   aoMudar: (texto: string) => void
+  /** Para o campo que já vem preenchido (o recebimento, D-006): tocar e digitar substitui, sem apagar antes. */
+  selecionarAoFocar?: boolean
 }) {
   const id = useId()
   return (
@@ -33,6 +36,7 @@ export function CampoDeDinheiro({
           className="min-h-16 w-full border-0 bg-transparent text-[2.25rem] leading-none font-bold text-tinta tabular-nums outline-none"
           texto={texto}
           aoMudar={aoMudar}
+          selecionarAoFocar={selecionarAoFocar}
         />
       </div>
       <LeituraDoValor texto={texto} className="mt-1.5 text-[1.25rem]" />
@@ -51,6 +55,7 @@ export function EntradaDeDinheiro({
   id,
   exemplo,
   rotuloAcessivel,
+  selecionarAoFocar = false,
 }: {
   texto: string
   aoMudar: (texto: string) => void
@@ -58,6 +63,7 @@ export function EntradaDeDinheiro({
   id?: string
   exemplo?: string
   rotuloAcessivel?: string
+  selecionarAoFocar?: boolean
 }) {
   return (
     <input
@@ -70,6 +76,7 @@ export function EntradaDeDinheiro({
       aria-label={rotuloAcessivel}
       value={texto}
       onChange={(evento) => aoMudar(evento.target.value)}
+      onFocus={selecionarAoFocar ? (evento) => evento.target.select() : undefined}
     />
   )
 }

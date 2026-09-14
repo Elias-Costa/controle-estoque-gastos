@@ -6,10 +6,11 @@ import type { Cliente, Dia, Id, Venda } from '../dominio/ficha.ts'
 import { Botao } from './Botao.tsx'
 import { CLASSES_DE_CAMPO, CLASSES_DE_CAMPO_COMPACTO } from './Campo.tsx'
 import { CampoDeDinheiro, EntradaDeDinheiro, LeituraDoValor } from './CampoDeDinheiro.tsx'
-import { diasDepois, hoje } from './datas.ts'
+import { diaDoQuando, hoje, quandoDe } from './datas.ts'
 import { Escolha, Vezes } from './Opcoes.tsx'
 import { PALAVRAS } from './palavras-da-ficha.ts'
 import { fraseDaGuarda, fraseDaRecusa, PALAVRAS_DA_VENDA, quandoDaParcela, tituloDaVenda } from './palavras-da-venda.ts'
+import { QuandoFoi } from './QuandoFoi.tsx'
 import {
   conferir,
   parcelasCorrigidas,
@@ -21,9 +22,6 @@ import {
 } from './rascunho-da-venda.ts'
 import { Topo } from './Topo.tsx'
 import { useLeitura } from './useLeitura.ts'
-
-/** "Quando foi": as duas opções do protótipo e a de RN-09, que abre o campo de data (D-045). */
-type Quando = 'hoje' | 'ontem' | 'outro'
 
 /** O máximo de "vezes" do protótipo; a correção de uma venda com mais parcelas nunca oferece menos do que ela tem. */
 const VEZES_DO_PROTOTIPO = 4
@@ -111,16 +109,14 @@ function Formulario({
   aoCorrigir: () => void
 }) {
   const dia = hoje()
-  const ontem = diasDepois(dia, -1)
   const [rascunho, setRascunho] = useState<Rascunho>(() => (original === undefined ? rascunhoNovo() : rascunhoDaVenda(original)))
-  const [quando, setQuando] = useState<Quando>(() => quandoDe(original?.data, dia, ontem))
-  const [outroDia, setOutroDia] = useState(() => (original !== undefined && quandoDe(original.data, dia, ontem) === 'outro' ? original.data : ''))
+  const [quando, setQuando] = useState(() => quandoDe(original?.data, dia))
   const [descontoAberto, setDescontoAberto] = useState(() => rascunho.descontoTexto !== '')
   const [editandoParcelas, setEditandoParcelas] = useState(false)
   const [gravando, setGravando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
 
-  const data: Dia = quando === 'hoje' ? dia : quando === 'ontem' ? ontem : outroDia
+  const data: Dia = diaDoQuando(quando, dia)
   const conferencia = conferir({ ...rascunho, data }, dia)
   const frases = conferencia.guardas
     .map((guarda) => fraseDaGuarda(guarda, somaDasParcelas(conferencia.parcelas), conferencia.total))
@@ -301,28 +297,7 @@ function Formulario({
         </>
       )}
 
-      <Escolha
-        rotulo={PALAVRAS_DA_VENDA.quandoFoi}
-        opcoes={[
-          { valor: 'hoje', texto: PALAVRAS_DA_VENDA.hoje },
-          { valor: 'ontem', texto: PALAVRAS_DA_VENDA.ontem },
-          { valor: 'outro', texto: PALAVRAS_DA_VENDA.outroDia },
-        ]}
-        valor={quando}
-        aoEscolher={setQuando}
-      />
-      {quando === 'outro' && (
-        // A data aparece, sempre: o "Outro dia" do protótipo foi tirado por carimbar em silêncio (RN-09, D-045).
-        <input
-          className={`${CLASSES_DE_CAMPO} mt-2`}
-          type="date"
-          max={dia}
-          aria-label={PALAVRAS_DA_VENDA.outroDia}
-          value={outroDia}
-          onChange={(evento) => setOutroDia(evento.target.value)}
-          autoFocus
-        />
-      )}
+      <QuandoFoi rotulo={PALAVRAS_DA_VENDA.quandoFoi} quando={quando} hoje={dia} aoMudar={setQuando} />
 
       {(frases.length > 0 || erro !== null) && (
         <div className="mt-4">
@@ -383,12 +358,6 @@ function ParcelaEditavel({
       <LeituraDoValor texto={edicao.valorTexto ?? ''} className="mt-1 text-right text-[1.125rem]" />
     </li>
   )
-}
-
-/** Hoje, ontem ou outro dia, a partir da data de uma venda já gravada. */
-function quandoDe(data: Dia | undefined, dia: Dia, ontem: Dia): Quando {
-  if (data === undefined || data === dia) return 'hoje'
-  return data === ontem ? 'ontem' : 'outro'
 }
 
 /** A soma das parcelas montadas, só para a frase da guarda — o domínio confere de verdade. */
