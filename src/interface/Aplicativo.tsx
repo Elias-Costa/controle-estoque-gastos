@@ -3,6 +3,7 @@ import type { Centavos } from '../dominio/dinheiro.ts'
 import type { Id } from '../dominio/ficha.ts'
 import { TelaCadastro } from './TelaCadastro.tsx'
 import { TelaDevedoras } from './TelaDevedoras.tsx'
+import { TelaEntrar } from './TelaEntrar.tsx'
 import { TelaFicha } from './TelaFicha.tsx'
 import { TelaInicial } from './TelaInicial.tsx'
 import { TelaLancamento } from './TelaLancamento.tsx'
@@ -18,10 +19,12 @@ import { TelaVendido } from './TelaVendido.tsx'
  * o "‹" volta; o recebimento tem duas — a ficha e a anotação. O cadastro tem dois destinos
  * (D-045): a ficha nova, ou a venda para ela. A confirmação do recebimento carrega o `troco`,
  * que não é lançamento e a base não tem (D-016, D-046). A ficha sabe se veio da lista de
- * devedores (E-12, D-047), para o "‹" devolver ela ao mesmo lugar.
+ * devedores (E-12, D-047), para o "‹" devolver ela ao mesmo lugar. O login (E-13, D-048) é uma
+ * tela como as outras, aberta pela linha "Entrar ›" da inicial — nunca a primeira tela.
  */
 type Rota =
   | { readonly tela: 'inicio' }
+  | { readonly tela: 'entrar' }
   | { readonly tela: 'devedoras' }
   | { readonly tela: 'ficha'; readonly clienteId: Id; readonly origem?: 'devedoras' }
   | { readonly tela: 'cadastro'; readonly nome: string; readonly destino: 'ficha' | 'venda' }
@@ -57,8 +60,11 @@ export function Aplicativo() {
           aoCadastrar={(nome) => setRota({ tela: 'cadastro', nome, destino: 'ficha' })}
           aoVender={() => setRota({ tela: 'para-quem' })}
           aoVerDevedoras={() => setRota({ tela: 'devedoras' })}
+          aoEntrar={() => setRota({ tela: 'entrar' })}
         />
       )
+    case 'entrar':
+      return <TelaEntrar aoVoltar={irParaInicio} aoEntrar={irParaInicio} />
     case 'devedoras':
       return <TelaDevedoras aoVoltar={irParaInicio} aoAbrirFicha={(clienteId) => setRota({ tela: 'ficha', clienteId, origem: 'devedoras' })} />
     case 'ficha':

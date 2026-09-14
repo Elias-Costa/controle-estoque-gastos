@@ -21,11 +21,16 @@ export function Rotulo({ para, children }: { para?: string; children: string }) 
 }
 
 /**
- * Campo de texto, telefone ou data do kit (D-023). Uma linha por padrão; `multilinha` para a
- * observação. `autoFoco` só no primeiro campo obrigatório de uma tela — o teclado do iPhone
- * abrir sozinho ao entrar na tela é um toque a menos (RNF-02), **se abrir**: foco programático
- * no iOS não está medido (`docs/fatos-verificados.md`).
+ * Campo de texto, telefone, data, e-mail ou senha do kit (D-023). Uma linha por padrão;
+ * `multilinha` para a observação. `autoFoco` só no primeiro campo obrigatório de uma tela — o
+ * teclado do iPhone abrir sozinho ao entrar na tela é um toque a menos (RNF-02), **se abrir**:
+ * foco programático no iOS não está medido (`docs/fatos-verificados.md`). `email` e `senha`
+ * existem para a tela de login (E-13): teclado de e-mail sem maiúscula automática, e a senha
+ * escondida.
  */
+
+/** O `type` do `<input>` para cada tipo do kit; `senha` é o nome dela para `password`. */
+const TIPO_DO_INPUT = { text: 'text', tel: 'tel', date: 'date', email: 'email', senha: 'password' } as const
 export function Campo({
   rotulo,
   valor,
@@ -38,7 +43,7 @@ export function Campo({
   rotulo: string
   valor: string
   aoMudar: (valor: string) => void
-  tipo?: 'text' | 'tel' | 'date'
+  tipo?: keyof typeof TIPO_DO_INPUT
   exemplo?: string
   autoFoco?: boolean
   multilinha?: boolean
@@ -59,8 +64,9 @@ export function Campo({
         <input
           id={id}
           className={CLASSES_DE_CAMPO}
-          type={tipo}
-          inputMode={tipo === 'tel' ? 'tel' : undefined}
+          type={TIPO_DO_INPUT[tipo]}
+          inputMode={tipo === 'tel' ? 'tel' : tipo === 'email' ? 'email' : undefined}
+          autoCapitalize={tipo === 'email' ? 'none' : undefined}
           autoComplete="off"
           placeholder={exemplo}
           value={valor}

@@ -2,10 +2,12 @@ import type { Id } from '../dominio/ficha.ts'
 import { CARIMBO_DE_BUILD } from '../plataforma/versao.ts'
 import { Botao } from './Botao.tsx'
 import { IndicadorDeEnvio } from './IndicadorDeEnvio.tsx'
+import { Instalacao } from './Instalacao.tsx'
 import { ListaDeFichas } from './ListaDeFichas.tsx'
 import { PALAVRAS_DA_COBRANCA } from './palavras-da-cobranca.ts'
 import { PALAVRAS } from './palavras-da-ficha.ts'
 import { PALAVRAS_DA_VENDA } from './palavras-da-venda.ts'
+import { BotaoEntrar } from './TelaEntrar.tsx'
 
 /**
  * A tela inicial (E-09): a lista de fichinhas com busca — quem deve e quanto (RF-01, RF-10 em
@@ -16,7 +18,9 @@ import { PALAVRAS_DA_VENDA } from './palavras-da-venda.ts'
  * Fiel ao protótipo validado em 2026-09-08, com as divergências de D-044: o rodapé tem "Nova
  * venda" (principal, E-10) sobre "+ É uma cliente nova" (secundário), o indicador de RF-25 fica
  * sob o título e o carimbo de RF-23 no pé da lista. Sem total agregado: "a receber na rua" é
- * RF-19, F4. "Recebi" nasce em E-11 — botão morto é defeito, não promessa.
+ * RF-19, F4. "Recebi" nasce em E-11 — botão morto é defeito, não promessa. E-13 (D-048) pôs a
+ * linha "Entrar ›" sob o indicador (só sem sessão guardada) e a instrução de instalação sob a
+ * lista (só no celular, antes de instalar): as duas custam zero toques no caminho cronometrado.
  */
 export function TelaInicial({
   busca,
@@ -25,6 +29,7 @@ export function TelaInicial({
   aoCadastrar,
   aoVender,
   aoVerDevedoras,
+  aoEntrar,
 }: {
   busca: string
   aoBuscar: (texto: string) => void
@@ -32,6 +37,7 @@ export function TelaInicial({
   aoCadastrar: (nomeSugerido: string) => void
   aoVender: () => void
   aoVerDevedoras: () => void
+  aoEntrar: () => void
 }) {
   return (
     <main className="tela">
@@ -44,9 +50,12 @@ export function TelaInicial({
           </button>
         </div>
         <IndicadorDeEnvio />
+        <BotaoEntrar aoTocar={aoEntrar} />
       </header>
 
       <ListaDeFichas busca={busca} aoBuscar={aoBuscar} aoAbrir={aoAbrirFicha} chave="inicio" />
+
+      <Instalacao />
 
       {/* Discreto de propósito: serve ao mantenedor durante o teste, não a ela (RF-23, D-032). */}
       <p className="mt-6 text-[0.8rem] text-suave">versão {CARIMBO_DE_BUILD}</p>
