@@ -79,6 +79,44 @@ export function filtrarEOrdenar(resumos: readonly ResumoDaFicha[], busca: string
     .sort((a, b) => a.cliente.nome.localeCompare(b.cliente.nome, 'pt-BR'))
 }
 
+/** O filtro de RF-10: quem está devendo com parcela vencida, quem deve e nada venceu, ou todas que devem. */
+export type FiltroDeDevedoras = 'em-atraso' | 'a-vencer' | 'todas'
+
+/** A ordem de RF-10: maior atraso (padrão), maior valor, nome. */
+export type OrdemDeDevedoras = 'atraso' | 'valor' | 'nome'
+
+function porNome(a: ResumoDaFicha, b: ResumoDaFicha): number {
+  return a.cliente.nome.localeCompare(b.cliente.nome, 'pt-BR')
+}
+
+/** Maior saldo primeiro; `bigint` não subtrai para `number`, então compara. */
+function porValor(a: ResumoDaFicha, b: ResumoDaFicha): number {
+  if (a.saldo === b.saldo) return porNome(a, b)
+  return a.saldo > b.saldo ? -1 : 1
+}
+
+/** Mais dias de atraso primeiro; empate (as a vencer, atraso zero) pela data mais próxima, depois nome. */
+function porAtraso(a: ResumoDaFicha, b: ResumoDaFicha): number {
+  return (
+    b.diasDeAtraso - a.diasDeAtraso ||
+    (a.proxima?.vencimento ?? '').localeCompare(b.proxima?.vencimento ?? '') ||
+    porNome(a, b)
+  )
+}
+
+/**
+ * A lista de devedores (RF-10, E-12, D-047): só quem deve (saldo maior que zero), pelo filtro e
+ * na ordem escolhidos. Nada aqui é guardado — é a mesma `resumir` da lista de fichinhas, lida na
+ * hora. "Em atraso" é ter parcela vencida; "a vencer" é dever sem nenhuma vencida.
+ */
+export function devedoras(resumos: readonly ResumoDaFicha[], filtro: FiltroDeDevedoras, ordem: OrdemDeDevedoras): ResumoDaFicha[] {
+  const comparar = ordem === 'atraso' ? porAtraso : ordem === 'valor' ? porValor : porNome
+  return resumos
+    .filter((resumo) => resumo.saldo > 0n)
+    .filter((resumo) => (filtro === 'todas' ? true : filtro === 'em-atraso' ? resumo.diasDeAtraso > 0 : resumo.diasDeAtraso === 0))
+    .sort(comparar)
+}
+
 /**
  * Uma linha do histórico da ficha. `chave` é estável para o React; `valor` é sempre positivo — a
  * descrição diz o sentido. `lancamentoId` só existe na linha que **abre a anotação** (E-10,

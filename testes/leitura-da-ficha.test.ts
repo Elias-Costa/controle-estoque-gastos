@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { somar } from '../src/dominio/dinheiro.ts'
 import type { Cliente, Ficha, Parcela, Resultado, SaldoAnterior, VendaFiado } from '../src/dominio/ficha.ts'
 import { estornar, novaVendaAVista, novaVendaFiado, novoSaldoAnterior, registrarRecebimento } from '../src/dominio/lancamentos.ts'
-import { filtrarEOrdenar, linhasDaFicha, resumir } from '../src/interface/leitura-da-ficha.ts'
+import { devedoras, filtrarEOrdenar, linhasDaFicha, resumir, type FiltroDeDevedoras, type OrdemDeDevedoras } from '../src/interface/leitura-da-ficha.ts'
 import { avisoDeAtraso, descricaoDosItens, linhaDaProxima, quantoDeve } from '../src/interface/palavras-da-ficha.ts'
 
 /**
@@ -132,6 +132,47 @@ describe('filtrarEOrdenar — busca sem acento, ordem alfabética (D-044)', () =
 
   test('sem ninguém: lista vazia, e é a tela que diz "Ninguém com esse nome"', () => {
     expect(nomes('zulmira')).toEqual([])
+  })
+})
+
+describe('devedoras — a lista de RF-10: só quem deve, pelo filtro e na ordem (E-12, D-047)', () => {
+  // Ana e Marlene: saldo anterior vencido há 30 dias, R$ 20,00 cada — empate em tudo, só o nome separa.
+  // Zélia: R$ 5,00 a vencer em 3 dias, antes da próxima da Rosa (5 dias). Ângela não deve nada.
+  const resumos = [
+    resumir(ROSA, fichaDaRosa, HOJE),
+    resumir(CLAUDIA, fichaDaClaudia, HOJE),
+    resumir(cliente('c7', 'Marlene'), [anterior('c7', 'a1', '2026-07-13', [parcela('p7', '2026-08-13', 2000n)])], HOJE),
+    resumir(cliente('c8', 'Zélia'), [anterior('c8', 'a2', '2026-09-01', [parcela('p8', '2026-09-15', 500n)])], HOJE),
+    resumir(cliente('c9', 'Ana'), [anterior('c9', 'a3', '2026-07-13', [parcela('p9', '2026-08-13', 2000n)])], HOJE),
+    resumir(cliente('c5', 'Ângela'), [], HOJE),
+  ]
+  const nomes = (filtro: FiltroDeDevedoras, ordem: OrdemDeDevedoras) => devedoras(resumos, filtro, ordem).map((r) => r.cliente.nome)
+
+  test('"Em atraso" por atraso (o padrão): 30, 30, 8 dias — o empate vai pelo nome', () => {
+    expect(nomes('em-atraso', 'atraso')).toEqual(['Ana', 'Marlene', 'Cláudia'])
+  })
+
+  test('"A vencer" por atraso: ninguém vencida, então a data mais próxima primeiro', () => {
+    expect(nomes('a-vencer', 'atraso')).toEqual(['Zélia', 'Dona Rosa'])
+  })
+
+  test('"Todas" é todas que devem — quem não deve nada fica de fora', () => {
+    expect(nomes('todas', 'atraso')).toEqual(['Ana', 'Marlene', 'Cláudia', 'Zélia', 'Dona Rosa'])
+    expect(nomes('todas', 'atraso')).not.toContain('Ângela')
+  })
+
+  test('por maior valor: R$ 90, 60, 20, 20, 5 — o empate vai pelo nome', () => {
+    expect(nomes('todas', 'valor')).toEqual(['Dona Rosa', 'Cláudia', 'Ana', 'Marlene', 'Zélia'])
+  })
+
+  test('por nome: alfabética pt-BR, como a lista de fichinhas', () => {
+    expect(nomes('todas', 'nome')).toEqual(['Ana', 'Cláudia', 'Dona Rosa', 'Marlene', 'Zélia'])
+  })
+
+  test('não mexe na lista que recebeu', () => {
+    const antes = resumos.map((r) => r.cliente.nome)
+    devedoras(resumos, 'todas', 'valor')
+    expect(resumos.map((r) => r.cliente.nome)).toEqual(antes)
   })
 })
 
