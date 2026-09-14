@@ -6,9 +6,15 @@ O problema que ele resolve não é "controlar estoque": é **substituir um cader
 
 ## O que o sistema faz
 
-**Fichas e fiado** — cadastro de clientes, vendas à vista ou fiado, parcelas com datas combinadas, e recebimentos que abatem automaticamente a parcela em aberto mais antiga. O saldo de cada cliente é sempre derivado da soma dos lançamentos, nunca um campo guardado. Correção é estorno: nada de histórico financeiro é apagado.
+**Hoje (fase 1, pronta em código):**
 
-**Cobrança** — lista de devedores ordenada por atraso, e mensagem de cobrança ou recibo montada pronta para o WhatsApp. O app escreve o texto; quem envia é ela.
+**Fichas e fiado** — cadastro de clientes, vendas à vista ou fiado, parcelas com datas combinadas e valores editáveis, e recebimentos que abatem automaticamente a parcela em aberto mais antiga. O saldo de cada cliente é sempre derivado da soma dos lançamentos, nunca um campo guardado. Correção é estorno: nada de histórico financeiro é apagado.
+
+**Cobrança** — lista de quem está devendo, em atraso primeiro, e mensagem de cobrança ou recibo montada pronta para o WhatsApp. O app escreve o texto; quem envia é ela.
+
+**Migração do caderno** — o saldo que a cliente já devia entra em uma linha (à vista ou em parcelas), e a última data digitada fica lembrada para a fichinha seguinte — sem tela própria para isso.
+
+**Previsto, nas fases seguintes** (só depois de duas semanas de uso real da fase 1):
 
 **Estoque** — produtos com foto, entrada item a item com preço de custo, baixa automática na venda e aviso de estoque no mínimo.
 
@@ -18,28 +24,19 @@ O problema que ele resolve não é "controlar estoque": é **substituir um cader
 
 ## Estado
 
-**Em desenvolvimento. A fundação do repositório está pronta; as telas ainda não existem.**
+**Fase 1 pronta em código (2026-09-14). O que falta é a sessão com a usuária.**
 
-A arquitetura foi provada no aparelho real antes de o sistema ser escrito — no iPhone, não no desktop:
+O que existe: as telas de lista, ficha, cadastro, venda, recebimento, devedores e login; o domínio da ficha com dinheiro em `bigint`; a base local com a fila de envio; o esquema na nuvem com as invariantes financeiras e o isolamento por conta valendo no próprio banco; a sincronização entre aparelhos; a instalação (ícone, nome, imagens de abertura); e o mecanismo que leva uma versão nova ao aparelho.
 
-- `bigint` atravessa o IndexedDB do Safari sem perda de precisão
-- O armazenamento persistente é concedido com o PWA instalado na tela de início
-- **O dado sobrevive a reiniciar o aparelho**
-- A escrita funciona em modo avião, sem tocar na rede
-- O reenvio da fila é idempotente: o mesmo item enviado duas vezes não vira duas linhas
+O que está provado, e onde:
 
-O que existe hoje é a fundação: as fronteiras entre as camadas, a garantia de que dinheiro nunca vira
-ponto flutuante, o mecanismo que leva uma versão nova ao aparelho, o domínio da ficha, a base local
-com a fila de envio, o esquema na nuvem com as invariantes financeiras e o isolamento por conta
-valendo no próprio banco, a sincronização entre aparelhos, e a prova de offline em navegador real
-(`bun run test:navegador`): venda com a rede desligada que sobrevive a recarregar, reenvio que não
-duplica, dois aparelhos que convergem sem sumiço, base apagada que volta da nuvem — verde no
-Chromium de desktop em 2026-09-12.
+- **No iPhone, antes de o sistema ser escrito** (2026-09-05): `bigint` atravessa o IndexedDB do Safari sem perda; o armazenamento persistente é concedido com o PWA instalado; **o dado sobrevive a reiniciar o aparelho**; a escrita funciona em modo avião; o reenvio da fila é idempotente.
+- **No Chromium de desktop, contra o build de produção** (rodado por último em 2026-09-14): venda com a rede desligada que sobrevive a recarregar, reenvio que não duplica, dois aparelhos que convergem sem sumiço, base apagada que volta da nuvem, login que nunca bloqueia (`bun run test:navegador`, 5 testes); as invariantes tentadas direto no Postgres e o transporte real (`bun run test:integracao`, 24 testes); 381 testes de unidade (`bun run check`).
+- **Com ela, no protótipo** (2026-09-08): registrar um recebimento levou 14 s e 3 toques; uma venda fiado de dois itens, 48 s — sozinha, no iPhone dela. Prova o desenho das telas, não o produto.
 
-Há também um **protótipo navegável** em `prototipo/` — as telas de ficha, venda fiado e recebimento,
-clicáveis, com dados inventados e sem persistência nenhuma. Ele não é o aplicativo e não vira o
-aplicativo: existe para cronometrar, com a usuária, se lançar no app é mais rápido que anotar no
-papel. Se não for, o sistema não serve — e essa medição ainda não aconteceu.
+O que **não** está provado, e só a sessão com ela responde: o app instalado no iPhone dela, em modo avião; os mesmos dois tempos com o app de verdade, na primeira vez que ela vê a tela; uma semana sem abrir. A fase 1 fecha quando ela usar o app por uma semana sem voltar ao caderno — esse é o critério, não o verde dos testes.
+
+O **protótipo navegável** de `prototipo/` continua no repositório como o instrumento daquela medição: HTML simples, dados inventados, sem persistência. Ele não é o aplicativo e não virou o aplicativo.
 
 ## Arquitetura
 
@@ -48,7 +45,7 @@ papel. Se não for, o sistema não serve — e essa medição ainda não acontec
 Três consequências disso atravessam o código inteiro:
 
 - **Os ids nascem no dispositivo** (UUIDv7), antes de qualquer rede. O mesmo id é a chave de idempotência do envio, o que torna o reenvio seguro por construção.
-- **Lançamento financeiro é imutável.** Venda e recebimento nunca são editados, só estornados. Além de auditoria, isso elimina a classe de conflito que importaria entre dois aparelhos: registros que só nascem não têm o que conflitar.
+- **Lançamento financeiro é imutável.** Venda e recebimento nunca são editados, só estornados (ou corrigidos no lugar enquanto ainda não subiram). Além de auditoria, isso elimina a classe de conflito que importaria entre dois aparelhos: registros que só nascem não têm o que conflitar.
 - **Dinheiro é `bigint` de centavos.** Nunca ponto flutuante, em lugar nenhum — inclusive nos totais do painel. Dividir uma venda em parcelas não é divisão, é repartição: as partes precisam somar exatamente o total, e a sobra em centavos é distribuída explicitamente.
 
 As invariantes financeiras valem **no banco** (constraints e políticas de linha), não apenas no código do aplicativo — e há uma suíte que tenta violar cada uma direto no Postgres, contornando o app, e espera a recusa.
@@ -58,20 +55,22 @@ As camadas são separadas por pasta, e a fronteira do domínio é aplicada por l
 ```
 src/dominio/          regras do negócio, puras. Só importa caminhos relativos
 src/dados/            base local (Dexie), repositório e as operações que a tela chama
-src/sincronizacao/    fila de operações e envio
-src/interface/        as telas
-src/plataforma/       service worker, carimbo de versão e pedido de persistência
+src/sincronizacao/    fila de operações, envio, e a conta na nuvem
+src/interface/        as telas dela, e as funções puras que decidem o que cada uma mostra
+src/plataforma/       service worker, carimbo de versão, pedido de persistência, instalação
 nuvem/                o esquema do Supabase: migrations versionadas e reversíveis, e o runner que as aplica
+ferramentas/          scripts que geram o que entra no git (os PNG do ícone)
+testes/               unidade (bun test), integração (Postgres real) e navegador (Playwright)
 ```
 
 ## Stack
 
 | Camada | Escolha |
 |---|---|
-| Interface | React + Vite + TypeScript, como SPA estática |
+| Interface | React 19 + Vite + TypeScript, Tailwind v4 com componentes próprios, como SPA estática |
 | Base local | Dexie (IndexedDB) |
 | Nuvem | Supabase — Postgres, autenticação e Row Level Security. Migrations em `nuvem/migracoes/`, cada uma com o seu `.reverter.sql`, aplicadas por um runner próprio sobre `Bun.sql` |
-| Runtime e pacotes | Bun — e `bun test` para os testes de unidade, com `fake-indexeddb` como dublê da base local (prova a lógica de `src/dados`, não o WebKit); a suíte de integração fala com o Postgres real por `Bun.sql`, o cliente embutido |
+| Runtime e pacotes | Bun — e `bun test` para os testes de unidade, com `fake-indexeddb` como dublê da base local (prova a lógica de `src/dados`, não o WebKit); a suíte de integração fala com o Postgres real por `Bun.sql`, o cliente embutido; a de navegador é Playwright sobre o Chromium |
 | PWA | `vite-plugin-pwa` |
 
 Não há renderização no servidor: o app é instalado e funciona offline, então o artefato é estático.
@@ -88,28 +87,33 @@ bun install
 bun run dev
 ```
 
-Para o app **sincronizar com a nuvem** é preciso um `.env.local` na raiz com `VITE_SUPABASE_URL` e a chave `anon` em `VITE_SUPABASE_ANON_KEY`. Sem eles o app roda inteiro no aparelho, não toca a rede e o indicador fica em "para enviar" — é o comportamento esperado, não um defeito. Com eles, a fila só sobe quando há sessão; até E-13 (login) a sessão vem de um usuário de teste (ver `nuvem/LEIA-ME.md`).
+Para o app **sincronizar com a nuvem** é preciso um `.env.local` na raiz com `VITE_SUPABASE_URL` e a chave `anon` em `VITE_SUPABASE_ANON_KEY`. Sem eles o app roda inteiro no aparelho, não toca a rede e o indicador fica em "para enviar" — é o comportamento esperado, não um defeito. Com eles, a fila só sobe depois de entrar: a tela inicial mostra "Entrar ›" enquanto não há sessão guardada no aparelho, e a conta é criada no painel do Supabase (ver *Publicar*).
 
 **Para mexer no esquema da nuvem** (`bun run migrar`, `bun run test:integracao`) é preciso mais uma variável no mesmo `.env.local`: `SUPABASE_DB_URL`, a conexão direta ao Postgres — no painel do Supabase, **Connect → Session pooler** (porta 5432), com o password do banco. É segredo e nunca entra no repositório; o runner e a suíte não o imprimem. Detalhes em `nuvem/LEIA-ME.md`.
 
 ## Comandos
 
+Todos os comandos abaixo foram executados em 2026-09-14, nesta ordem, com o resultado descrito — exceto os servidores marcados com †, que sobem do mesmo jeito que os demais e só não foram abertos nessa rodada.
+
 | Comando | O que faz |
 |---|---|
-| `bun run dev` | Servidor de desenvolvimento |
-| `bun run dev:lan` | Idem, com HTTPS e exposto na rede local — para abrir no celular |
-| `bun run build` | Build de produção |
-| `bun run preview:lan` | Serve o build de produção com HTTPS na rede local |
-| `bun run test` | Testes de unidade, com o runner do Bun |
-| `bun run check` | Typecheck + lint + testes. É o portão de qualquer mudança |
-| `bun run test:integracao` | As suítes contra o projeto real. `nuvem.test.ts` tenta violar cada invariante direto no Postgres (precisa de `SUPABASE_DB_URL`; não deixa rastro). `sincronizacao.test.ts` sobe e baixa linhas pelo `supabase-js` com um usuário de teste (`SUPABASE_TESTE_EMAIL`/`SUPABASE_TESTE_SENHA`); **deixa linhas no banco**, sob o usuário de teste — limpeza em `nuvem/LEIA-ME.md` |
-| `bun run test:navegador` | A prova de offline (RT-07 a RT-10) no Chromium do Playwright, contra o build de laboratório. Precisa do mesmo usuário de teste; sem ele, pula. Uma vez: `bunx playwright install chromium`. Também deixa linhas no banco |
+| `bun run check` | Typecheck + lint + testes de unidade. É o portão de qualquer mudança (381 testes; os 24 de integração aparecem como pulados) |
+| `bun run build` | Build de produção em `dist/`. `grep -l laboratorio dist/assets/*.js dist/sw.js` devolve nada: o gancho de teste não entra em produção |
+| `bun run preview` | Serve `dist/` na 4173, sem HTTPS — para olhar o build no desktop |
+| `bun run test:integracao` | As suítes contra o projeto real (~70 s). `nuvem.test.ts` tenta violar cada invariante direto no Postgres (precisa de `SUPABASE_DB_URL`; não deixa rastro). `sincronizacao.test.ts` sobe e baixa linhas pelo `supabase-js` com um usuário de teste (`SUPABASE_TESTE_EMAIL`/`SUPABASE_TESTE_SENHA`); **deixa linhas no banco**, sob o usuário de teste — limpeza abaixo |
+| `bun run test:navegador` | A prova de offline (RT-07 a RT-10) e o login (RF-27) no Chromium do Playwright, contra o build de laboratório (~40 s, 5 testes). Precisa do mesmo usuário de teste; sem ele, pula. Uma vez: `bunx playwright install chromium`. Também deixa linhas no banco |
 | `bun run build:laboratorio` | O build de produção mais `window.laboratorio`, em `dist-laboratorio/` — só para os testes de navegador. `dist/` nunca o contém |
-| `bun run preview:laboratorio:lan` | Serve `dist-laboratorio/` com HTTPS na rede local, na 4174 — para o roteiro à mão no Android (`testes/navegador/LEIA-ME.md`) |
-| `bun run migrar` | Aplica no Supabase as migrations de `nuvem/migracoes/` que ainda não foram aplicadas |
-| `bun run migrar:reverter` | Reverte a última migration aplicada, pelo seu `.reverter.sql` |
-| `bun run icones` | Gera de `public/favicon.svg` os PNG do ícone (`public/icones/`) e as imagens de abertura do iPhone (`public/abertura/`), pelo Chromium do Playwright (`ferramentas/LEIA-ME.md`). Rodar quando o ícone mudar; os PNG entram no git |
-| `bun run prototipo` | Protótipo das telas em `prototipo/`, na porta 5174 (HTTP, sem service worker) |
+| `bun run preview:laboratorio` | Serve `dist-laboratorio/` na 4174, sem HTTPS — é o que o Playwright sobe sozinho, e serve para uma passada à mão no desktop |
+| `bun run preview:laboratorio:lan` † | O mesmo, com HTTPS na rede local — para o roteiro à mão no Android (`testes/navegador/LEIA-ME.md`) |
+| `bun run migrar` | Aplica no Supabase as migrations de `nuvem/migracoes/` que ainda não foram aplicadas; sem pendente, diz "nada a aplicar" |
+| `bun run migrar:reverter` | Reverte a última migration aplicada, pelo seu `.reverter.sql`. **Limpeza da nuvem** (só há dado de suíte lá até a entrega): `migrar:reverter` duas vezes e `migrar` — feito em 2026-09-14; a nuvem está vazia |
+| `bun run icones` | Gera de `public/favicon.svg` os PNG do ícone (`public/icones/`) e as imagens de abertura do iPhone (`public/abertura/`), pelo Chromium do Playwright (`ferramentas/LEIA-ME.md`). É determinístico: rodar sem mudar o SVG não altera nenhum PNG. Rodar quando o ícone mudar; os PNG entram no git |
+| `bun run dev` † | Servidor de desenvolvimento na 5173 |
+| `bun run dev:lan` † | Idem, com HTTPS e exposto na rede local — para abrir no celular |
+| `bun run preview:lan` † | Serve o build de produção com HTTPS na rede local, na 5173 |
+| `bun run prototipo` † | Protótipo das telas em `prototipo/`, na porta 5174 (HTTP, sem service worker) |
+
+`bun run typecheck`, `bun run lint` e `bun run test` existem soltos; `check` é os três em sequência.
 
 ## Testando no celular
 
