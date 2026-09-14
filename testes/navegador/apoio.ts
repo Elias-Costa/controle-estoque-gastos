@@ -31,6 +31,9 @@ const SENHA = process.env.SUPABASE_TESTE_SENHA ?? ''
 /** Há tudo o que a prova precisa em `.env.local`. */
 export const COM_USUARIO = URL !== '' && CHAVE !== '' && EMAIL !== '' && SENHA !== ''
 
+/** O usuário de teste, para a prova de RF-27 digitar na tela de login (E-13). Só o processo do Playwright os vê. */
+export const USUARIO_DE_TESTE = { email: EMAIL, senha: SENHA } as const
+
 /** Pula o teste, dizendo o que falta, quando não há usuário de teste. Chamar no início de cada `test`. */
 export function pularSemUsuario(): void {
   test.skip(
@@ -75,6 +78,15 @@ export async function entrar(page: Page): Promise<void> {
     },
     { email: EMAIL, senha: SENHA },
   )
+}
+
+/** Sai da conta pelo laboratório (E-13): a sessão guardada some, a base fica. */
+export async function sair(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const lab = window.laboratorio
+    if (!lab) throw new Error('sem window.laboratorio: não é o build de laboratório')
+    return lab.sair()
+  })
 }
 
 /** Cadastra e devolve o id. */

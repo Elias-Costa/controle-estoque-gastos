@@ -32,6 +32,12 @@ export type Laboratorio = {
    * nuvem recusou, porque um teste que "passa" sem sessão não provou nada.
    */
   readonly entrar: (email: string, senha: string) => Promise<void>
+  /**
+   * Sai da conta — o `signOut` do cliente. **Não existe na interface** (D-048): é só a mão da
+   * prova de RF-27 (`testes/navegador/sessao.navegador.ts`), que precisa perder a sessão para
+   * mostrar que a base fica e a fila espera.
+   */
+  readonly sair: () => Promise<void>
 }
 
 declare global {
@@ -47,6 +53,12 @@ async function entrar(email: string, senha: string): Promise<void> {
   if (error) throw new Error(`login do usuário de teste falhou: ${error.message}`)
 }
 
+async function sair(): Promise<void> {
+  if (!supabaseDoApp) throw new Error('build sem VITE_SUPABASE_URL/VITE_SUPABASE_ANON_KEY: não há conta de onde sair')
+  const { error } = await supabaseDoApp.auth.signOut()
+  if (error) throw new Error(`sair falhou: ${error.message}`)
+}
+
 window.laboratorio = {
   banco,
   repositorio,
@@ -56,4 +68,5 @@ window.laboratorio = {
   lancarVendaFiado: (entrada) => lancarVendaFiado(repositorio, entrada),
   receber: (entrada) => receber(repositorio, entrada),
   entrar,
+  sair,
 }
