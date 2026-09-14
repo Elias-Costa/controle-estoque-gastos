@@ -11,6 +11,7 @@ import { mensagemDeCobranca, PALAVRAS_DA_COBRANCA } from './palavras-da-cobranca
 import { linhaDaProxima, PALAVRAS } from './palavras-da-ficha.ts'
 import { fraseDaRecusa, PALAVRAS_DA_VENDA } from './palavras-da-venda.ts'
 import { botaoRecebi, PALAVRAS_DO_RECEBIMENTO } from './palavras-do-recebimento.ts'
+import { PALAVRAS_DO_SALDO_ANTERIOR } from './palavras-do-saldo-anterior.ts'
 import { Topo } from './Topo.tsx'
 import { useLeitura } from './useLeitura.ts'
 import { linkDoWhatsApp } from './whatsapp.ts'
@@ -24,8 +25,10 @@ import { linkDoWhatsApp } from './whatsapp.ts'
  * que falta da próxima parcela — D-006; some quando não há o que receber) sobre "Vender fiado
  * para ela" (E-10, D-044). Quando o que falta é de até R$ 0,10, "Considerar pago" toma o
  * lugar de "Recebi" (D-031, D-046): um toque, e a ficha relê. A linha de uma venda ou de um
- * recebimento ainda não desfeito é tocável e abre a anotação (D-045) — é por ali que ela
- * corrige ou desfaz. "Cobrar no WhatsApp" (E-12, RF-09) fica no cartão do saldo (D-047).
+ * recebimento (ou de um saldo anterior, E-14) ainda não desfeito é tocável e abre a anotação
+ * (D-045) — é por ali que ela corrige ou desfaz. "Cobrar no WhatsApp" (E-12, RF-09) fica no
+ * cartão do saldo (D-047). No fim do histórico, fora do caminho diário, a linha "Anotar o que
+ * ela já devia" (D-049): a migração do papel para quem já está cadastrada.
  */
 export function TelaFicha({
   clienteId,
@@ -33,12 +36,14 @@ export function TelaFicha({
   aoReceber,
   aoVender,
   aoAbrirLancamento,
+  aoAnotarSaldoAnterior,
 }: {
   clienteId: Id
   aoVoltar: () => void
   aoReceber: () => void
   aoVender: () => void
   aoAbrirLancamento: (lancamentoId: Id) => void
+  aoAnotarSaldoAnterior: () => void
 }) {
   // Sobe a cada "Considerar pago" para a ficha reler: escrita própria não navega aqui.
   const [releituras, setReleituras] = useState(0)
@@ -92,6 +97,9 @@ export function TelaFicha({
       <CartaoDeSaldo resumo={resumo} cobravel={!podeQuitar} />
       <h2 className="mt-7 mb-2 text-[1rem] font-semibold text-suave">{PALAVRAS.oQueAconteceu}</h2>
       <Historico linhas={linhas} aoAbrir={aoAbrirLancamento} />
+      <button type="button" className="mt-3 min-h-11 border-0 bg-transparent p-0 text-[1rem] text-acento underline" onClick={aoAnotarSaldoAnterior}>
+        {PALAVRAS_DO_SALDO_ANTERIOR.anotarJaDevia}
+      </button>
       {erro !== null && <p className="mt-4 mb-0 font-semibold text-atraso">{erro}</p>}
       <div className="rodape-acao">
         {podeQuitar ? (

@@ -7,19 +7,12 @@ import { Botao } from './Botao.tsx'
 import { CLASSES_DE_CAMPO, CLASSES_DE_CAMPO_COMPACTO } from './Campo.tsx'
 import { CampoDeDinheiro, EntradaDeDinheiro, LeituraDoValor } from './CampoDeDinheiro.tsx'
 import { diaDoQuando, hoje, quandoDe } from './datas.ts'
-import { Escolha, Vezes } from './Opcoes.tsx'
+import { Escolha } from './Opcoes.tsx'
 import { PALAVRAS } from './palavras-da-ficha.ts'
-import { fraseDaGuarda, fraseDaRecusa, PALAVRAS_DA_VENDA, quandoDaParcela, tituloDaVenda } from './palavras-da-venda.ts'
+import { fraseDaGuarda, fraseDaRecusa, PALAVRAS_DA_VENDA, tituloDaVenda } from './palavras-da-venda.ts'
+import { Parcelas } from './Parcelas.tsx'
 import { QuandoFoi } from './QuandoFoi.tsx'
-import {
-  conferir,
-  parcelasCorrigidas,
-  rascunhoDaVenda,
-  textoDeCentavos,
-  type EdicaoDeParcela,
-  type ParcelaMontada,
-  type Rascunho,
-} from './rascunho-da-venda.ts'
+import { conferir, parcelasCorrigidas, rascunhoDaVenda, type EdicaoDeParcela, type ParcelaMontada, type Rascunho } from './rascunho-da-venda.ts'
 import { Topo } from './Topo.tsx'
 import { useLeitura } from './useLeitura.ts'
 
@@ -53,16 +46,24 @@ function rascunhoNovo(): Rascunho {
  * "Pronto" regrava a mesma linha; a ficha é a confirmação. Tudo que ela vê antes do toque
  * vem de `conferir` (`rascunho-da-venda.ts`): total, parcelas e guardas — nenhum número é
  * somado aqui (EL-03).
+ *
+ * `outroDiaLembrado` é a última data digitada nesta sessão (D-049): "Outro dia" já vem com
+ * ela, e `aoLembrarOutroDia` devolve a que foi gravada — a migração ajusta o dia em vez de
+ * digitar a data inteira a cada ficha.
  */
 export function TelaVenda({
   clienteId,
   corrigirId,
+  outroDiaLembrado,
+  aoLembrarOutroDia,
   aoVoltar,
   aoVender,
   aoCorrigir,
 }: {
   clienteId: Id
   corrigirId?: Id
+  outroDiaLembrado: Dia
+  aoLembrarOutroDia: (dia: Dia) => void
   aoVoltar: () => void
   aoVender: (vendaId: Id) => void
   aoCorrigir: () => void
@@ -91,28 +92,41 @@ export function TelaVenda({
     )
   }
 
-  return <Formulario cliente={leitura.valor.cliente} original={leitura.valor.original} aoVoltar={aoVoltar} aoVender={aoVender} aoCorrigir={aoCorrigir} />
+  return (
+    <Formulario
+      cliente={leitura.valor.cliente}
+      original={leitura.valor.original}
+      outroDiaLembrado={outroDiaLembrado}
+      aoLembrarOutroDia={aoLembrarOutroDia}
+      aoVoltar={aoVoltar}
+      aoVender={aoVender}
+      aoCorrigir={aoCorrigir}
+    />
+  )
 }
 
 /** O formulário, montado uma vez com o rascunho inicial — em branco ou a venda a corrigir. */
 function Formulario({
   cliente,
   original,
+  outroDiaLembrado,
+  aoLembrarOutroDia,
   aoVoltar,
   aoVender,
   aoCorrigir,
 }: {
   cliente: Cliente
   original: Venda | undefined
+  outroDiaLembrado: Dia
+  aoLembrarOutroDia: (dia: Dia) => void
   aoVoltar: () => void
   aoVender: (vendaId: Id) => void
   aoCorrigir: () => void
 }) {
   const dia = hoje()
   const [rascunho, setRascunho] = useState<Rascunho>(() => (original === undefined ? rascunhoNovo() : rascunhoDaVenda(original)))
-  const [quando, setQuando] = useState(() => quandoDe(original?.data, dia))
+  const [quando, setQuando] = useState(() => quandoDe(original?.data, dia, outroDiaLembrado))
   const [descontoAberto, setDescontoAberto] = useState(() => rascunho.descontoTexto !== '')
-  const [editandoParcelas, setEditandoParcelas] = useState(false)
   const [gravando, setGravando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
 
@@ -152,6 +166,8 @@ function Formulario({
           setErro(fraseDaRecusa(resultado.motivo))
           return
         }
+        // A data que ela digitou vale para o próximo "Outro dia" (D-049); "Hoje" e "Ontem" não são digitadas.
+        if (quando.escolha === 'outro') aoLembrarOutroDia(data)
         aoVender(resultado.valor.id)
         return
       }
@@ -259,42 +275,16 @@ function Formulario({
       )}
 
       {rascunho.pagamento === 'fiado' && (
-        <>
-          <Vezes
-            rotulo={PALAVRAS_DA_VENDA.emQuantasVezes}
-            maximo={maximoDeVezes}
-            valor={rascunho.vezes}
-            // Mudar o número de vezes recomeça a divisão do zero (D-045): as edições anteriores não fazem sentido em outra contagem.
-            aoEscolher={(vezes) => mudar({ vezes, edicoes: [] })}
-          />
-          {conferencia.total > 0n && (
-            <>
-              <ul className="m-0 mt-3 list-none p-0">
-                {conferencia.parcelas.map((parcela, posicao) =>
-                  editandoParcelas ? (
-                    <ParcelaEditavel
-                      key={posicao}
-                      posicao={posicao}
-                      parcela={parcela}
-                      edicao={rascunho.edicoes[posicao] ?? {}}
-                      aoMudar={(mudanca) => mudarParcela(posicao, mudanca)}
-                    />
-                  ) : (
-                    <li key={posicao} className="flex justify-between border-b border-borda py-2 tabular-nums">
-                      <span className="text-suave">{quandoDaParcela(posicao + 1, parcela.vencimento)}</span>
-                      <span className={parcela.editada ? 'font-semibold' : ''}>{emReais(parcela.valor)}</span>
-                    </li>
-                  ),
-                )}
-              </ul>
-              {!editandoParcelas && (
-                <button type="button" className="mt-1 min-h-11 border-0 bg-transparent p-0 text-[1rem] text-acento underline" onClick={() => setEditandoParcelas(true)}>
-                  {PALAVRAS_DA_VENDA.mudarParcelas}
-                </button>
-              )}
-            </>
-          )}
-        </>
+        <Parcelas
+          maximo={maximoDeVezes}
+          vezes={rascunho.vezes}
+          parcelas={conferencia.parcelas}
+          edicoes={rascunho.edicoes}
+          lista={conferencia.total > 0n}
+          // Mudar o número de vezes recomeça a divisão do zero (D-045): as edições anteriores não fazem sentido em outra contagem.
+          aoMudarVezes={(vezes) => mudar({ vezes, edicoes: [] })}
+          aoMudarParcela={mudarParcela}
+        />
       )}
 
       <QuandoFoi rotulo={PALAVRAS_DA_VENDA.quandoFoi} quando={quando} hoje={dia} aoMudar={setQuando} />
@@ -316,47 +306,6 @@ function Formulario({
         </Botao>
       </div>
     </main>
-  )
-}
-
-/**
- * Uma parcela em edição (D-012, D-045): "1ª", o campo de data e o campo de valor. O valor
- * vazio mostra, como exemplo, o que a divisão dá — digitar por cima é "combinei outro";
- * apagar é "deixa o sistema dividir de novo".
- */
-function ParcelaEditavel({
-  posicao,
-  parcela,
-  edicao,
-  aoMudar,
-}: {
-  posicao: number
-  parcela: ParcelaMontada
-  edicao: EdicaoDeParcela
-  aoMudar: (mudanca: EdicaoDeParcela) => void
-}) {
-  const ordem = `${posicao + 1}ª`
-  return (
-    <li className="border-b border-borda py-2">
-      <div className="flex items-center gap-2">
-        <span className="w-7 flex-none text-suave">{ordem}</span>
-        <input
-          className={`${CLASSES_DE_CAMPO} min-w-0 flex-1`}
-          type="date"
-          aria-label={`${ordem} vence em`}
-          value={edicao.vencimento ?? parcela.vencimento}
-          onChange={(evento) => aoMudar({ vencimento: evento.target.value })}
-        />
-        <EntradaDeDinheiro
-          className={`${CLASSES_DE_CAMPO_COMPACTO} w-[7rem] flex-none text-right tabular-nums`}
-          texto={edicao.valorTexto ?? ''}
-          aoMudar={(valorTexto) => aoMudar({ valorTexto })}
-          exemplo={textoDeCentavos(parcela.valor)}
-          rotuloAcessivel={`${ordem} valor`}
-        />
-      </div>
-      <LeituraDoValor texto={edicao.valorTexto ?? ''} className="mt-1 text-right text-[1.125rem]" />
-    </li>
   )
 }
 

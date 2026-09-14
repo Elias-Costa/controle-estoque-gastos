@@ -35,12 +35,16 @@ import { useLeitura } from './useLeitura.ts'
 export function TelaRecebimento({
   clienteId,
   corrigirId,
+  outroDiaLembrado,
+  aoLembrarOutroDia,
   aoVoltar,
   aoReceber,
   aoCorrigir,
 }: {
   clienteId: Id
   corrigirId?: Id
+  outroDiaLembrado: Dia
+  aoLembrarOutroDia: (dia: Dia) => void
   aoVoltar: () => void
   aoReceber: (recebimentoId: Id, troco: Centavos) => void
   aoCorrigir: () => void
@@ -81,6 +85,8 @@ export function TelaRecebimento({
       original={original}
       saldoDisponivel={saldoDisponivel}
       valorInicial={valorInicial}
+      outroDiaLembrado={outroDiaLembrado}
+      aoLembrarOutroDia={aoLembrarOutroDia}
       aoVoltar={aoVoltar}
       aoReceber={aoReceber}
       aoCorrigir={aoCorrigir}
@@ -94,6 +100,8 @@ function Formulario({
   original,
   saldoDisponivel,
   valorInicial,
+  outroDiaLembrado,
+  aoLembrarOutroDia,
   aoVoltar,
   aoReceber,
   aoCorrigir,
@@ -102,6 +110,8 @@ function Formulario({
   original: Recebimento | undefined
   saldoDisponivel: Centavos
   valorInicial: string
+  outroDiaLembrado: Dia
+  aoLembrarOutroDia: (dia: Dia) => void
   aoVoltar: () => void
   aoReceber: (recebimentoId: Id, troco: Centavos) => void
   aoCorrigir: () => void
@@ -110,7 +120,7 @@ function Formulario({
   const [rascunho, setRascunho] = useState<Omit<RascunhoDoRecebimento, 'data'>>(() =>
     original === undefined ? { valorTexto: valorInicial, forma: 'dinheiro', observacao: '' } : rascunhoDoRecebimento(original),
   )
-  const [quando, setQuando] = useState(() => quandoDe(original?.data, dia))
+  const [quando, setQuando] = useState(() => quandoDe(original?.data, dia, outroDiaLembrado))
   const [observacaoAberta, setObservacaoAberta] = useState(() => rascunho.observacao !== '')
   const [gravando, setGravando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
@@ -137,6 +147,8 @@ function Formulario({
           setErro(fraseDaRecusa(resultado.motivo))
           return
         }
+        // A data que ela digitou vale para o próximo "Outro dia" (D-049); "Hoje" e "Ontem" não são digitadas.
+        if (quando.escolha === 'outro') aoLembrarOutroDia(data)
         aoReceber(resultado.valor.recebimento.id, resultado.valor.troco)
         return
       }

@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import type { Centavos } from '../dominio/dinheiro.ts'
-import type { Id } from '../dominio/ficha.ts'
+import type { Dia, Id } from '../dominio/ficha.ts'
 import { TelaCadastro } from './TelaCadastro.tsx'
 import { TelaDevedoras } from './TelaDevedoras.tsx'
 import { TelaEntrar } from './TelaEntrar.tsx'
@@ -10,6 +10,7 @@ import { TelaLancamento } from './TelaLancamento.tsx'
 import { TelaParaQuem } from './TelaParaQuem.tsx'
 import { TelaRecebido } from './TelaRecebido.tsx'
 import { TelaRecebimento } from './TelaRecebimento.tsx'
+import { TelaSaldoAnterior } from './TelaSaldoAnterior.tsx'
 import { TelaVenda } from './TelaVenda.tsx'
 import { TelaVendido } from './TelaVendido.tsx'
 
@@ -20,7 +21,8 @@ import { TelaVendido } from './TelaVendido.tsx'
  * (D-045): a ficha nova, ou a venda para ela. A confirmação do recebimento carrega o `troco`,
  * que não é lançamento e a base não tem (D-016, D-046). A ficha sabe se veio da lista de
  * devedores (E-12, D-047), para o "‹" devolver ela ao mesmo lugar. O login (E-13, D-048) é uma
- * tela como as outras, aberta pela linha "Entrar ›" da inicial — nunca a primeira tela.
+ * tela como as outras, aberta pela linha "Entrar ›" da inicial — nunca a primeira tela. O saldo
+ * anterior (E-14, D-049) tem duas portas — a linha no fim da ficha e a anotação (correção).
  */
 type Rota =
   | { readonly tela: 'inicio' }
@@ -34,6 +36,7 @@ type Rota =
   | { readonly tela: 'recebimento'; readonly clienteId: Id; readonly origem: 'ficha' | 'lancamento'; readonly corrigirId?: Id }
   | { readonly tela: 'recebido'; readonly clienteId: Id; readonly recebimentoId: Id; readonly troco: Centavos }
   | { readonly tela: 'lancamento'; readonly clienteId: Id; readonly lancamentoId: Id }
+  | { readonly tela: 'saldo-anterior'; readonly clienteId: Id; readonly origem: 'ficha' | 'lancamento'; readonly corrigirId?: Id }
 
 /**
  * O aplicativo (E-09 a E-12): a tela inicial, a lista de devedores, a ficha, o cadastro, as
@@ -42,10 +45,15 @@ type Rota =
  *
  * A busca vive aqui, e não na tela inicial, para sobreviver à ida e volta da ficha: era assim
  * no protótipo (as seções eram escondidas, não destruídas) e é o que ela viu na sessão.
+ *
+ * `outroDiaLembrado` é a última data que ela digitou (D-049, item 1): "Outro dia" na venda e
+ * no recebimento, e "Desde" no saldo anterior, já vêm com ela. Vive aqui, e não na base, por
+ * ser conveniência de sessão — recarregar esquece, e nada se perde com isso.
  */
 export function Aplicativo() {
   const [rota, setRota] = useState<Rota>({ tela: 'inicio' })
   const [busca, setBusca] = useState('')
+  const [outroDiaLembrado, setOutroDiaLembrado] = useState<Dia>('')
   const irParaInicio = useCallback(() => setRota({ tela: 'inicio' }), [])
   const irParaDevedoras = useCallback(() => setRota({ tela: 'devedoras' }), [])
   const irParaFicha = useCallback((clienteId: Id) => setRota({ tela: 'ficha', clienteId }), [])
@@ -75,12 +83,15 @@ export function Aplicativo() {
           aoReceber={() => setRota({ tela: 'recebimento', clienteId: rota.clienteId, origem: 'ficha' })}
           aoVender={() => setRota({ tela: 'venda', clienteId: rota.clienteId, origem: 'ficha' })}
           aoAbrirLancamento={(lancamentoId) => setRota({ tela: 'lancamento', clienteId: rota.clienteId, lancamentoId })}
+          aoAnotarSaldoAnterior={() => setRota({ tela: 'saldo-anterior', clienteId: rota.clienteId, origem: 'ficha' })}
         />
       )
     case 'cadastro':
       return (
         <TelaCadastro
           nomeInicial={rota.nome}
+          outroDiaLembrado={outroDiaLembrado}
+          aoLembrarOutroDia={setOutroDiaLembrado}
           aoVoltar={() => setRota(rota.destino === 'venda' ? { tela: 'para-quem' } : { tela: 'inicio' })}
           aoCadastrar={(clienteId) => {
             // A cliente nova já está na lista: a busca que não a achava sairia vazia ao voltar.
@@ -108,6 +119,8 @@ export function Aplicativo() {
         <TelaVenda
           clienteId={clienteId}
           corrigirId={corrigirId}
+          outroDiaLembrado={outroDiaLembrado}
+          aoLembrarOutroDia={setOutroDiaLembrado}
           aoVoltar={voltar}
           aoVender={(vendaId) => setRota({ tela: 'vendido', clienteId, vendaId })}
           aoCorrigir={() => irParaFicha(clienteId)}
@@ -126,6 +139,8 @@ export function Aplicativo() {
         <TelaRecebimento
           clienteId={clienteId}
           corrigirId={corrigirId}
+          outroDiaLembrado={outroDiaLembrado}
+          aoLembrarOutroDia={setOutroDiaLembrado}
           aoVoltar={voltar}
           aoReceber={(recebimentoId, troco) => setRota({ tela: 'recebido', clienteId, recebimentoId, troco })}
           aoCorrigir={() => irParaFicha(clienteId)}
@@ -148,8 +163,25 @@ export function Aplicativo() {
           clienteId={rota.clienteId}
           lancamentoId={rota.lancamentoId}
           aoVoltar={() => irParaFicha(rota.clienteId)}
-          aoCorrigir={(tipo) => setRota({ tela: tipo === 'venda' ? 'venda' : 'recebimento', clienteId: rota.clienteId, origem: 'lancamento', corrigirId: rota.lancamentoId })}
+          aoCorrigir={(tipo) => setRota({ tela: tipo, clienteId: rota.clienteId, origem: 'lancamento', corrigirId: rota.lancamentoId })}
         />
       )
+    case 'saldo-anterior': {
+      const { clienteId, origem, corrigirId } = rota
+      const voltar = (): void => {
+        if (origem === 'lancamento' && corrigirId !== undefined) setRota({ tela: 'lancamento', clienteId, lancamentoId: corrigirId })
+        else setRota({ tela: 'ficha', clienteId })
+      }
+      return (
+        <TelaSaldoAnterior
+          clienteId={clienteId}
+          corrigirId={corrigirId}
+          outroDiaLembrado={outroDiaLembrado}
+          aoLembrarOutroDia={setOutroDiaLembrado}
+          aoVoltar={voltar}
+          aoAnotar={() => irParaFicha(clienteId)}
+        />
+      )
+    }
   }
 }
