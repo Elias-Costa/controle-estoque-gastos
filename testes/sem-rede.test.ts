@@ -36,6 +36,17 @@ function arquivosDeCodigo(pasta: string): string[] {
     .map((nome) => join(pasta, nome))
 }
 
+/**
+ * A varredura de E-13 (RF-27, D-005, D-048, EL-05): a base local **nunca é apagada por causa de
+ * sessão** — nem por nada, em `src/`. Apagar a base num logout transformaria um problema de
+ * sessão em EL-05. O único lugar que a apaga é a prova de RT-10 (`testes/navegador/apoio.ts`,
+ * pelo `banco` que o laboratório expõe), fora de `src/` e fora do build dela. `Dexie.delete()`
+ * apaga o banco inteiro; `.clear()` esvazia uma tabela; `banco.fila.…delete()` (apagar um item
+ * pelo id) é legítimo e não casa com nenhum dos sinais.
+ */
+const PASTAS_DE_SRC = ['src/dominio', 'src/dados', 'src/sincronizacao', 'src/interface', 'src/plataforma'] as const
+const SINAIS_DE_APAGAR = ['banco.delete(', 'Dexie.delete(', 'deleteDatabase(', '.clear('] as const
+
 describe('nenhum caminho de escrita depende de rede (E-08, RI-02)', () => {
   for (const pasta of PASTAS_SEM_REDE) {
     const arquivos = arquivosDeCodigo(pasta)
@@ -53,5 +64,22 @@ describe('nenhum caminho de escrita depende de rede (E-08, RI-02)', () => {
         expect(achados).toEqual([])
       })
     }
+  }
+})
+
+describe('a base local não é apagada por sessão (E-13, D-005, EL-05)', () => {
+  const arquivos = PASTAS_DE_SRC.flatMap(arquivosDeCodigo)
+
+  test('a varredura cobre a conta, o laboratório e as telas (senão não prova nada)', () => {
+    expect(arquivos).toContain(join('src/sincronizacao', 'conta.ts'))
+    expect(arquivos).toContain(join('src/plataforma', 'laboratorio.ts'))
+    expect(arquivos).toContain(join('src/interface', 'TelaEntrar.tsx'))
+  })
+
+  for (const arquivo of arquivos) {
+    test(`${arquivo} não apaga a base`, () => {
+      const fonte = readFileSync(arquivo, 'utf8')
+      expect(SINAIS_DE_APAGAR.filter((sinal) => fonte.includes(sinal))).toEqual([])
+    })
   }
 })

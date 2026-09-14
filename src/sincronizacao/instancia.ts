@@ -14,6 +14,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { aoEnfileirar, banco } from '../dados/instancia.ts'
+import { criarConta, type Conta } from './conta.ts'
 import { criarClienteSupabase, criarNuvemSupabase, type Nuvem } from './nuvem.ts'
 import { iniciarSincronizacao } from './sincronizacao.ts'
 
@@ -22,13 +23,16 @@ const chaveAnonima: string | undefined = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 /**
  * O cliente `supabase-js` do app, ou `null` sem configuração. Exportado para o laboratório de
- * E-08 fazer login com o usuário de teste (`D-043`); o motor não o vê — só a `Nuvem` abaixo.
- * O login de verdade é E-13, e vai nascer sobre este mesmo cliente.
+ * E-08 entrar e sair com o usuário de teste (`D-043`); o motor não o vê — só a `Nuvem` abaixo,
+ * e a tela de login só a `Conta`.
  */
 export const supabaseDoApp: SupabaseClient | null = url && chaveAnonima ? criarClienteSupabase(url, chaveAnonima) : null
 
 /** A nuvem do app, ou `null` sem configuração. */
 export const nuvemDoApp: Nuvem | null = supabaseDoApp ? criarNuvemSupabase(supabaseDoApp) : null
+
+/** A conta do app (E-13, D-048): a tela de login e a linha "Entrar ›" da tela inicial vivem sobre ela. */
+export const conta: Conta = criarConta(supabaseDoApp?.auth ?? null)
 
 /** O motor do app. Acorda a cada gravação local (a única ligação entre `dados` e esta pasta, e nesta direção). */
 export const sincronizacao = iniciarSincronizacao({ banco, nuvem: nuvemDoApp })
