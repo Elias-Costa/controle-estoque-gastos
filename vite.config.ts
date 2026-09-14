@@ -53,18 +53,27 @@ export default defineConfig(() => ({
        */
       devOptions: { enabled: true, type: 'module' },
       manifest: {
-        // Provisório. O nome sob o ícone é vocabulário dela (RI-07) e o definitivo,
-        // com ícone e splash, é escopo de E-13 — é pergunta para a usuária.
-        name: 'Controle de Fiado',
-        short_name: 'Fiado',
+        // O nome sob o ícone é a palavra dela (RI-07) — "Fichinhas", o título da primeira
+        // tela; hipótese até E-15 (D-048 item 2). As cores são o `acento` e o `fundo` de
+        // src/index.css: o Chrome pinta a splash dele com `background_color`, o nome e o
+        // ícone de 512. Os PNG saem de `bun run icones` (ferramentas/gerar-icones.ts).
+        name: 'Fichinhas',
+        short_name: 'Fichinhas',
         description: 'Fichas, fiado e recebimentos.',
         lang: 'pt-BR',
-        theme_color: '#0f172a',
-        background_color: '#ffffff',
+        theme_color: '#0b5f3a',
+        background_color: '#f7f7f8',
         display: 'standalone',
         start_url: '/',
-        icons: [{ src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }],
+        icons: [
+          { src: '/icones/icone-192.png', sizes: '192x192', type: 'image/png' },
+          { src: '/icones/icone-512.png', sizes: '512x512', type: 'image/png' },
+          { src: '/icones/icone-mascaravel-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
       },
+      // As imagens de abertura do iPhone só o iOS busca, na instalação: fora do precache,
+      // que é o que o app carrega em toda instalação e a cada versão nova.
+      workbox: { globIgnores: ['abertura/**'] },
     }),
     ...(process.env.LAN ? [basicSsl()] : []),
   ],

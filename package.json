@@ -20,6 +20,7 @@
     "test:navegador": "bun run typecheck && bun run build:laboratorio && bunx playwright test",
     "migrar": "bun run nuvem/migrar.ts",
     "migrar:reverter": "bun run nuvem/migrar.ts reverter",
+    "icones": "bun run ferramentas/gerar-icones.ts",
     "check": "bun run typecheck && bun run lint && bun run test"
   },
   "dependencies": {
