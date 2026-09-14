@@ -1,20 +1,20 @@
 # Controle de Estoque e Fiado
 
-Sistema de controle de **fiado**, estoque e gastos para uma revendedora autônoma de cosméticos (Avon, O Boticário, Natura). PWA offline-first, instalável na tela de início do celular.
+Sistema de controle de **fiado**, estoque e gastos para quem revende cosméticos por conta própria (Avon, O Boticário, Natura). PWA offline-first, instalável na tela de início do celular.
 
-O problema que ele resolve não é "controlar estoque": é **substituir um caderno de fichinhas de papel**, onde cada cliente tem uma página e a dona vai descontando os valores conforme o dinheiro chega. Quem vende fiado sem maquininha faz no caderno o parcelamento que o cartão faria — e paga por isso com contas que não fecham, páginas rasuradas e nenhuma noção de quanto tem a receber.
+O problema que ele resolve não é "controlar estoque": é **substituir um caderno de fichinhas de papel**, onde cada cliente tem uma página e os valores vão sendo descontados conforme o dinheiro chega. Quem vende fiado sem maquininha faz no caderno o parcelamento que o cartão faria — e paga por isso com contas que não fecham, páginas rasuradas e nenhuma noção de quanto tem a receber.
 
 ## O que o sistema faz
 
-**Hoje (fase 1, pronta em código):**
+**Hoje (fase 1):**
 
 **Fichas e fiado** — cadastro de clientes, vendas à vista ou fiado, parcelas com datas combinadas e valores editáveis, e recebimentos que abatem automaticamente a parcela em aberto mais antiga. O saldo de cada cliente é sempre derivado da soma dos lançamentos, nunca um campo guardado. Correção é estorno: nada de histórico financeiro é apagado.
 
-**Cobrança** — lista de quem está devendo, em atraso primeiro, e mensagem de cobrança ou recibo montada pronta para o WhatsApp. O app escreve o texto; quem envia é ela.
+**Cobrança** — lista de quem está devendo, em atraso primeiro, e mensagem de cobrança ou recibo montada pronta para o WhatsApp. O app escreve o texto; quem envia é a pessoa.
 
-**Migração do caderno** — o saldo que a cliente já devia entra em uma linha (à vista ou em parcelas), e a última data digitada fica lembrada para a fichinha seguinte — sem tela própria para isso.
+**Migração do caderno** — o saldo que um cliente já devia entra em uma linha (à vista ou em parcelas), e a última data digitada fica lembrada para a próxima ficha — sem tela própria para isso.
 
-**Previsto, nas fases seguintes** (só depois de duas semanas de uso real da fase 1):
+**Previsto, nas fases seguintes:**
 
 **Estoque** — produtos com foto, entrada item a item com preço de custo, baixa automática na venda e aviso de estoque no mínimo.
 
@@ -24,23 +24,20 @@ O problema que ele resolve não é "controlar estoque": é **substituir um cader
 
 ## Estado
 
-**Fase 1 pronta em código (2026-09-14). O que falta é a sessão com a usuária.**
+**Fase 1 pronta em código.** Existem as telas de lista, ficha, cadastro, venda, recebimento, devedores e login; o domínio da ficha com dinheiro em `bigint`; a base local com a fila de envio; o esquema na nuvem com as invariantes financeiras e o isolamento por conta valendo no próprio banco; a sincronização entre aparelhos; a instalação (ícone, nome, imagens de abertura); e o mecanismo que leva uma versão nova ao aparelho na abertura seguinte.
 
-O que existe: as telas de lista, ficha, cadastro, venda, recebimento, devedores e login; o domínio da ficha com dinheiro em `bigint`; a base local com a fila de envio; o esquema na nuvem com as invariantes financeiras e o isolamento por conta valendo no próprio banco; a sincronização entre aparelhos; a instalação (ícone, nome, imagens de abertura); e o mecanismo que leva uma versão nova ao aparelho.
+O que está provado por teste:
 
-O que está provado, e onde:
+- **Num iPhone real, antes de o sistema ser escrito:** `bigint` atravessa o IndexedDB do Safari sem perda; o armazenamento persistente é concedido com o PWA instalado; o dado sobrevive a reiniciar o aparelho; a escrita funciona em modo avião; o reenvio da fila é idempotente.
+- **No Chromium, contra o build de produção** (`bun run test:navegador`): venda com a rede desligada que sobrevive a recarregar, reenvio que não duplica, dois aparelhos que convergem sem sumiço, base apagada que volta da nuvem, login que nunca bloqueia.
+- **Direto no Postgres** (`bun run test:integracao`): cada invariante do esquema violada contornando o app, e recusada; o transporte real de ponta a ponta.
+- **Unidade** (`bun run check`): aritmética em centavos, abatimento, saldo derivado sob centenas de fichas aleatórias, estorno, a leitura do que se digita no campo de dinheiro.
 
-- **No iPhone, antes de o sistema ser escrito** (2026-09-05): `bigint` atravessa o IndexedDB do Safari sem perda; o armazenamento persistente é concedido com o PWA instalado; **o dado sobrevive a reiniciar o aparelho**; a escrita funciona em modo avião; o reenvio da fila é idempotente.
-- **No Chromium de desktop, contra o build de produção** (rodado por último em 2026-09-14): venda com a rede desligada que sobrevive a recarregar, reenvio que não duplica, dois aparelhos que convergem sem sumiço, base apagada que volta da nuvem, login que nunca bloqueia (`bun run test:navegador`, 5 testes); as invariantes tentadas direto no Postgres e o transporte real (`bun run test:integracao`, 24 testes); 381 testes de unidade (`bun run check`).
-- **Com ela, no protótipo** (2026-09-08): registrar um recebimento levou 14 s e 3 toques; uma venda fiado de dois itens, 48 s — sozinha, no iPhone dela. Prova o desenho das telas, não o produto.
-
-O que **não** está provado, e só a sessão com ela responde: o app instalado no iPhone dela, em modo avião; os mesmos dois tempos com o app de verdade, na primeira vez que ela vê a tela; uma semana sem abrir. A fase 1 fecha quando ela usar o app por uma semana sem voltar ao caderno — esse é o critério, não o verde dos testes.
-
-O **protótipo navegável** de `prototipo/` continua no repositório como o instrumento daquela medição: HTML simples, dados inventados, sem persistência. Ele não é o aplicativo e não virou o aplicativo.
+O que ainda não está provado é o uso real: as telas foram desenhadas contra um protótipo cronometrado (`prototipo/`, que continua no repositório como instrumento, não como código do app), e a fase 1 só fecha quando o caderno parar de ser usado.
 
 ## Arquitetura
 
-**Offline-first, e isso é a decisão central.** Toda escrita vai primeiro para o banco local no aparelho e só depois sobe para a nuvem, por uma fila de envio. O app não tem caminho de escrita que dependa de rede — o momento em que o sinal falha é exatamente o momento em que ela está com a cliente na frente, e uma tela de erro ali é o que faz voltar para o caderno.
+**Offline-first, e isso é a decisão central.** Toda escrita vai primeiro para o banco local no aparelho e só depois sobe para a nuvem, por uma fila de envio. O app não tem caminho de escrita que dependa de rede — o momento em que o sinal falha é exatamente o momento em que se está com o cliente na frente, e uma tela de erro ali é o que faz voltar para o caderno.
 
 Três consequências disso atravessam o código inteiro:
 
@@ -56,7 +53,7 @@ As camadas são separadas por pasta, e a fronteira do domínio é aplicada por l
 src/dominio/          regras do negócio, puras. Só importa caminhos relativos
 src/dados/            base local (Dexie), repositório e as operações que a tela chama
 src/sincronizacao/    fila de operações, envio, e a conta na nuvem
-src/interface/        as telas dela, e as funções puras que decidem o que cada uma mostra
+src/interface/        as telas, e as funções puras que decidem o que cada uma mostra
 src/plataforma/       service worker, carimbo de versão, pedido de persistência, instalação
 nuvem/                o esquema do Supabase: migrations versionadas e reversíveis, e o runner que as aplica
 ferramentas/          scripts que geram o que entra no git (os PNG do ícone)
@@ -87,31 +84,31 @@ bun install
 bun run dev
 ```
 
-Para o app **sincronizar com a nuvem** é preciso um `.env.local` na raiz com `VITE_SUPABASE_URL` e a chave `anon` em `VITE_SUPABASE_ANON_KEY`. Sem eles o app roda inteiro no aparelho, não toca a rede e o indicador fica em "para enviar" — é o comportamento esperado, não um defeito. Com eles, a fila só sobe depois de entrar: a tela inicial mostra "Entrar ›" enquanto não há sessão guardada no aparelho, e a conta é criada no painel do Supabase (ver *Publicar*).
+Para o app **sincronizar com a nuvem** é preciso um `.env.local` na raiz com `VITE_SUPABASE_URL` e a chave `anon` em `VITE_SUPABASE_ANON_KEY`. Sem eles o app roda inteiro no aparelho, não toca a rede e o indicador fica em "para enviar" — é o comportamento esperado, não um defeito. Com eles, a fila só sobe depois de entrar: a tela inicial mostra "Entrar ›" enquanto não há sessão guardada no aparelho, e o usuário é criado no painel do Supabase (ver *Publicar*).
 
-**Para mexer no esquema da nuvem** (`bun run migrar`, `bun run test:integracao`) é preciso mais uma variável no mesmo `.env.local`: `SUPABASE_DB_URL`, a conexão direta ao Postgres — no painel do Supabase, **Connect → Session pooler** (porta 5432), com o password do banco. É segredo e nunca entra no repositório; o runner e a suíte não o imprimem. Detalhes em `nuvem/LEIA-ME.md`.
+**Para mexer no esquema da nuvem** (`bun run migrar`, `bun run test:integracao`) é preciso mais uma variável no mesmo `.env.local`: `SUPABASE_DB_URL`, a conexão direta ao Postgres — no painel do Supabase, **Connect → Session pooler** (porta 5432), com o password do banco. É segredo e nunca entra no repositório; o runner e a suíte não o imprimem.
+
+**Para as suítes de integração e de navegador** é preciso ainda um usuário de teste do projeto, em `SUPABASE_TESTE_EMAIL` e `SUPABASE_TESTE_SENHA`. Elas **deixam linhas no banco** sob esse usuário (lançamento é imutável e o app não apaga), então rode-as contra um projeto Supabase de desenvolvimento, não contra o que guarda dado real.
 
 ## Comandos
 
-Todos os comandos abaixo foram executados em 2026-09-14, nesta ordem, com o resultado descrito — exceto os servidores marcados com †, que sobem do mesmo jeito que os demais e só não foram abertos nessa rodada.
-
 | Comando | O que faz |
 |---|---|
-| `bun run check` | Typecheck + lint + testes de unidade. É o portão de qualquer mudança (381 testes; os 24 de integração aparecem como pulados) |
-| `bun run build` | Build de produção em `dist/`. `grep -l laboratorio dist/assets/*.js dist/sw.js` devolve nada: o gancho de teste não entra em produção |
+| `bun run check` | Typecheck + lint + testes de unidade. É o portão de qualquer mudança |
+| `bun run build` | Build de produção em `dist/` |
 | `bun run preview` | Serve `dist/` na 4173, sem HTTPS — para olhar o build no desktop |
-| `bun run test:integracao` | As suítes contra o projeto real (~70 s). `nuvem.test.ts` tenta violar cada invariante direto no Postgres (precisa de `SUPABASE_DB_URL`; não deixa rastro). `sincronizacao.test.ts` sobe e baixa linhas pelo `supabase-js` com um usuário de teste (`SUPABASE_TESTE_EMAIL`/`SUPABASE_TESTE_SENHA`); **deixa linhas no banco**, sob o usuário de teste — limpeza abaixo |
-| `bun run test:navegador` | A prova de offline (RT-07 a RT-10) e o login (RF-27) no Chromium do Playwright, contra o build de laboratório (~40 s, 5 testes). Precisa do mesmo usuário de teste; sem ele, pula. Uma vez: `bunx playwright install chromium`. Também deixa linhas no banco |
-| `bun run build:laboratorio` | O build de produção mais `window.laboratorio`, em `dist-laboratorio/` — só para os testes de navegador. `dist/` nunca o contém |
-| `bun run preview:laboratorio` | Serve `dist-laboratorio/` na 4174, sem HTTPS — é o que o Playwright sobe sozinho, e serve para uma passada à mão no desktop |
-| `bun run preview:laboratorio:lan` † | O mesmo, com HTTPS na rede local — para o roteiro à mão no Android (`testes/navegador/LEIA-ME.md`) |
+| `bun run test:integracao` | As suítes contra o projeto Supabase real (~70 s). `nuvem.test.ts` tenta violar cada invariante direto no Postgres (precisa de `SUPABASE_DB_URL`; não deixa rastro). `sincronizacao.test.ts` sobe e baixa linhas pelo `supabase-js` com o usuário de teste; deixa linhas no banco |
+| `bun run test:navegador` | A prova de offline e o login no Chromium do Playwright, contra o build de laboratório (~40 s). Precisa do usuário de teste; sem ele, pula. Uma vez: `bunx playwright install chromium`. Também deixa linhas no banco |
+| `bun run build:laboratorio` | O build de produção mais `window.laboratorio`, em `dist-laboratorio/` — só para os testes de navegador. `dist/` nunca o contém: `grep -l laboratorio dist/assets/*.js dist/sw.js` devolve nada |
+| `bun run preview:laboratorio` | Serve `dist-laboratorio/` na 4174, sem HTTPS — é o que o Playwright sobe sozinho |
+| `bun run preview:laboratorio:lan` | O mesmo, com HTTPS na rede local — para dirigir o laboratório pelo console remoto de um celular |
 | `bun run migrar` | Aplica no Supabase as migrations de `nuvem/migracoes/` que ainda não foram aplicadas; sem pendente, diz "nada a aplicar" |
-| `bun run migrar:reverter` | Reverte a última migration aplicada, pelo seu `.reverter.sql`. **Limpeza da nuvem** (só há dado de suíte lá até a entrega): `migrar:reverter` duas vezes e `migrar` — feito em 2026-09-14; a nuvem está vazia |
-| `bun run icones` | Gera de `public/favicon.svg` os PNG do ícone (`public/icones/`) e as imagens de abertura do iPhone (`public/abertura/`), pelo Chromium do Playwright (`ferramentas/LEIA-ME.md`). É determinístico: rodar sem mudar o SVG não altera nenhum PNG. Rodar quando o ícone mudar; os PNG entram no git |
-| `bun run dev` † | Servidor de desenvolvimento na 5173 |
-| `bun run dev:lan` † | Idem, com HTTPS e exposto na rede local — para abrir no celular |
-| `bun run preview:lan` † | Serve o build de produção com HTTPS na rede local, na 5173 |
-| `bun run prototipo` † | Protótipo das telas em `prototipo/`, na porta 5174 (HTTP, sem service worker) |
+| `bun run migrar:reverter` | Reverte a última migration aplicada, pelo seu `.reverter.sql`. Reverter todas e aplicar de novo é o único jeito de zerar um projeto de desenvolvimento cheio de linhas de suíte |
+| `bun run icones` | Gera de `public/favicon.svg` os PNG do ícone (`public/icones/`) e as imagens de abertura do iPhone (`public/abertura/`), pelo Chromium do Playwright. Determinístico: rodar sem mudar o SVG não altera nenhum PNG. Os PNG entram no git |
+| `bun run dev` | Servidor de desenvolvimento na 5173 |
+| `bun run dev:lan` | Idem, com HTTPS e exposto na rede local — para abrir no celular |
+| `bun run preview:lan` | Serve o build de produção com HTTPS na rede local, na 5173 |
+| `bun run prototipo` | O protótipo das telas em `prototipo/`, na porta 5174 (HTTP, sem service worker) |
 
 `bun run typecheck`, `bun run lint` e `bun run test` existem soltos; `check` é os três em sequência.
 
@@ -132,29 +129,21 @@ Dois tropeços comuns:
 
 ## Publicar
 
-O app é publicado no **Vercel**, sem domínio próprio, com deploy automático a cada push em `main` — todo commit chega ao aparelho dela na abertura seguinte (`D-026`, `D-032`, `D-043`). É uma SPA estática de uma rota: o preset Vite do Vercel basta, sem `vercel.json`.
+O app é uma SPA estática de uma rota: qualquer host de arquivos estáticos serve. No **Vercel**, o preset Vite basta, sem `vercel.json`: importar o repositório, build `bun run build`, output `dist`, e `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` nas variáveis do projeto. Cada push em `main` publica; build quebrado não publica e o anterior fica no ar.
 
-Uma vez, no painel do Vercel:
+**O nome do projeto vira a origem, e a origem é a identidade do IndexedDB no aparelho.** Escolhido uma vez, nunca muda: trocar o domínio depois de instalado é começar do zero no celular.
 
-1. *Add New → Project*, importar este repositório do GitHub.
-2. **Nome do projeto: `controle-fiado`.** O nome vira a origem (`https://controle-fiado.vercel.app`) e **a origem é a identidade do IndexedDB no aparelho dela: escolhido uma vez, nunca muda.** Se o subdomínio estiver tomado, escolha outro *antes* de instalar no aparelho e registre em `docs/decisions.md` (`D-043`).
-3. Framework preset *Vite*; build `bun run build`; output `dist`.
-4. *Environment Variables*: `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`, os mesmos de `.env.local`. (Sem eles o build sai sem nuvem: o app funciona só no aparelho e o indicador fica em "para enviar".)
-5. *Deploy*. Depois, cada push em `main` publica sozinho; build quebrado não publica e o anterior fica no ar.
+**Versão nova entra na abertura seguinte**, nunca no meio de uma sessão — o service worker novo fica em espera e assume quando o app é aberto de novo. O carimbo `versão dd/mm, hh:mm` no rodapé da tela inicial diz qual build está no aparelho.
 
-No iPhone dela: abrir o endereço no Safari e *Compartilhar → Adicionar à Tela de Início* (o próprio app mostra esse caminho no pé da tela inicial enquanto não está instalado). **Instalar cedo, mesmo sem entrar** (`D-036`): o app instalado é o laboratório de "uma semana sem abrir" (RT-13) e da troca de versão (`D-032`). O carimbo `versão dd/mm, hh:mm` no rodapé diz qual build está no aparelho.
+**Conta**, no painel do Supabase: *Authentication → Users → Add user* com auto-confirm. Em *Authentication → Sessions*, **Time-box user sessions** e **Inactivity timeout** em *never* — com prazo ali a sessão cai sozinha e o app para de enviar até alguém entrar de novo (a base local nunca é apagada por sessão). No aparelho, a tela inicial mostra "Entrar ›" enquanto não há sessão guardada; depois de entrar, a linha some e a fila sobe. Não há "Sair" nem "esqueci a senha" no app — recuperar acesso é caminho de quem administra o projeto, no painel.
 
-**A conta dela** (E-13, `D-005`, `D-048`), uma vez, no painel do Supabase:
-
-1. *Authentication → Users → Add user*, com auto-confirm, **num e-mail que você acessa** — recuperar senha é caminho seu, não dela.
-2. *Authentication → Sessions*: **Time-box user sessions** e **Inactivity timeout** em *never* — conferir no painel; o agente não viu o valor. Com prazo ali a sessão cai sozinha: o app não perde a base, mas para de enviar até alguém entrar de novo.
-3. No aparelho dela, com o app aberto: a tela inicial mostra **"Entrar ›"** sob o indicador enquanto não há sessão guardada. Tocar, digitar e-mail e senha, "Entrar". A linha some, a fila sobe, e na prática ela não vê essa tela de novo. Não há "Sair".
+No iPhone: abrir o endereço no Safari e *Compartilhar → Adicionar à Tela de Início* (o próprio app mostra esse caminho no pé da tela inicial enquanto não está instalado). No Android, o Chrome oferece a instalação pelo menu.
 
 ## Licença
 
 [MIT](LICENSE) — use, modifique e redistribua à vontade, mantendo o aviso de copyright.
 
-O sistema foi construído para uma revendedora específica, mas o problema é comum a qualquer pessoa que venda fiado e anote em caderno. Se servir para a sua, fique à vontade.
+O sistema foi construído para uma revenda específica, mas o problema é comum a qualquer pessoa que venda fiado e anote em caderno. Se servir para a sua, fique à vontade.
 
 ## Privacidade
 
