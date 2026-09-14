@@ -108,6 +108,7 @@ Para o app **sincronizar com a nuvem** é preciso um `.env.local` na raiz com `V
 | `bun run preview:laboratorio:lan` | Serve `dist-laboratorio/` com HTTPS na rede local, na 4174 — para o roteiro à mão no Android (`testes/navegador/LEIA-ME.md`) |
 | `bun run migrar` | Aplica no Supabase as migrations de `nuvem/migracoes/` que ainda não foram aplicadas |
 | `bun run migrar:reverter` | Reverte a última migration aplicada, pelo seu `.reverter.sql` |
+| `bun run icones` | Gera de `public/favicon.svg` os PNG do ícone (`public/icones/`) e as imagens de abertura do iPhone (`public/abertura/`), pelo Chromium do Playwright (`ferramentas/LEIA-ME.md`). Rodar quando o ícone mudar; os PNG entram no git |
 | `bun run prototipo` | Protótipo das telas em `prototipo/`, na porta 5174 (HTTP, sem service worker) |
 
 ## Testando no celular
@@ -137,7 +138,13 @@ Uma vez, no painel do Vercel:
 4. *Environment Variables*: `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`, os mesmos de `.env.local`. (Sem eles o build sai sem nuvem: o app funciona só no aparelho e o indicador fica em "para enviar".)
 5. *Deploy*. Depois, cada push em `main` publica sozinho; build quebrado não publica e o anterior fica no ar.
 
-No iPhone dela: abrir o endereço no Safari e *Compartilhar → Adicionar à Tela de Início*. **Sem sessão e sem tarefa** (`D-036`): até E-13 não há login, e o app instalado cedo é o laboratório de "uma semana sem abrir" (RT-13) e da troca de versão (`D-032`). O carimbo `versão dd/mm, hh:mm` no rodapé diz qual build está no aparelho.
+No iPhone dela: abrir o endereço no Safari e *Compartilhar → Adicionar à Tela de Início* (o próprio app mostra esse caminho no pé da tela inicial enquanto não está instalado). **Instalar cedo, mesmo sem entrar** (`D-036`): o app instalado é o laboratório de "uma semana sem abrir" (RT-13) e da troca de versão (`D-032`). O carimbo `versão dd/mm, hh:mm` no rodapé diz qual build está no aparelho.
+
+**A conta dela** (E-13, `D-005`, `D-048`), uma vez, no painel do Supabase:
+
+1. *Authentication → Users → Add user*, com auto-confirm, **num e-mail que você acessa** — recuperar senha é caminho seu, não dela.
+2. *Authentication → Sessions*: **Time-box user sessions** e **Inactivity timeout** em *never* — conferir no painel; o agente não viu o valor. Com prazo ali a sessão cai sozinha: o app não perde a base, mas para de enviar até alguém entrar de novo.
+3. No aparelho dela, com o app aberto: a tela inicial mostra **"Entrar ›"** sob o indicador enquanto não há sessão guardada. Tocar, digitar e-mail e senha, "Entrar". A linha some, a fila sobe, e na prática ela não vê essa tela de novo. Não há "Sair".
 
 ## Licença
 
