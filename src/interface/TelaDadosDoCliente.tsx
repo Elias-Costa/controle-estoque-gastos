@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { repositorio } from '../dados/instancia.ts'
-import { alterarCliente, desativarCliente, reativarCliente } from '../dados/operacoes.ts'
+import { alterarCliente, desativarCliente } from '../dados/operacoes.ts'
 import type { Cliente, Id } from '../dominio/ficha.ts'
 import { Botao } from './Botao.tsx'
 import { Campo } from './Campo.tsx'
@@ -16,11 +16,12 @@ import { useLeitura } from './useLeitura.ts'
  * dados ›" do cabeçalho da ficha; fora do caminho cronometrado. Sem "Já me deve": o saldo
  * anterior tem o caminho próprio (D-049).
  *
- * No fim, "Desativar a fichinha" (item 6) com segundo toque, ou "Reativar a fichinha" quando já
- * está desativada. Desativar é marca, nunca apagar (D-041): a fichinha some das listas e volta
- * por "Ver as fichinhas desativadas (N)" na tela inicial. Os dois gravam antes o que ela mudou
- * nos campos — nada que ela digitou se perde em silêncio. Desativar volta à tela inicial (a
- * ficha sumiu da lista); reativar volta à ficha.
+ * No fim, "Desativar a fichinha" (item 6) com segundo toque. Desativar é marca, nunca apagar
+ * (D-041): a fichinha some das listas, volta por "Ver as fichinhas desativadas (N)" na tela
+ * inicial e reativa **na própria ficha**, que fica inerte até lá (emenda ao item 6) — por isso
+ * esta tela só se alcança por uma ficha ativa e só desativa. Grava antes o que ela mudou nos
+ * campos — nada que ela digitou se perde em silêncio. Desativar volta à tela inicial (a ficha
+ * sumiu da lista).
  */
 export function TelaDadosDoCliente({
   clienteId,
@@ -62,7 +63,6 @@ function Formulario({ cliente, aoVoltar, aoPronto, aoDesativar }: { cliente: Cli
   const [confirmando, setConfirmando] = useState(false)
   const [gravando, setGravando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
-  const desativada = cliente.desativadoEm !== undefined
 
   /** Grava os campos como estão; devolve o cliente gravado, ou `null` com o erro já na tela. */
   async function gravarCampos(): Promise<Cliente | null> {
@@ -97,16 +97,10 @@ function Formulario({ cliente, aoVoltar, aoPronto, aoDesativar }: { cliente: Cli
       await desativarCliente(repositorio, gravado, hoje())
       aoDesativar()
     })
-  const reativar = () =>
-    executar(async (gravado) => {
-      await reativarCliente(repositorio, gravado)
-      aoPronto()
-    })
 
   return (
     <main className="tela">
       <Topo titulo={PALAVRAS.dados.titulo} subtitulo={cliente.nome} aoVoltar={aoVoltar} />
-      {desativada && <p className="mt-0 mb-3 text-[0.95rem] font-semibold text-suave">{PALAVRAS.fichinhaDesativada}</p>}
 
       <Campo rotulo={PALAVRAS.cadastro.nome} valor={nome} aoMudar={setNome} />
       <Campo rotulo={PALAVRAS.cadastro.telefone} valor={telefone} aoMudar={setTelefone} tipo="tel" />
@@ -131,15 +125,9 @@ function Formulario({ cliente, aoVoltar, aoPronto, aoDesativar }: { cliente: Cli
             <Botao tipo="principal" aoTocar={() => void pronto()} desabilitado={gravando || nome.trim() === ''}>
               {PALAVRAS.cadastro.pronto}
             </Botao>
-            {desativada ? (
-              <Botao tipo="secundario" aoTocar={() => void reativar()} desabilitado={gravando}>
-                {PALAVRAS.dados.reativar}
-              </Botao>
-            ) : (
-              <Botao tipo="secundario" aoTocar={() => setConfirmando(true)}>
-                {PALAVRAS.dados.desativar}
-              </Botao>
-            )}
+            <Botao tipo="secundario" aoTocar={() => setConfirmando(true)}>
+              {PALAVRAS.dados.desativar}
+            </Botao>
           </>
         )}
       </div>

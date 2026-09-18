@@ -30,8 +30,9 @@ export const PALAVRAS = {
   naoDeuParaAbrir: 'Não deu para abrir as fichinhas. Feche o aplicativo e abra de novo.',
   /** O que foi desfeito fica sob um toque (D-050, item 1); "Esconder" é o mesmo lugar, invertido. */
   esconderDesfeitas: 'Esconder o que foi desfeito',
-  /** A ficha desativada continua abrindo; esta linha, sob o nome, diz por que ela não está na lista. */
+  /** A ficha desativada abre inerte; esta linha, sob o nome, diz por quê, e o rodapé só reativa (D-050, emenda ao item 6). */
   fichinhaDesativada: 'Fichinha desativada',
+  reativar: 'Reativar a fichinha',
   /** A linha no fim da lista inicial: as desativadas a um toque (D-050, item 6). */
   voltarParaAsFichinhas: 'Voltar para as fichinhas',
   nenhumaDesativada: 'Nenhuma fichinha desativada',
@@ -49,14 +50,13 @@ export const PALAVRAS = {
     faltaONome: 'Falta o nome',
     naoDeu: 'Não deu para anotar. Tente de novo.',
   },
-  /** "Mudar dados" (D-050, item 8): os mesmos campos do cadastro, e a fichinha desativada/reativada no fim. */
+  /** "Mudar dados" (D-050, item 8): os mesmos campos do cadastro, e "Desativar a fichinha" no fim — só de fichinha ativa. */
   dados: {
     abrir: 'Mudar dados',
     titulo: 'Mudar dados',
     desativar: 'Desativar a fichinha',
     desativarMesmo: 'Desativar mesmo? Ela sai da lista, mas nada é apagado.',
     simDesativar: 'Sim, desativar',
-    reativar: 'Reativar a fichinha',
   },
 } as const
 

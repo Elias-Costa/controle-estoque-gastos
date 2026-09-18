@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { repositorio } from '../dados/instancia.ts'
-import { quitar } from '../dados/operacoes.ts'
+import { quitar, reativarCliente } from '../dados/operacoes.ts'
 import { emReais } from '../dominio/dinheiro.ts'
-import type { Id } from '../dominio/ficha.ts'
+import type { Cliente, Id } from '../dominio/ficha.ts'
 import { podeConsiderarPago } from '../dominio/lancamentos.ts'
 import { Botao, BotaoLink } from './Botao.tsx'
 import { diaCurto, hoje } from './datas.ts'
@@ -30,7 +30,9 @@ import { linkDoWhatsApp } from './whatsapp.ts'
  * que foi desfeito fica escondido** sob "Ver o que foi desfeito (N)" no fim do histórico (item
  * 1), só naquela abertura. "Cobrar no WhatsApp" (E-12, RF-09) fica no cartão do saldo (D-047).
  * "Mudar dados ›" no cabeçalho (item 8) abre os dados da cliente — e é lá que a fichinha se
- * desativa; desativada, a ficha diz isso sob o nome e continua funcionando (item 6). No fim do
+ * desativa. **Desativada, a ficha é inerte** (emenda ao item 6): diz isso sob o nome, mostra o
+ * saldo e o histórico, mas sem cobrar, sem linha tocável, sem "Mudar dados", sem "Anotar o que
+ * já devia" — o rodapé tem só "Reativar a fichinha", um toque, e a ficha relê. No fim do
  * histórico, fora do caminho diário, "Anotar o que já devia" (D-049).
  */
 export function TelaFicha({
@@ -86,6 +88,21 @@ export function TelaFicha({
     }
   }
 
+  // Reativar (D-050, emenda ao item 6): um toque, sem confirmação — é o desfazer de um engano.
+  // Não navega: a ficha relê e volta a ter os botões. Só existe com a ficha desativada.
+  async function reativar(cliente: Cliente): Promise<void> {
+    setQuitando(true)
+    setErro(null)
+    try {
+      await reativarCliente(repositorio, cliente)
+      setReleituras((atual) => atual + 1)
+    } catch {
+      setErro(PALAVRAS.cadastro.naoDeu)
+    } finally {
+      setQuitando(false)
+    }
+  }
+
   if (leitura.estado !== 'lido' || leitura.valor === null) {
     return (
       <main className="tela">
@@ -96,32 +113,44 @@ export function TelaFicha({
   }
 
   const { resumo, linhas, podeQuitar } = leitura.valor
+  // Ficha desativada é inerte (D-050, emenda ao item 6): mostra, mas não oferece nada além de reativar.
+  const desativada = resumo.cliente.desativadoEm !== undefined
   return (
     <main className="tela">
-      <Topo titulo={resumo.cliente.nome} subtitulo={resumo.cliente.apelido} aoVoltar={aoVoltar} acao={{ texto: PALAVRAS.dados.abrir, aoTocar: aoMudarDados }} />
-      {resumo.cliente.desativadoEm !== undefined && <p className="mt-0 mb-3 text-[0.95rem] font-semibold text-suave">{PALAVRAS.fichinhaDesativada}</p>}
-      <CartaoDeSaldo resumo={resumo} cobravel={!podeQuitar} />
+      <Topo titulo={resumo.cliente.nome} subtitulo={resumo.cliente.apelido} aoVoltar={aoVoltar} acao={desativada ? undefined : { texto: PALAVRAS.dados.abrir, aoTocar: aoMudarDados }} />
+      {desativada && <p className="mt-0 mb-3 text-[0.95rem] font-semibold text-suave">{PALAVRAS.fichinhaDesativada}</p>}
+      <CartaoDeSaldo resumo={resumo} cobravel={!podeQuitar && !desativada} />
       <h2 className="mt-7 mb-2 text-[1rem] font-semibold text-suave">{PALAVRAS.oQueAconteceu}</h2>
-      <Historico linhas={linhas} aoAbrir={aoAbrirLancamento} />
-      <button type="button" className="mt-3 block min-h-11 border-0 bg-transparent p-0 text-left text-[1rem] text-acento underline" onClick={aoAnotarSaldoAnterior}>
-        {PALAVRAS_DO_SALDO_ANTERIOR.anotarJaDevia}
-      </button>
+      <Historico linhas={linhas} aoAbrir={desativada ? undefined : aoAbrirLancamento} />
+      {!desativada && (
+        <button type="button" className="mt-3 block min-h-11 border-0 bg-transparent p-0 text-left text-[1rem] text-acento underline" onClick={aoAnotarSaldoAnterior}>
+          {PALAVRAS_DO_SALDO_ANTERIOR.anotarJaDevia}
+        </button>
+      )}
       {erro !== null && <p className="mt-4 mb-0 font-semibold text-atraso">{erro}</p>}
       <div className="rodape-acao">
-        {podeQuitar ? (
-          <Botao tipo="principal" aoTocar={() => void considerarPago()} desabilitado={quitando}>
-            {PALAVRAS_DO_RECEBIMENTO.considerarPago}
+        {desativada ? (
+          <Botao tipo="principal" aoTocar={() => void reativar(resumo.cliente)} desabilitado={quitando}>
+            {PALAVRAS.reativar}
           </Botao>
         ) : (
-          resumo.proxima !== null && (
-            <Botao tipo="principal" aoTocar={aoReceber}>
-              {PALAVRAS_DO_RECEBIMENTO.abater}
+          <>
+            {podeQuitar ? (
+              <Botao tipo="principal" aoTocar={() => void considerarPago()} desabilitado={quitando}>
+                {PALAVRAS_DO_RECEBIMENTO.considerarPago}
+              </Botao>
+            ) : (
+              resumo.proxima !== null && (
+                <Botao tipo="principal" aoTocar={aoReceber}>
+                  {PALAVRAS_DO_RECEBIMENTO.abater}
+                </Botao>
+              )
+            )}
+            <Botao tipo="secundario" aoTocar={aoVender}>
+              {PALAVRAS_DA_VENDA.venderFiado}
             </Botao>
-          )
+          </>
         )}
-        <Botao tipo="secundario" aoTocar={aoVender}>
-          {PALAVRAS_DA_VENDA.venderFiado}
-        </Botao>
       </div>
     </main>
   )
@@ -176,7 +205,7 @@ function CartaoDeSaldo({ resumo, cobravel }: { resumo: ResumoDaFicha; cobravel: 
  * desfeito — o alvo riscado e o seu "Desfez" — começa escondido (D-050, item 1): a linha de
  * texto no fim, "Ver o que foi desfeito (N)", mostra tudo naquela abertura; nada é guardado.
  */
-function Historico({ linhas, aoAbrir }: { linhas: LinhaDaFicha[]; aoAbrir: (lancamentoId: Id) => void }) {
+function Historico({ linhas, aoAbrir }: { linhas: LinhaDaFicha[]; aoAbrir: ((lancamentoId: Id) => void) | undefined }) {
   const [mostrandoDesfeitas, setMostrandoDesfeitas] = useState(false)
   if (linhas.length === 0) return <p className="m-0 text-suave">{PALAVRAS.nadaAnotado}</p>
   const { aVista, quantas } = separarDesfeitas(linhas)
@@ -192,7 +221,8 @@ function Historico({ linhas, aoAbrir }: { linhas: LinhaDaFicha[]; aoAbrir: (lanc
   )
 }
 
-function Linhas({ linhas, aoAbrir }: { linhas: LinhaDaFicha[]; aoAbrir: (lancamentoId: Id) => void }) {
+/** As linhas em si. Sem `aoAbrir` (ficha desativada), nenhuma é botão — nada de corrigir ou desfazer numa ficha inerte. */
+function Linhas({ linhas, aoAbrir }: { linhas: LinhaDaFicha[]; aoAbrir: ((lancamentoId: Id) => void) | undefined }) {
   return (
     <ul className="m-0 list-none p-0">
       {linhas.map((linha) => {
@@ -210,7 +240,7 @@ function Linhas({ linhas, aoAbrir }: { linhas: LinhaDaFicha[]; aoAbrir: (lancame
         const lancamentoId = linha.lancamentoId
         return (
           <li key={linha.chave}>
-            {lancamentoId === undefined ? (
+            {lancamentoId === undefined || aoAbrir === undefined ? (
               <div className={classes}>{conteudo}</div>
             ) : (
               <button type="button" className={`${classes} border-x-0 border-t-0 bg-transparent px-0 text-left text-tinta`} onClick={() => aoAbrir(lancamentoId)}>

@@ -24,8 +24,9 @@ import { TelaVendido } from './TelaVendido.tsx'
  * devedores (E-12, D-047), para o "‹" devolver ela ao mesmo lugar. O login (E-13, D-048) é uma
  * tela como as outras, aberta pela linha "Entrar ›" da inicial — nunca a primeira tela. O saldo
  * anterior (E-14, D-049) tem duas portas — a linha no fim da ficha e a anotação (correção).
- * "Mudar dados" (E-16, D-050) abre do cabeçalho da ficha; "Pronto" e reativar voltam à ficha,
- * desativar volta ao início — a ficha sumiu da lista, e é a lista que mostra isso.
+ * "Mudar dados" (E-16, D-050) abre do cabeçalho de uma ficha ativa; "Pronto" volta à ficha,
+ * desativar volta ao início — a ficha sumiu da lista, e é a lista que mostra isso. Reativar
+ * é na própria ficha, sem navegar.
  */
 type Rota =
   | { readonly tela: 'inicio' }
