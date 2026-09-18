@@ -45,6 +45,8 @@ export type ClienteNaNuvem = {
   readonly telefone: string | null
   readonly apelido: string | null
   readonly observacao: string | null
+  /** A marca de fichinha desativada, um `Dia` (migration 0003, D-050 item 6); `null` é ativa. */
+  readonly desativado_em: Dia | null
   /** Relógio do aparelho, ISO UTC (D-042, item 1). */
   readonly atualizado_em: string
 }
@@ -144,6 +146,7 @@ export function clienteParaNuvem(cliente: ClienteLocal): ClienteNaNuvem {
     telefone: cliente.telefone ?? null,
     apelido: cliente.apelido ?? null,
     observacao: cliente.observacao ?? null,
+    desativado_em: cliente.desativadoEm ?? null,
     atualizado_em: cliente.atualizadoEm,
   }
 }
@@ -155,12 +158,15 @@ export function clienteDaNuvem(linha: unknown): ClienteLocal {
   const telefone = textoOuNulo('cliente.telefone', campos['telefone'])
   const apelido = textoOuNulo('cliente.apelido', campos['apelido'])
   const observacao = textoOuNulo('cliente.observacao', campos['observacao'])
+  // Linha anterior à migration 0003 vem sem a chave: é ativa, como `null`.
+  const desativadoEm = textoOuNulo('cliente.desativado_em', campos['desativado_em'])
   return {
     id: texto('cliente.id', campos['id']),
     nome: texto('cliente.nome', campos['nome']),
     ...(telefone === undefined ? {} : { telefone }),
     ...(apelido === undefined ? {} : { apelido }),
     ...(observacao === undefined ? {} : { observacao }),
+    ...(desativadoEm === undefined ? {} : { desativadoEm }),
     atualizadoEm: normalizarCarimbo('cliente.atualizado_em', campos['atualizado_em']),
   }
 }

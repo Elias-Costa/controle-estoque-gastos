@@ -3,16 +3,19 @@ import { IDBFactory, IDBKeyRange } from 'fake-indexeddb'
 import { BancoLocal } from '../src/dados/banco.ts'
 import { FORMATO_UUIDV7 } from '../src/dados/identidade.ts'
 import {
+  alterarCliente,
   cadastrarCliente,
   corrigirLancamento,
   corrigirSaldoAnterior,
   corrigirVenda,
+  desativarCliente,
   estornarLancamento,
   lancarSaldoAnterior,
   lancarVendaAVista,
   lancarVendaFiado,
   moverParaOutraCliente,
   quitar,
+  reativarCliente,
   receber,
   renegociar,
 } from '../src/dados/operacoes.ts'
@@ -311,6 +314,35 @@ describe('correções: a janela de D-013 entra como argumento; a fila não ganha
     expect(motivo(await moverParaOutraCliente(repositorio, { lancamentoId: fiado.id, deClienteId: maria.id, paraClienteId: 'ninguem' }, { sincronizado: false }))).toBe('cliente-nao-encontrado')
     expect(motivo(await moverParaOutraCliente(repositorio, { lancamentoId: fiado.id, deClienteId: maria.id, paraClienteId: cliente.id }, { sincronizado: true }))).toBe('ja-sincronizado')
     expect(saldo(await repositorio.lerFicha(maria.id))).toBe(10000n)
+  })
+})
+
+describe('os dados da cliente mudam pela mesma linha e pela mesma fila (D-050, itens 6 e 8)', () => {
+  test('alterar: mesmo id, nome conferido, a marca de desativada fica; desativar e reativar são a marca indo e vindo', async () => {
+    const { banco, repositorio } = preparar()
+    const cliente = await vera(repositorio)
+
+    const alterada = ok(await alterarCliente(repositorio, cliente, { nome: ' Vera Lúcia ', telefone: '(11) 9 1234-5678' }))
+    expect(alterada).toEqual({ id: cliente.id, nome: 'Vera Lúcia', telefone: '(11) 9 1234-5678' })
+    expect(motivo(await alterarCliente(repositorio, cliente, { nome: '  ' }))).toBe('nome-obrigatorio')
+
+    const desativada = await desativarCliente(repositorio, alterada, '2026-09-18')
+    expect(desativada.desativadoEm).toBe('2026-09-18')
+    expect((await repositorio.lerCliente(cliente.id))?.desativadoEm).toBe('2026-09-18')
+    // Editar uma fichinha desativada não a reativa por acidente.
+    expect(ok(await alterarCliente(repositorio, desativada, { nome: 'Vera' })).desativadoEm).toBe('2026-09-18')
+
+    const reativada = await reativarCliente(repositorio, desativada)
+    expect('desativadoEm' in reativada).toBe(false)
+    expect(await repositorio.lerCliente(cliente.id)).toMatchObject({ id: cliente.id, nome: 'Vera Lúcia' })
+    expect((await repositorio.lerCliente(cliente.id))?.desativadoEm).toBeUndefined()
+
+    // Cinco gravações do mesmo id (cadastro, alterar, desativar, alterar, reativar): uma linha, um
+    // item na fila com a versão contada — a recusa não grava nem conta (RI-02).
+    expect(await banco.clientes.count()).toBe(1)
+    const fila = (await banco.fila.toArray()).filter((item) => item.registroId === cliente.id)
+    expect(fila).toHaveLength(1)
+    expect(fila[0]?.versao).toBe(4)
   })
 })
 

@@ -35,13 +35,18 @@ export type Id = string
  */
 export type Dia = string
 
-/** A cliente. Só o nome é obrigatório (RF-01); telefone fica como ela digitou. */
+/**
+ * A cliente. Só o nome é obrigatório (RF-01); telefone fica como ela digitou. `desativadoEm` é
+ * a marca de "fichinha desativada" (D-050, item 6): cliente não se apaga (D-041), some das
+ * listas — e volta quando a marca sai.
+ */
 export type Cliente = {
   readonly id: Id
   readonly nome: string
   readonly telefone?: string
   readonly apelido?: string
   readonly observacao?: string
+  readonly desativadoEm?: Dia
 }
 
 /** Um item da venda: descrição livre e preço, e só isso em F1 (D-011). Sem produto, sem quantidade. */

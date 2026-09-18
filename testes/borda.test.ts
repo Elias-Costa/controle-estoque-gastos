@@ -47,6 +47,7 @@ describe('cliente', () => {
       telefone: '(11) 9 8765-4321',
       apelido: null,
       observacao: null,
+      desativado_em: null,
       atualizado_em: '2026-09-12T10:05:00.000Z',
     })
   })
@@ -60,6 +61,17 @@ describe('cliente', () => {
   test('ida e volta é identidade para os campos opcionais presentes', () => {
     const completo: ClienteLocal = { ...cliente, apelido: 'do salão', observacao: 'paga no dia 10' }
     expect(clienteDaNuvem(clienteParaNuvem(completo))).toEqual(completo)
+  })
+
+  test('a marca de desativada vai como `date`, volta como `Dia`, e a linha sem a chave (antes da 0003) é ativa (D-050)', () => {
+    const desativado: ClienteLocal = { ...cliente, desativadoEm: '2026-09-18' }
+    expect(clienteParaNuvem(desativado).desativado_em).toBe('2026-09-18')
+    expect(clienteDaNuvem(clienteParaNuvem(desativado))).toEqual(desativado)
+    expect(clienteDaNuvem(clienteParaNuvem(desativado)).desativadoEm).toBe('2026-09-18')
+
+    const { desativado_em: _, ...semAChave } = clienteParaNuvem(cliente)
+    expect(clienteDaNuvem(semAChave)).toEqual(cliente)
+    expect(() => clienteDaNuvem({ ...clienteParaNuvem(cliente), desativado_em: 7 })).toThrow(/cliente\.desativado_em/)
   })
 })
 

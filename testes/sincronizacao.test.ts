@@ -450,7 +450,7 @@ describe('falha retentável: rede e chave estrangeira', () => {
     expect(esperas.at(-1)).toBe(ESPERA_INICIAL_MS)
 
     // O outro aparelho subiu o cliente; o próximo ciclo o baixa e o recebimento passa.
-    nuvem.clientes.set('c-do-outro', { id: 'c-do-outro', nome: 'Do outro', telefone: null, apelido: null, observacao: null, atualizado_em: '2026-09-12T09:00:00.000Z', recebido_em: '2026-09-12T12:00:30.000Z' })
+    nuvem.clientes.set('c-do-outro', { id: 'c-do-outro', nome: 'Do outro', telefone: null, apelido: null, observacao: null, desativado_em: null, atualizado_em: '2026-09-12T09:00:00.000Z', recebido_em: '2026-09-12T12:00:30.000Z' })
     await sinc.sincronizar()
     expect(await banco.fila.count()).toBe(0)
     expect(nuvem.lancamentos.has('r-sem-pai')).toBe(true)
@@ -543,7 +543,7 @@ describe('baixar (D-010): lançamento é união, cadastro é último-que-escreve
     const { banco, repositorio, sinc } = preparar({ nuvem })
     const cliente = await vera(repositorio) // atualizadoEm 10:00:00
     // O computador mexeu depois (10:05) e já subiu.
-    nuvem.clientes.set(cliente.id, { id: cliente.id, nome: 'Vera Lúcia', telefone: '(11) 9 0000-0000', apelido: null, observacao: null, atualizado_em: '2026-09-12T10:05:00.000Z', recebido_em: '2026-09-12T12:00:00.000Z' })
+    nuvem.clientes.set(cliente.id, { id: cliente.id, nome: 'Vera Lúcia', telefone: '(11) 9 0000-0000', apelido: null, observacao: null, desativado_em: null, atualizado_em: '2026-09-12T10:05:00.000Z', recebido_em: '2026-09-12T12:00:00.000Z' })
     await sinc.sincronizar()
     // O envio da versão de 10:00 foi descartado pela nuvem (sem erro); o download trouxe a de 10:05.
     expect(await banco.clientes.get(cliente.id)).toEqual({ id: cliente.id, nome: 'Vera Lúcia', telefone: '(11) 9 0000-0000', atualizadoEm: '2026-09-12T10:05:00.000Z' })

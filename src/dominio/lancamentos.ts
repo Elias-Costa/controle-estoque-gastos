@@ -72,6 +72,30 @@ export function novoCliente(entrada: EntradaCliente): Resultado<Cliente> {
   return aceito({ ...entrada, nome })
 }
 
+/**
+ * Mudar os dados de uma cliente (RF-01, D-050 item 8): a mesma regra do cadastro sobre o mesmo
+ * id. A marca de desativada, se houver, fica — editar não reativa.
+ */
+export function clienteAlterado(cliente: Cliente, mudancas: Omit<EntradaCliente, 'id'>): Resultado<Cliente> {
+  const resultado = novoCliente({ ...mudancas, id: cliente.id })
+  if (!resultado.ok) return resultado
+  return aceito(cliente.desativadoEm === undefined ? resultado.valor : { ...resultado.valor, desativadoEm: cliente.desativadoEm })
+}
+
+/**
+ * Desativar a fichinha (D-050, item 6): marca com a data do dia, sem olhar o saldo — decisão do
+ * mantenedor, sabendo que esconde dívida da lista até reativar. Nada é apagado (RI-03, D-041).
+ */
+export function desativar(cliente: Cliente, dia: Dia): Cliente {
+  return { ...cliente, desativadoEm: dia }
+}
+
+/** Reativar a fichinha: a marca sai, o resto fica como estava. */
+export function reativar(cliente: Cliente): Cliente {
+  const { desativadoEm: _marca, ...ativo } = cliente
+  return ativo
+}
+
 export type EntradaVendaFiado = {
   readonly id: Id
   readonly clienteId: Id

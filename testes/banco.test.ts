@@ -130,4 +130,21 @@ describe('esquema local (D-020, D-040)', () => {
     expect((await atual.sincronizacao.get('clientes'))?.valor).toBe('2026-09-12T00:00:00.000Z')
     atual.close()
   })
+
+  test('a marca de fichinha desativada (D-050) é campo sem índice: entra na v2 publicada sem versão nova, e sai com o `put` que a tira', async () => {
+    // O esquema declara só as chaves (D-040); um campo a mais na linha não é migração. A prova
+    // é contra o fake, não o WebKit (D-033) — o que ela garante é que `banco.ts` não mudou de versão.
+    const banco = abrir()
+    await banco.open()
+    expect(banco.verno).toBe(2)
+    expect(ESQUEMAS_PUBLICADOS[2]).toEqual(ESQUEMA_V2)
+
+    await banco.clientes.put({ id: 'c1', nome: 'Vera', desativadoEm: '2026-09-18', atualizadoEm: '2026-09-18T10:00:00.000Z' })
+    expect((await banco.clientes.get('c1'))?.desativadoEm).toBe('2026-09-18')
+
+    // Reativar é regravar sem a marca: `put` substitui a linha inteira, nada sobra do campo.
+    await banco.clientes.put({ id: 'c1', nome: 'Vera', atualizadoEm: '2026-09-18T10:01:00.000Z' })
+    expect(await banco.clientes.get('c1')).toEqual({ id: 'c1', nome: 'Vera', atualizadoEm: '2026-09-18T10:01:00.000Z' })
+    banco.close()
+  })
 })

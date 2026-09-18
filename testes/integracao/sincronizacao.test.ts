@@ -122,6 +122,23 @@ describe.skipIf(!COM_USUARIO)('o transporte real: supabase-js → PostgREST → 
     expect(ids.indexOf(venda.id)).toBeLessThan(ids.indexOf(recebimento.id))
   })
 
+  test('a marca de fichinha desativada (0003, D-050) sobe como `date`, desce como `Dia`, e sai quando reativa', async () => {
+    // Escrito em E-16 sem rodar contra o projeto dela (há dado real; ARCHITECTURE §11): roda no segundo projeto.
+    const desativado: ClienteLocal = { ...cliente, desativadoEm: '2026-09-18', atualizadoEm: '2026-09-12T10:06:00.000Z' }
+    esperarOk(await nuvem.enviarCliente(clienteParaNuvem(desativado)))
+    let linha = esperarOk(await nuvem.buscarClientes(haPouco())).find((l) => l['id'] === clienteId)
+    if (linha === undefined) throw new Error('o cliente desativado não desceu')
+    expect(linha['desativado_em']).toBe('2026-09-18')
+    expect(clienteDaNuvem(linha).desativadoEm).toBe('2026-09-18')
+
+    const reativado: ClienteLocal = { ...cliente, atualizadoEm: '2026-09-12T10:07:00.000Z' }
+    esperarOk(await nuvem.enviarCliente(clienteParaNuvem(reativado)))
+    linha = esperarOk(await nuvem.buscarClientes(haPouco())).find((l) => l['id'] === clienteId)
+    if (linha === undefined) throw new Error('o cliente reativado não desceu')
+    expect(linha['desativado_em']).toBeNull()
+    expect(clienteDaNuvem(linha)).toEqual(reativado)
+  })
+
   test('RT-08 no transporte real: reenviar idêntico passa; reenviar diferente é recusa 23000 — e a forma do erro fica registrada', async () => {
     esperarOk(await nuvem.enviarLancamento(lancamentoParaNuvem(recebimento)))
     const diferente = esperarFalha(await nuvem.enviarLancamento(lancamentoParaNuvem({ ...recebimento, valor: 4000n })))

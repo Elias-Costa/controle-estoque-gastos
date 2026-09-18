@@ -42,14 +42,17 @@ import {
   type VendaFiado,
 } from '../dominio/ficha.ts'
 import {
+  clienteAlterado,
   considerarPago,
   corrigir,
   corrigirCliente,
+  desativar,
   estornar,
   novaVendaAVista,
   novaVendaFiado,
   novoCliente,
   novoSaldoAnterior,
+  reativar,
   registrarRecebimento,
   renegociarParcelas,
   type Correcao,
@@ -96,6 +99,30 @@ export async function cadastrarCliente(repositorio: Repositorio, entrada: Omit<E
   const resultado = novoCliente({ ...entrada, id: uuidv7() })
   if (resultado.ok) await repositorio.gravarCliente(resultado.valor)
   return resultado
+}
+
+/**
+ * Mudar os dados da cliente (RF-01, D-050 item 8): mesmo id, mesma validação, mesma
+ * `gravarCliente` — e o mesmo último-que-escreve da fila (D-042) resolve dois aparelhos.
+ */
+export async function alterarCliente(repositorio: Repositorio, cliente: Cliente, mudancas: Omit<EntradaCliente, 'id'>): Promise<Resultado<Cliente>> {
+  const resultado = clienteAlterado(cliente, mudancas)
+  if (resultado.ok) await repositorio.gravarCliente(resultado.valor)
+  return resultado
+}
+
+/** Desativar a fichinha (D-050, item 6): a marca é uma edição de cliente, pela mesma fila. */
+export async function desativarCliente(repositorio: Repositorio, cliente: Cliente, dia: Dia): Promise<Cliente> {
+  const desativado = desativar(cliente, dia)
+  await repositorio.gravarCliente(desativado)
+  return desativado
+}
+
+/** Reativar a fichinha: a marca sai, pela mesma fila. */
+export async function reativarCliente(repositorio: Repositorio, cliente: Cliente): Promise<Cliente> {
+  const ativo = reativar(cliente)
+  await repositorio.gravarCliente(ativo)
+  return ativo
 }
 
 /** Venda fiado (RF-03, RF-05): ids da venda e de cada parcela gerados aqui. */
