@@ -140,9 +140,9 @@ function palavrasDe(anotado: Anotado): { desfazer: string; comProblema: string }
   return PALAVRAS_DO_SALDO_ANTERIOR.anotacao
 }
 
-/** "Fiado em", "Pagou na hora em", "Recebi em" ou "Já devia desde" — o subtítulo, antes da data. */
+/** "Fiado em", "Pagou na hora em", "Pagou em" ou "Já devia desde" — o subtítulo, antes da data. */
 function quandoFoi(anotado: Anotado): string {
-  if (anotado.tipo === 'recebimento') return PALAVRAS_DO_RECEBIMENTO.anotacao.recebiEm
+  if (anotado.tipo === 'recebimento') return PALAVRAS_DO_RECEBIMENTO.anotacao.pagouEm
   if (anotado.tipo === 'saldo-anterior') return PALAVRAS_DO_SALDO_ANTERIOR.anotacao.jaDeviaDesde
   return anotado.pagamento === 'fiado' ? PALAVRAS_DA_VENDA.anotacao.fiadoEm : PALAVRAS_DA_VENDA.anotacao.pagouNaHoraEm
 }

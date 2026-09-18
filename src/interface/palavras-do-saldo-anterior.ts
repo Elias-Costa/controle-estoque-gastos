@@ -3,12 +3,13 @@ import type { GuardaDoSaldoAnterior } from './rascunho-do-saldo-anterior.ts'
 
 /**
  * As palavras do saldo anterior fora do cadastro (E-14, RF-07, D-049): a linha da ficha, a
- * tela "O que a X já devia" e a anotação. As do cadastro ("Já me deve", "Desde", "Vence em")
+ * tela "O que X já devia" e a anotação. As do cadastro ("Já me deve", "Desde", "Vence em")
  * continuam em `palavras-da-ficha.ts`, e as duas telas usam as mesmas. Todas são **hipótese
- * até E-15** (`D-049`): qual palavra ela usa é observação, não escolha do agente.
+ * até a próxima observação** (`D-049`; impessoais desde `D-050`, item 2): qual palavra ela usa
+ * é observação, não escolha do agente.
  */
 export const PALAVRAS_DO_SALDO_ANTERIOR = {
-  anotarJaDevia: 'Anotar o que ela já devia',
+  anotarJaDevia: 'Anotar o que já devia',
   quanto: 'Quanto',
   pronto: 'Pronto',
   naoDeu: 'Não deu para anotar. Tente de novo.',
@@ -19,9 +20,9 @@ export const PALAVRAS_DO_SALDO_ANTERIOR = {
   },
 } as const
 
-/** "O que a Rosa já devia" — o título da tela, no molde de "O que a Rosa levou". */
+/** "O que Rosa já devia" — o título da tela, no molde de "O que Rosa levou". */
 export function tituloDoSaldoAnterior(nome: string): string {
-  return `O que a ${nome} já devia`
+  return `O que ${nome} já devia`
 }
 
 /** A frase de cada guarda (RI-07). `sem-valor` não tem frase: é o estado inicial, e o botão indisponível já diz. */

@@ -2,7 +2,17 @@ import { describe, expect, test } from 'bun:test'
 import { somar } from '../src/dominio/dinheiro.ts'
 import type { Cliente, Ficha, Parcela, Resultado, SaldoAnterior, VendaFiado } from '../src/dominio/ficha.ts'
 import { estornar, novaVendaAVista, novaVendaFiado, novoSaldoAnterior, registrarRecebimento } from '../src/dominio/lancamentos.ts'
-import { devedoras, filtrarEOrdenar, linhasDaFicha, resumir, type FiltroDeDevedoras, type OrdemDeDevedoras } from '../src/interface/leitura-da-ficha.ts'
+import {
+  ativas,
+  desativadas,
+  devedoras,
+  filtrarEOrdenar,
+  linhasDaFicha,
+  resumir,
+  separarDesfeitas,
+  type FiltroDeDevedoras,
+  type OrdemDeDevedoras,
+} from '../src/interface/leitura-da-ficha.ts'
 import { avisoDeAtraso, descricaoDosItens, linhaDaProxima, quantoDeve } from '../src/interface/palavras-da-ficha.ts'
 
 /**
@@ -77,7 +87,7 @@ describe('resumir — o que a lista mostra de cada ficha', () => {
     expect(resumo.proxima).toEqual({ restante: 3000n, vencimento: '2026-09-04', vencida: true })
     expect(resumo.diasDeAtraso).toBe(8)
     expect(quantoDeve(resumo.saldo)).toBe('R$ 60,00')
-    expect(avisoDeAtraso(resumo.diasDeAtraso)).toBe('atrasada há 8 dias')
+    expect(avisoDeAtraso(resumo.diasDeAtraso)).toBe('em atraso há 8 dias')
     expect(linhaDaProxima(resumo.proxima, resumo.vazia)).toBe('R$ 30,00 venceu em 04/09')
   })
 
@@ -174,6 +184,16 @@ describe('devedoras — a lista de RF-10: só quem deve, pelo filtro e na ordem 
     devedoras(resumos, 'todas', 'valor')
     expect(resumos.map((r) => r.cliente.nome)).toEqual(antes)
   })
+
+  test('fichinha desativada fica fora da lista de devedores mesmo devendo — custo aceito em D-050, item 6', () => {
+    const anaDesativada = resumir({ ...cliente('c9', 'Ana'), desativadoEm: '2026-09-18' }, [anterior('c9', 'a3', '2026-07-13', [parcela('p9', '2026-08-13', 2000n)])], HOJE)
+    const comDesativada = [...resumos.filter((r) => r.cliente.id !== 'c9'), anaDesativada]
+    expect(anaDesativada.saldo).toBe(2000n)
+    expect(devedoras(comDesativada, 'todas', 'nome').map((r) => r.cliente.nome)).toEqual(['Cláudia', 'Dona Rosa', 'Marlene', 'Zélia'])
+    expect(ativas(comDesativada).map((r) => r.cliente.nome)).toEqual(['Dona Rosa', 'Cláudia', 'Marlene', 'Zélia', 'Ângela'])
+    expect(desativadas(comDesativada).map((r) => r.cliente.nome)).toEqual(['Ana'])
+    expect(desativadas(resumos)).toEqual([])
+  })
 })
 
 describe('linhasDaFicha — o histórico como o protótipo mostra (RF-02)', () => {
@@ -244,6 +264,19 @@ describe('linhasDaFicha — o histórico como o protótipo mostra (RF-02)', () =
       ['Desfez: Já devia', false, undefined],
       ['Já devia', true, undefined],
     ])
+
+    // O que fica sob "Ver o que foi desfeito (2)" (D-050, item 1): os dois alvos e os dois "Desfez";
+    // o resto continua à vista, na mesma ordem, e nenhum valor mudou — só filtra.
+    const { aVista, quantas } = separarDesfeitas(linhas)
+    expect(quantas).toBe(2)
+    expect(aVista.map((l) => l.descricao)).toEqual(['Parcela', 'Parcela', 'Batom', 'Pagou no Pix', 'Já devia'])
+    expect(linhas.filter((l) => l.desfeita).map((l) => l.descricao)).toEqual([
+      'Desfez: Pagou em dinheiro',
+      'Desfez: Perfume · pagou na hora',
+      'Perfume · pagou na hora',
+      'Pagou em dinheiro',
+    ])
+    expect(separarDesfeitas(linhasDaFicha(ficha, HOJE))).toEqual({ aVista: linhasDaFicha(ficha, HOJE), quantas: 0 })
   })
 
   test('descrição dos itens como ela escreveu: vírgulas e um "e" no fim', () => {

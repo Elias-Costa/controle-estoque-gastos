@@ -171,10 +171,10 @@ describe('a data do fato (RN-09): editável para o passado, nunca para o futuro,
 describe('de volta ao rascunho — a correção (D-013, D-045)', () => {
   const parcela = (id: string, vencimento: string, valor: bigint): Parcela => ({ id, vencimento, valor })
 
-  test('textoDeCentavos: o que ela teria digitado, sem ponto de milhar', () => {
+  test('textoDeCentavos: como a máscara mostra, com ponto de milhar (D-051)', () => {
     expect(textoDeCentavos(3990n)).toBe('39,90')
     expect(textoDeCentavos(25n)).toBe('0,25')
-    expect(textoDeCentavos(125000n)).toBe('1250,00')
+    expect(textoDeCentavos(125000n)).toBe('1.250,00')
     expect(textoDeCentavos(0n)).toBe('0,00')
   })
 
@@ -246,16 +246,16 @@ describe('de volta ao rascunho — a correção (D-013, D-045)', () => {
 
 describe('as palavras da venda (RI-07) — as do protótipo e as hipóteses de D-045', () => {
   test('confirmação: fiado diz o saldo novo; à vista diz o que pagou e o que ainda deve, ou que não deve nada', () => {
-    expect(linhasDaConfirmacao('Rosa', true, 6490n, 6490n)).toEqual(['Anotado na fichinha da Rosa', 'Agora ela deve R$ 64,90'])
-    expect(linhasDaConfirmacao('Rosa', false, 6490n, 0n)).toEqual(['Rosa levou e pagou R$ 64,90', 'Ela não deve nada'])
+    expect(linhasDaConfirmacao('Rosa', true, 6490n, 6490n)).toEqual(['Anotado na fichinha de Rosa', 'Agora deve R$ 64,90'])
+    expect(linhasDaConfirmacao('Rosa', false, 6490n, 0n)).toEqual(['Rosa levou e pagou R$ 64,90', 'Não deve nada'])
     expect(linhasDaConfirmacao('Rosa', false, 6490n, 4500n)).toEqual(['Rosa levou e pagou R$ 64,90', 'Ainda deve R$ 45,00'])
-    expect(linhasDaConfirmacao('Rosa', true, 100n, 0n)[1]).toBe('Ela não deve nada')
+    expect(linhasDaConfirmacao('Rosa', true, 100n, 0n)[1]).toBe('Não deve nada')
   })
 
   test('a linha da parcela e as recusas em palavras dela, nunca o código', () => {
     expect(quandoDaParcela(1, '2026-10-12')).toBe('1ª em 12/10')
     expect(fraseDaRecusa('ja-sincronizado')).toBe('Já foi enviada. Desfaça e anote de novo.')
-    expect(fraseDaRecusa('ficha-ficaria-negativa')).toBe('Ela já pagou parte. Desfaça o recebimento antes.')
+    expect(fraseDaRecusa('ficha-ficaria-negativa')).toBe('Já pagou parte. Desfaça o pagamento antes.')
     expect(fraseDaRecusa('sem-itens')).not.toMatch(/sem-itens/)
   })
 })

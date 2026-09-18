@@ -69,6 +69,16 @@ export function semAcento(texto: string): string {
   return texto.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
 }
 
+/** As fichinhas em uso: sem a marca de desativada (D-050, item 6). É o que toda lista mostra por padrão. */
+export function ativas(resumos: readonly ResumoDaFicha[]): ResumoDaFicha[] {
+  return resumos.filter((resumo) => resumo.cliente.desativadoEm === undefined)
+}
+
+/** As fichinhas desativadas: só a tela inicial as lista, sob "Ver as fichinhas desativadas (N)". */
+export function desativadas(resumos: readonly ResumoDaFicha[]): ResumoDaFicha[] {
+  return resumos.filter((resumo) => resumo.cliente.desativadoEm !== undefined)
+}
+
 /** A lista como ela vê: filtrada pela busca (nome ou apelido) e em ordem alfabética (D-044). */
 export function filtrarEOrdenar(resumos: readonly ResumoDaFicha[], busca: string): ResumoDaFicha[] {
   const termo = semAcento(busca.trim())
@@ -107,11 +117,12 @@ function porAtraso(a: ResumoDaFicha, b: ResumoDaFicha): number {
 /**
  * A lista de devedores (RF-10, E-12, D-047): só quem deve (saldo maior que zero), pelo filtro e
  * na ordem escolhidos. Nada aqui é guardado — é a mesma `resumir` da lista de fichinhas, lida na
- * hora. "Em atraso" é ter parcela vencida; "a vencer" é dever sem nenhuma vencida.
+ * hora. "Em atraso" é ter parcela vencida; "a vencer" é dever sem nenhuma vencida. Fichinha
+ * desativada fica de fora mesmo devendo — custo aceito em D-050, item 6.
  */
 export function devedoras(resumos: readonly ResumoDaFicha[], filtro: FiltroDeDevedoras, ordem: OrdemDeDevedoras): ResumoDaFicha[] {
   const comparar = ordem === 'atraso' ? porAtraso : ordem === 'valor' ? porValor : porNome
-  return resumos
+  return ativas(resumos)
     .filter((resumo) => resumo.saldo > 0n)
     .filter((resumo) => (filtro === 'todas' ? true : filtro === 'em-atraso' ? resumo.diasDeAtraso > 0 : resumo.diasDeAtraso === 0))
     .sort(comparar)
@@ -121,6 +132,8 @@ export function devedoras(resumos: readonly ResumoDaFicha[], filtro: FiltroDeDev
  * Uma linha do histórico da ficha. `chave` é estável para o React; `valor` é sempre positivo — a
  * descrição diz o sentido. `lancamentoId` só existe na linha que **abre a anotação** (E-10,
  * D-045; E-11, D-046; E-14, D-049): a venda, o recebimento ou o saldo anterior ainda não desfeito.
+ * `estornado` é o alvo riscado; `desfeita` é o que fica escondido sob "Ver o que foi desfeito"
+ * (D-050, item 1) — o alvo **e** a linha "Desfez" dele.
  */
 export type LinhaDaFicha = {
   readonly chave: string
@@ -129,7 +142,20 @@ export type LinhaDaFicha = {
   readonly valor: Centavos
   readonly tipo: 'vencida' | 'a-vencer' | 'evento' | 'pagamento'
   readonly estornado: boolean
+  readonly desfeita: boolean
   readonly lancamentoId?: Id
+}
+
+/**
+ * O histórico como a ficha abre (D-050, item 1): as linhas à vista e, separadas, as desfeitas —
+ * que só aparecem depois do toque. `quantas` conta os alvos desfeitos, o N da linha de texto.
+ * Só filtra: nada aqui soma, e o saldo continua vindo de `resumir` (RN-01).
+ */
+export function separarDesfeitas(linhas: readonly LinhaDaFicha[]): { readonly aVista: LinhaDaFicha[]; readonly quantas: number } {
+  return {
+    aVista: linhas.filter((linha) => !linha.desfeita),
+    quantas: linhas.filter((linha) => linha.estornado).length,
+  }
 }
 
 /**
@@ -155,6 +181,7 @@ export function linhasDaFicha(ficha: Ficha, hoje: Dia): LinhaDaFicha[] {
       valor: parcela.restante,
       tipo: situacaoDaParcela(parcela, hoje) === 'vencida' ? 'vencida' : 'a-vencer',
       estornado: false,
+      desfeita: false,
     }))
 
   const deEventos: LinhaDaFicha[] = historico(ficha).map(({ lancamento, valor, estornado }) => ({
@@ -167,6 +194,7 @@ export function linhasDaFicha(ficha: Ficha, hoje: Dia): LinhaDaFicha[] {
     valor,
     tipo: lancamento.tipo === 'recebimento' || lancamento.tipo === 'desconto-quitacao' ? 'pagamento' : 'evento',
     estornado,
+    desfeita: estornado || lancamento.tipo === 'estorno',
     ...((lancamento.tipo === 'venda' || lancamento.tipo === 'recebimento' || lancamento.tipo === 'saldo-anterior') &&
       !estornado && { lancamentoId: lancamento.id }),
   }))

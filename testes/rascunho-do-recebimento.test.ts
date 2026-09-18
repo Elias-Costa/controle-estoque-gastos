@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import type { Ficha, Resultado } from '../src/dominio/ficha.ts'
 import { novoSaldoAnterior, registrarRecebimento } from '../src/dominio/lancamentos.ts'
 import { diaDoQuando, quandoDe } from '../src/interface/datas.ts'
-import { botaoRecebi, fraseDaGuardaDoRecebimento, fraseDoTroco, linhasDoRecebido, tituloDoRecebimento } from '../src/interface/palavras-do-recebimento.ts'
+import { fraseDaGuardaDoRecebimento, fraseDoTroco, linhasDoRecebido, PALAVRAS_DO_RECEBIMENTO, tituloDoRecebimento } from '../src/interface/palavras-do-recebimento.ts'
 import { guardaDaData } from '../src/interface/rascunho-da-venda.ts'
 import {
   conferirRecebimento,
@@ -109,13 +109,13 @@ describe('"Quando foi" (extraído da venda em E-11)', () => {
   })
 })
 
-describe('as palavras do recebimento (RI-07, protótipo de 2026-09-08)', () => {
-  test('o botão da ficha, o título, o troco e a confirmação', () => {
-    expect(botaoRecebi(3000n)).toBe('Recebi R$ 30,00')
-    expect(tituloDoRecebimento('Dona Rosa')).toBe('Recebi da Dona Rosa')
+describe('as palavras do recebimento (RI-07, protótipo de 2026-09-08, o verbo dela desde a visita de E-15 — D-050)', () => {
+  test('o botão da ficha é "Abater valor", literal, sem número; o título, o troco e a confirmação no impessoal', () => {
+    expect(PALAVRAS_DO_RECEBIMENTO.abater).toBe('Abater valor')
+    expect(tituloDoRecebimento('Dona Rosa')).toBe('Abater na fichinha de Dona Rosa')
     expect(fraseDoTroco(300n)).toBe('Troco de R$ 3,00')
-    expect(linhasDoRecebido('Rosa', 3000n, 3000n)).toEqual(['Anotado: R$ 30,00 da Rosa', 'Ainda deve R$ 30,00'])
-    expect(linhasDoRecebido('Rosa', 4700n, 0n)).toEqual(['Anotado: R$ 47,00 da Rosa', 'Ela não deve mais nada'])
+    expect(linhasDoRecebido('Rosa', 3000n, 3000n)).toEqual(['Anotado: R$ 30,00 de Rosa', 'Ainda deve R$ 30,00'])
+    expect(linhasDoRecebido('Rosa', 4700n, 0n)).toEqual(['Anotado: R$ 47,00 de Rosa', 'Não deve mais nada'])
   })
 
   test('só as guardas de data viram frase: o campo e o botão indisponível já dizem o resto', () => {

@@ -18,15 +18,17 @@ import { Topo } from './Topo.tsx'
 import { useLeitura } from './useLeitura.ts'
 
 /**
- * A tela de recebimento (E-11, RF-06): "Recebi da Rosa". A operação mais frequente e o alvo
- * mais duro (RNF-02: até 4 toques, menos de 20 s). O caminho é o do protótipo validado em
- * 2026-09-08 (RT-14 em 14 s e 3 toques): a ficha → "Recebi R$ X" → "Confirmar" — o valor já
- * vem preenchido com o que falta da próxima parcela (D-006) e o abatimento é derivado, sem
- * perguntar em qual parcela (RI-08). O que E-11 acrescentou fica fora desse caminho (D-046):
- * o troco enquanto ela digita (D-016), "Outro dia", e a observação atrás de "Anotar algo".
+ * A tela de recebimento (E-11, RF-06): "Abater na fichinha de Rosa". A operação mais frequente
+ * e o alvo mais duro (RNF-02: até 4 toques, menos de 20 s). O caminho é o do protótipo validado
+ * em 2026-09-08 (RT-14 em 14 s e 3 toques; passou de novo, sozinha, na visita de E-15): a ficha
+ * → "Abater valor" → "Confirmar" — o valor já vem preenchido com o que falta da próxima parcela
+ * (D-006) e o abatimento é derivado, sem perguntar em qual parcela (RI-08). O que E-11
+ * acrescentou fica fora desse caminho (D-046): o troco enquanto ela digita (D-016), "Outro
+ * dia", e a observação atrás de "Anotar algo".
  *
  * Sem foco automático no valor: o teclado aberto cobriria o "Confirmar" no caminho em que ela
- * não digita nada. Tocar o campo seleciona tudo, para digitar por cima.
+ * não digita nada. Tocar o campo seleciona tudo, para digitar por cima — é assim que "abater
+ * 50 de 500" custa zero toque a mais (D-050, item 4: para parte das clientes não há parcela).
  *
  * Com `corrigirId` é a **correção** (D-013): a mesma tela, preenchida com o recebimento como
  * está; o "Confirmar" regrava a mesma linha e a ficha é a confirmação. O troco é contado

@@ -13,11 +13,9 @@ import { fraseDaGuardaDoSaldoAnterior, PALAVRAS_DO_SALDO_ANTERIOR, tituloDoSaldo
 import { Parcelas } from './Parcelas.tsx'
 import { parcelasCorrigidas, type EdicaoDeParcela } from './rascunho-da-venda.ts'
 import { conferirSaldoAnterior, rascunhoDoSaldoAnterior, type ConferenciaDoSaldoAnterior, type RascunhoDoSaldoAnterior } from './rascunho-do-saldo-anterior.ts'
+import { MAXIMO_DE_VEZES } from './Opcoes.tsx'
 import { Topo } from './Topo.tsx'
 import { useLeitura } from './useLeitura.ts'
-
-/** O máximo de "vezes" da venda; a correção de um saldo com mais parcelas nunca oferece menos do que ele tem. */
-const VEZES_DO_PROTOTIPO = 4
 
 /**
  * O saldo anterior para uma cliente já cadastrada (E-14, RF-07, D-009, D-049): "O que a Rosa
@@ -164,7 +162,7 @@ function Formulario({
         rotuloDoValor={PALAVRAS_DO_SALDO_ANTERIOR.quanto}
         rascunho={completo}
         conferencia={conferencia}
-        maximoDeVezes={Math.max(VEZES_DO_PROTOTIPO, rascunho.vezes)}
+        maximoDeVezes={Math.max(MAXIMO_DE_VEZES, rascunho.vezes)}
         aoMudar={mudar}
       />
 

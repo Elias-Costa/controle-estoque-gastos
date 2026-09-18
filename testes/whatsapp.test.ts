@@ -44,23 +44,21 @@ describe('linkDoWhatsApp — um href, nunca um envio', () => {
   })
 })
 
-describe('mensagemDeCobranca — nome, o que falta, vencimento (RF-09)', () => {
-  test('parcela vencida: "venceu em"; o total só quando é diferente da parcela', () => {
-    expect(mensagemDeCobranca({ nome: 'Cláudia Souza', restante: 3000n, vencimento: '2026-09-04', vencida: true, saldo: 6000n })).toBe(
-      'Oi, Cláudia, tudo bem? Passando para lembrar da parcela de R$ 30,00 da sua fichinha, que venceu em 04/09. No total, a fichinha está em R$ 60,00. Quando puder, me avisa. Obrigada!',
+describe('mensagemDeCobranca — o texto dela, ditado na visita de E-15 (RF-09, D-050 item 7)', () => {
+  test('parcela atrasada: palavra por palavra, "Fulano(a)" é o primeiro nome', () => {
+    expect(mensagemDeCobranca({ nome: 'Cláudia Souza', vencimento: '2026-09-04', vencida: true })).toBe(
+      'Oi, Cláudia, tudo bem? Passando para lembrar da parcela que está atrasada. Quando puder, me mande, por favor. Obrigada!',
     )
   })
 
-  test('parcela a vencer, única: "vence em", sem a linha do total', () => {
-    expect(mensagemDeCobranca({ nome: 'Dona Rosa', restante: 3000n, vencimento: '2026-09-17', vencida: false, saldo: 3000n })).toBe(
-      'Oi, Dona Rosa, tudo bem? Passando para lembrar da parcela de R$ 30,00 da sua fichinha, que vence em 17/09. Quando puder, me avisa. Obrigada!',
+  test('parcela a vencer: só "que está atrasada" vira "que vence em dd/mm"; o resto é dela', () => {
+    expect(mensagemDeCobranca({ nome: 'Dona Rosa', vencimento: '2026-09-17', vencida: false })).toBe(
+      'Oi, Dona Rosa, tudo bem? Passando para lembrar da parcela que vence em 17/09. Quando puder, me mande, por favor. Obrigada!',
     )
   })
 
-  test('o que falta da parcela é o que sobrou, não o valor cheio — centavos exatos, por emReais', () => {
-    const texto = mensagemDeCobranca({ nome: 'Ana', restante: 1250n, vencimento: '2026-09-01', vencida: true, saldo: 1250n })
-    expect(texto).toContain('parcela de R$ 12,50')
-    expect(texto).not.toContain('No total')
+  test('sem valor e sem total: ela não os ditou', () => {
+    expect(mensagemDeCobranca({ nome: 'Ana', vencimento: '2026-09-01', vencida: true })).not.toMatch(/R\$/)
   })
 })
 
@@ -78,7 +76,7 @@ describe('mensagemDeRecibo — o que entrou e o que ficou (RF-09)', () => {
 
 describe('fraseDaListaVazia — vazia em "Em atraso" é boa notícia', () => {
   test('uma frase por filtro', () => {
-    expect(fraseDaListaVazia('em-atraso')).toBe('Ninguém atrasada')
+    expect(fraseDaListaVazia('em-atraso')).toBe('Ninguém em atraso')
     expect(fraseDaListaVazia('a-vencer')).toBe('Ninguém a vencer')
     expect(fraseDaListaVazia('todas')).toBe('Ninguém devendo')
   })

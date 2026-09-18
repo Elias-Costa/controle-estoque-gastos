@@ -9,17 +9,15 @@ import { hoje } from './datas.ts'
 import { PALAVRAS } from './palavras-da-ficha.ts'
 import { fraseDaGuardaDoSaldoAnterior } from './palavras-do-saldo-anterior.ts'
 import { conferirSaldoAnterior, type RascunhoDoSaldoAnterior } from './rascunho-do-saldo-anterior.ts'
+import { MAXIMO_DE_VEZES } from './Opcoes.tsx'
 import { CamposDoSaldoAnterior } from './TelaSaldoAnterior.tsx'
 import { Topo } from './Topo.tsx'
-
-/** O máximo de "vezes" da venda (D-049, item 2). */
-const VEZES_DO_PROTOTIPO = 4
 
 /**
  * Cadastro de cliente (RF-01) com o saldo anterior opcional (RF-07): a fichinha nova.
  *
  * Só o nome é obrigatório; ele já vem preenchido com o que ela digitou na busca — quem toca em
- * "+ É uma cliente nova" acabou de procurar alguém e não achou (regra do protótipo). Os outros
+ * "+ Nova fichinha" acabou de procurar alguém e não achou (regra do protótipo). Os outros
  * campos são o que RF-01 lista; nenhum é exigido. A meta é cadastro em menos de 15 s.
  *
  * "Já me deve" é a migração do papel em uma linha (D-009, D-044, D-049): valor, "desde",
@@ -118,7 +116,7 @@ export function TelaCadastro({
       <Campo rotulo={PALAVRAS.cadastro.apelido} valor={apelido} aoMudar={setApelido} exemplo={PALAVRAS.cadastro.apelidoExemplo} />
       <Campo rotulo={PALAVRAS.cadastro.observacao} valor={observacao} aoMudar={setObservacao} multilinha />
 
-      <CamposDoSaldoAnterior rotuloDoValor={PALAVRAS.cadastro.jaMeDeve} rascunho={rascunho} conferencia={conferencia} maximoDeVezes={VEZES_DO_PROTOTIPO} aoMudar={mudarSaldo} />
+      <CamposDoSaldoAnterior rotuloDoValor={PALAVRAS.cadastro.jaMeDeve} rascunho={rascunho} conferencia={conferencia} maximoDeVezes={MAXIMO_DE_VEZES} aoMudar={mudarSaldo} />
 
       {(frases.length > 0 || erro !== null) && (
         <div className="mt-4">

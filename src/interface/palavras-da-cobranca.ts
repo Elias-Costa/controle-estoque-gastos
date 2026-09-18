@@ -5,16 +5,17 @@ import type { FiltroDeDevedoras, OrdemDeDevedoras } from './leitura-da-ficha.ts'
 
 /**
  * As palavras da lista de devedores e da cobrança (RI-07) — num lugar só, como as outras.
- * Nenhuma passou por ela: **tudo aqui é hipótese até E-15** (D-047). Os dois textos do
- * WhatsApp são proposta do agente, porque ela não tem cobrança escrita (cobra de viva voz);
- * o envio é manual (D-007), então ela ajusta no próprio WhatsApp — e o que ela muda é o que
- * define os modelos de F3 (D-014). Trocar é uma linha, aqui.
+ * As da lista são **hipótese até a próxima observação** (D-047; impessoais desde D-050, item 2:
+ * "Ninguém em atraso", "Maior atraso"). **O texto da cobrança é dela**, ditado na visita de
+ * E-15 (D-050, item 7); o recibo continua sendo proposta do agente (D-047). O envio é manual
+ * (D-007), então ela ajusta no próprio WhatsApp — e o que ela muda é o que define os modelos
+ * de F3 (D-014). Trocar é uma linha, aqui.
  */
 export const PALAVRAS_DA_COBRANCA = {
   quemEstaDevendo: 'Quem está devendo',
   mostrar: 'Mostrar',
   ordem: 'Ordem',
-  ninguemAtrasada: 'Ninguém atrasada',
+  ninguemAtrasada: 'Ninguém em atraso',
   ninguemAVencer: 'Ninguém a vencer',
   ninguemDevendo: 'Ninguém devendo',
   cobrar: 'Cobrar no WhatsApp',
@@ -28,9 +29,9 @@ export const FILTROS: readonly { readonly valor: FiltroDeDevedoras; readonly tex
   { valor: 'todas', texto: 'Todas' },
 ]
 
-/** As pílulas da ordem, na ordem de RF-10; "Mais atrasada" é o padrão. */
+/** As pílulas da ordem, na ordem de RF-10; "Maior atraso" é o padrão. */
 export const ORDENS: readonly { readonly valor: OrdemDeDevedoras; readonly texto: string }[] = [
-  { valor: 'atraso', texto: 'Mais atrasada' },
+  { valor: 'atraso', texto: 'Maior atraso' },
   { valor: 'valor', texto: 'Maior valor' },
   { valor: 'nome', texto: 'Nome' },
 ]
@@ -59,23 +60,15 @@ function comoChamar(nome: string): string {
 }
 
 /**
- * A cobrança (RF-09): nome, o que falta da parcela e o vencimento — "venceu em" ou "vence em",
- * conforme o dia. O total da fichinha só quando é diferente da parcela: repetir o mesmo número
- * duas vezes confunde. Sem chave Pix em F1 (D-047 item 1).
+ * A cobrança (RF-09) é **o texto que ela ditou** na visita de E-15 (D-050, item 7), palavra por
+ * palavra, com "Fulano(a)" no lugar do nome: "Oi, Fulano(a), tudo bem? Passando para lembrar da
+ * parcela que está atrasada. Quando puder, me mande, por favor. Obrigada!". Sem valor, sem
+ * total, sem chave Pix — ela não os ditou. Com parcela ainda por vencer, o botão existe (D-047)
+ * e só o trecho "que está atrasada" vira "que vence em dd/mm": é a única palavra do agente.
  */
-export function mensagemDeCobranca(dados: {
-  readonly nome: string
-  readonly restante: Centavos
-  readonly vencimento: Dia
-  readonly vencida: boolean
-  readonly saldo: Centavos
-}): string {
-  const verbo = dados.vencida ? 'venceu' : 'vence'
-  const total = dados.saldo !== dados.restante ? ` No total, a fichinha está em ${emReais(dados.saldo)}.` : ''
-  return (
-    `Oi, ${comoChamar(dados.nome)}, tudo bem? Passando para lembrar da parcela de ${emReais(dados.restante)} da sua fichinha, ` +
-    `que ${verbo} em ${diaCurto(dados.vencimento)}.${total} Quando puder, me avisa. Obrigada!`
-  )
+export function mensagemDeCobranca(dados: { readonly nome: string; readonly vencimento: Dia; readonly vencida: boolean }): string {
+  const qual = dados.vencida ? 'que está atrasada' : `que vence em ${diaCurto(dados.vencimento)}`
+  return `Oi, ${comoChamar(dados.nome)}, tudo bem? Passando para lembrar da parcela ${qual}. Quando puder, me mande, por favor. Obrigada!`
 }
 
 /** O recibo (RF-09): o que entrou e o que ficou — o mesmo que a confirmação mostra, com o saldo relido (RN-01). */

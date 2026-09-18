@@ -5,9 +5,9 @@ import { emReais, somar, type Centavos } from '../dominio/dinheiro.ts'
 import type { Cliente, Dia, Id, Venda } from '../dominio/ficha.ts'
 import { Botao } from './Botao.tsx'
 import { CLASSES_DE_CAMPO, CLASSES_DE_CAMPO_COMPACTO } from './Campo.tsx'
-import { CampoDeDinheiro, EntradaDeDinheiro, LeituraDoValor } from './CampoDeDinheiro.tsx'
+import { CampoDeDinheiro, EntradaDeDinheiro } from './CampoDeDinheiro.tsx'
 import { diaDoQuando, hoje, quandoDe } from './datas.ts'
-import { Escolha } from './Opcoes.tsx'
+import { Escolha, MAXIMO_DE_VEZES } from './Opcoes.tsx'
 import { PALAVRAS } from './palavras-da-ficha.ts'
 import { fraseDaGuarda, fraseDaRecusa, PALAVRAS_DA_VENDA, tituloDaVenda } from './palavras-da-venda.ts'
 import { Parcelas } from './Parcelas.tsx'
@@ -16,8 +16,6 @@ import { conferir, parcelasCorrigidas, rascunhoDaVenda, type EdicaoDeParcela, ty
 import { Topo } from './Topo.tsx'
 import { useLeitura } from './useLeitura.ts'
 
-/** O máximo de "vezes" do protótipo; a correção de uma venda com mais parcelas nunca oferece menos do que ela tem. */
-const VEZES_DO_PROTOTIPO = 4
 
 /** Um rascunho em branco: dois itens (a tarefa cronometrada tem dois), fiado, uma vez, dinheiro (D-045, item 3). */
 function rascunhoNovo(): Rascunho {
@@ -136,7 +134,8 @@ function Formulario({
     .map((guarda) => fraseDaGuarda(guarda, somaDasParcelas(conferencia.parcelas), conferencia.total))
     .filter((frase): frase is string => frase !== null)
   const podeGravar = conferencia.guardas.length === 0 && !gravando
-  const maximoDeVezes = Math.max(VEZES_DO_PROTOTIPO, rascunho.vezes)
+  // A correção de uma venda com mais parcelas nunca oferece menos do que ela tem.
+  const maximoDeVezes = Math.max(MAXIMO_DE_VEZES, rascunho.vezes)
 
   function mudar(mudanca: Partial<Rascunho>): void {
     setRascunho((atual) => ({ ...atual, ...mudanca }))
@@ -223,8 +222,6 @@ function Formulario({
                 rotuloAcessivel={PALAVRAS_DA_VENDA.precoExemplo}
               />
             </div>
-            {/* A leitura do domínio ao lado do item (D-034): "25" é R$ 0,25, e ela vê antes de confirmar. */}
-            <LeituraDoValor texto={item.precoTexto} className="mt-1 text-right text-[1.125rem]" />
           </li>
         ))}
       </ul>

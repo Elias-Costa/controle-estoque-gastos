@@ -6,29 +6,32 @@ import type { Id } from '../dominio/ficha.ts'
 import { podeConsiderarPago } from '../dominio/lancamentos.ts'
 import { Botao, BotaoLink } from './Botao.tsx'
 import { diaCurto, hoje } from './datas.ts'
-import { linhasDaFicha, resumir, type LinhaDaFicha, type ResumoDaFicha } from './leitura-da-ficha.ts'
+import { linhasDaFicha, resumir, separarDesfeitas, type LinhaDaFicha, type ResumoDaFicha } from './leitura-da-ficha.ts'
 import { mensagemDeCobranca, PALAVRAS_DA_COBRANCA } from './palavras-da-cobranca.ts'
-import { linhaDaProxima, PALAVRAS } from './palavras-da-ficha.ts'
+import { linhaDaProxima, PALAVRAS, verDesfeitas } from './palavras-da-ficha.ts'
 import { fraseDaRecusa, PALAVRAS_DA_VENDA } from './palavras-da-venda.ts'
-import { botaoRecebi, PALAVRAS_DO_RECEBIMENTO } from './palavras-do-recebimento.ts'
+import { PALAVRAS_DO_RECEBIMENTO } from './palavras-do-recebimento.ts'
 import { PALAVRAS_DO_SALDO_ANTERIOR } from './palavras-do-saldo-anterior.ts'
 import { Topo } from './Topo.tsx'
 import { useLeitura } from './useLeitura.ts'
 import { linkDoWhatsApp } from './whatsapp.ts'
 
 /**
- * A ficha (RF-02): a tela que substitui a página do caderno. No topo, sem rolagem, quanto ela
- * deve hoje e qual a próxima parcela — vencida em destaque; abaixo, o histórico em ordem
+ * A ficha (RF-02): a tela que substitui a página do caderno. No topo, sem rolagem, quanto a
+ * pessoa deve hoje e qual a próxima parcela — vencida em destaque; abaixo, o histórico em ordem
  * cronológica inversa. Tudo derivado (RN-01): nenhum número aqui é lido de um campo.
  *
- * Fiel ao protótipo validado em 2026-09-08. No rodapé, "Recebi R$ X" (E-11, principal, com o
- * que falta da próxima parcela — D-006; some quando não há o que receber) sobre "Vender fiado
- * para ela" (E-10, D-044). Quando o que falta é de até R$ 0,10, "Considerar pago" toma o
- * lugar de "Recebi" (D-031, D-046): um toque, e a ficha relê. A linha de uma venda ou de um
- * recebimento (ou de um saldo anterior, E-14) ainda não desfeito é tocável e abre a anotação
- * (D-045) — é por ali que ela corrige ou desfaz. "Cobrar no WhatsApp" (E-12, RF-09) fica no
- * cartão do saldo (D-047). No fim do histórico, fora do caminho diário, a linha "Anotar o que
- * ela já devia" (D-049): a migração do papel para quem já está cadastrada.
+ * Fiel ao protótipo validado em 2026-09-08, com o que ela pediu na visita de E-15 (D-050). No
+ * rodapé, "Abater valor" (E-11, principal; era "Recebi R$ X" — o verbo é dela, item 4; some
+ * quando não há o que receber) sobre "Vender fiado" (E-10, D-044; item 2). Quando o que falta é
+ * de até R$ 0,10, "Considerar pago" toma o lugar do principal (D-031, D-046): um toque, e a
+ * ficha relê. A linha de uma venda ou de um recebimento (ou de um saldo anterior, E-14) ainda
+ * não desfeito é tocável e abre a anotação (D-045) — é por ali que ela corrige ou desfaz. **O
+ * que foi desfeito fica escondido** sob "Ver o que foi desfeito (N)" no fim do histórico (item
+ * 1), só naquela abertura. "Cobrar no WhatsApp" (E-12, RF-09) fica no cartão do saldo (D-047).
+ * "Mudar dados ›" no cabeçalho (item 8) abre os dados da cliente — e é lá que a fichinha se
+ * desativa; desativada, a ficha diz isso sob o nome e continua funcionando (item 6). No fim do
+ * histórico, fora do caminho diário, "Anotar o que já devia" (D-049).
  */
 export function TelaFicha({
   clienteId,
@@ -37,6 +40,7 @@ export function TelaFicha({
   aoVender,
   aoAbrirLancamento,
   aoAnotarSaldoAnterior,
+  aoMudarDados,
 }: {
   clienteId: Id
   aoVoltar: () => void
@@ -44,6 +48,7 @@ export function TelaFicha({
   aoVender: () => void
   aoAbrirLancamento: (lancamentoId: Id) => void
   aoAnotarSaldoAnterior: () => void
+  aoMudarDados: () => void
 }) {
   // Sobe a cada "Considerar pago" para a ficha reler: escrita própria não navega aqui.
   const [releituras, setReleituras] = useState(0)
@@ -93,11 +98,12 @@ export function TelaFicha({
   const { resumo, linhas, podeQuitar } = leitura.valor
   return (
     <main className="tela">
-      <Topo titulo={resumo.cliente.nome} subtitulo={resumo.cliente.apelido} aoVoltar={aoVoltar} />
+      <Topo titulo={resumo.cliente.nome} subtitulo={resumo.cliente.apelido} aoVoltar={aoVoltar} acao={{ texto: PALAVRAS.dados.abrir, aoTocar: aoMudarDados }} />
+      {resumo.cliente.desativadoEm !== undefined && <p className="mt-0 mb-3 text-[0.95rem] font-semibold text-suave">{PALAVRAS.fichinhaDesativada}</p>}
       <CartaoDeSaldo resumo={resumo} cobravel={!podeQuitar} />
       <h2 className="mt-7 mb-2 text-[1rem] font-semibold text-suave">{PALAVRAS.oQueAconteceu}</h2>
       <Historico linhas={linhas} aoAbrir={aoAbrirLancamento} />
-      <button type="button" className="mt-3 min-h-11 border-0 bg-transparent p-0 text-[1rem] text-acento underline" onClick={aoAnotarSaldoAnterior}>
+      <button type="button" className="mt-3 block min-h-11 border-0 bg-transparent p-0 text-left text-[1rem] text-acento underline" onClick={aoAnotarSaldoAnterior}>
         {PALAVRAS_DO_SALDO_ANTERIOR.anotarJaDevia}
       </button>
       {erro !== null && <p className="mt-4 mb-0 font-semibold text-atraso">{erro}</p>}
@@ -109,7 +115,7 @@ export function TelaFicha({
         ) : (
           resumo.proxima !== null && (
             <Botao tipo="principal" aoTocar={aoReceber}>
-              {botaoRecebi(resumo.proxima.restante)}
+              {PALAVRAS_DO_RECEBIMENTO.abater}
             </Botao>
           )
         )}
@@ -153,13 +159,7 @@ function CartaoDeSaldo({ resumo, cobravel }: { resumo: ResumoDaFicha; cobravel: 
           className="mt-4"
           href={linkDoWhatsApp(
             resumo.cliente.telefone,
-            mensagemDeCobranca({
-              nome: resumo.cliente.nome,
-              restante: resumo.proxima.restante,
-              vencimento: resumo.proxima.vencimento,
-              vencida: resumo.proxima.vencida,
-              saldo: resumo.saldo,
-            }),
+            mensagemDeCobranca({ nome: resumo.cliente.nome, vencimento: resumo.proxima.vencimento, vencida: resumo.proxima.vencida }),
           )}
         >
           {PALAVRAS_DA_COBRANCA.cobrar}
@@ -172,10 +172,27 @@ function CartaoDeSaldo({ resumo, cobravel }: { resumo: ResumoDaFicha; cobravel: 
 /**
  * O histórico: data, o que foi, quanto. Vencida em vermelho; pagamento em cinza; estornado
  * riscado (RN-07). A linha com `lancamentoId` é um botão que abre a anotação (D-045), com o
- * "›" à direita dizendo que abre — a mesma linha, o mesmo tamanho, sem cartão a mais.
+ * "›" à direita dizendo que abre — a mesma linha, o mesmo tamanho, sem cartão a mais. O que foi
+ * desfeito — o alvo riscado e o seu "Desfez" — começa escondido (D-050, item 1): a linha de
+ * texto no fim, "Ver o que foi desfeito (N)", mostra tudo naquela abertura; nada é guardado.
  */
 function Historico({ linhas, aoAbrir }: { linhas: LinhaDaFicha[]; aoAbrir: (lancamentoId: Id) => void }) {
+  const [mostrandoDesfeitas, setMostrandoDesfeitas] = useState(false)
   if (linhas.length === 0) return <p className="m-0 text-suave">{PALAVRAS.nadaAnotado}</p>
+  const { aVista, quantas } = separarDesfeitas(linhas)
+  return (
+    <>
+      <Linhas linhas={mostrandoDesfeitas ? linhas : aVista} aoAbrir={aoAbrir} />
+      {quantas > 0 && (
+        <button type="button" className="mt-3 block min-h-11 border-0 bg-transparent p-0 text-left text-[1rem] text-acento underline" onClick={() => setMostrandoDesfeitas((atual) => !atual)}>
+          {mostrandoDesfeitas ? PALAVRAS.esconderDesfeitas : verDesfeitas(quantas)}
+        </button>
+      )}
+    </>
+  )
+}
+
+function Linhas({ linhas, aoAbrir }: { linhas: LinhaDaFicha[]; aoAbrir: (lancamentoId: Id) => void }) {
   return (
     <ul className="m-0 list-none p-0">
       {linhas.map((linha) => {

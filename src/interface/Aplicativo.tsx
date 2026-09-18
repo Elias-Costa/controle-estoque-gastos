@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import type { Centavos } from '../dominio/dinheiro.ts'
 import type { Dia, Id } from '../dominio/ficha.ts'
 import { TelaCadastro } from './TelaCadastro.tsx'
+import { TelaDadosDoCliente } from './TelaDadosDoCliente.tsx'
 import { TelaDevedoras } from './TelaDevedoras.tsx'
 import { TelaEntrar } from './TelaEntrar.tsx'
 import { TelaFicha } from './TelaFicha.tsx'
@@ -23,6 +24,8 @@ import { TelaVendido } from './TelaVendido.tsx'
  * devedores (E-12, D-047), para o "‹" devolver ela ao mesmo lugar. O login (E-13, D-048) é uma
  * tela como as outras, aberta pela linha "Entrar ›" da inicial — nunca a primeira tela. O saldo
  * anterior (E-14, D-049) tem duas portas — a linha no fim da ficha e a anotação (correção).
+ * "Mudar dados" (E-16, D-050) abre do cabeçalho da ficha; "Pronto" e reativar voltam à ficha,
+ * desativar volta ao início — a ficha sumiu da lista, e é a lista que mostra isso.
  */
 type Rota =
   | { readonly tela: 'inicio' }
@@ -30,6 +33,7 @@ type Rota =
   | { readonly tela: 'devedoras' }
   | { readonly tela: 'ficha'; readonly clienteId: Id; readonly origem?: 'devedoras' }
   | { readonly tela: 'cadastro'; readonly nome: string; readonly destino: 'ficha' | 'venda' }
+  | { readonly tela: 'dados'; readonly clienteId: Id }
   | { readonly tela: 'para-quem' }
   | { readonly tela: 'venda'; readonly clienteId: Id; readonly origem: 'para-quem' | 'ficha' | 'lancamento'; readonly corrigirId?: Id }
   | { readonly tela: 'vendido'; readonly clienteId: Id; readonly vendaId: Id }
@@ -84,6 +88,20 @@ export function Aplicativo() {
           aoVender={() => setRota({ tela: 'venda', clienteId: rota.clienteId, origem: 'ficha' })}
           aoAbrirLancamento={(lancamentoId) => setRota({ tela: 'lancamento', clienteId: rota.clienteId, lancamentoId })}
           aoAnotarSaldoAnterior={() => setRota({ tela: 'saldo-anterior', clienteId: rota.clienteId, origem: 'ficha' })}
+          aoMudarDados={() => setRota({ tela: 'dados', clienteId: rota.clienteId })}
+        />
+      )
+    case 'dados':
+      return (
+        <TelaDadosDoCliente
+          clienteId={rota.clienteId}
+          aoVoltar={() => irParaFicha(rota.clienteId)}
+          aoPronto={() => irParaFicha(rota.clienteId)}
+          aoDesativar={() => {
+            // A fichinha saiu da lista: a busca que a achava sairia vazia ao voltar.
+            setBusca('')
+            irParaInicio()
+          }}
         />
       )
     case 'cadastro':

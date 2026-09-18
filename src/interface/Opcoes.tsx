@@ -50,10 +50,14 @@ export function Escolha<T extends string>({
   )
 }
 
+/** O máximo de "vezes" que a venda, o cadastro e o saldo anterior oferecem (D-050, item 3): ela pediu 6×. */
+export const MAXIMO_DE_VEZES = 6
+
 /**
  * "Em quantas vezes": 1× a N× lado a lado, como `.vezes` do protótipo (1×–4× validados na
- * sessão de 2026-09-08). `maximo` só passa de 4 na correção de uma venda que já tinha mais
- * parcelas — a tela nunca oferece menos do que a venda tem.
+ * sessão de 2026-09-08; **até 6× desde a visita de E-15**, D-050 item 3 — seis pílulas de
+ * ~50 px em 375 px). `maximo` só passa de `MAXIMO_DE_VEZES` na correção de uma venda que já
+ * tinha mais parcelas — a tela nunca oferece menos do que a venda tem.
  */
 export function Vezes({ rotulo, maximo, valor, aoEscolher }: { rotulo: string; maximo: number; valor: number; aoEscolher: (vezes: number) => void }) {
   const vezes = Array.from({ length: maximo }, (_, posicao) => posicao + 1)

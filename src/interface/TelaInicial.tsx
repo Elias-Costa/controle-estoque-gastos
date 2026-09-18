@@ -16,11 +16,12 @@ import { BotaoEntrar } from './TelaEntrar.tsx'
  * toque é uma linha da lista: 60 px de altura.
  *
  * Fiel ao protótipo validado em 2026-09-08, com as divergências de D-044: o rodapé tem "Nova
- * venda" (principal, E-10) sobre "+ É uma cliente nova" (secundário), o indicador de RF-25 fica
- * sob o título e o carimbo de RF-23 no pé da lista. Sem total agregado: "a receber na rua" é
- * RF-19, F4. "Recebi" nasce em E-11 — botão morto é defeito, não promessa. E-13 (D-048) pôs a
- * linha "Entrar ›" sob o indicador (só sem sessão guardada) e a instrução de instalação sob a
- * lista (só no celular, antes de instalar): as duas custam zero toques no caminho cronometrado.
+ * venda" (principal, E-10) sobre "+ Nova fichinha" (secundário; era "+ É uma cliente nova" até
+ * a visita de E-15, D-050 item 2), o indicador de RF-25 fica sob o título e o carimbo de RF-23
+ * no pé da lista. Sem total agregado: "a receber na rua" é RF-19, F4. E-13 (D-048) pôs a linha
+ * "Entrar ›" sob o indicador (só sem sessão guardada) e a instrução de instalação sob a lista
+ * (só no celular, antes de instalar): as duas custam zero toques no caminho cronometrado. É a
+ * única tela que lista as fichinhas desativadas, a um toque no fim da lista (D-050, item 6).
  */
 export function TelaInicial({
   busca,
@@ -53,7 +54,7 @@ export function TelaInicial({
         <BotaoEntrar aoTocar={aoEntrar} />
       </header>
 
-      <ListaDeFichas busca={busca} aoBuscar={aoBuscar} aoAbrir={aoAbrirFicha} chave="inicio" />
+      <ListaDeFichas busca={busca} aoBuscar={aoBuscar} aoAbrir={aoAbrirFicha} chave="inicio" comDesativadas />
 
       <Instalacao />
 

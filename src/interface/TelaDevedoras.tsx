@@ -12,12 +12,14 @@ import { useLeitura } from './useLeitura.ts'
 /**
  * "Quem está devendo" (RF-10, E-12): a dor nº 3 do briefing — "descobrir quem está atrasado
  * exige folhear ficha por ficha, então não é feito". Tela própria (D-047 item 2), aberta do
- * cabeçalho da inicial; abre em "Em atraso" e "Mais atrasada" (item 3), então a resposta já
- * está na tela sem toque, e a lista vazia diz "Ninguém atrasada" — boa notícia.
+ * cabeçalho da inicial; abre em "Em atraso" e "Maior atraso" (item 3), então a resposta já
+ * está na tela sem toque, e a lista vazia diz "Ninguém em atraso" — boa notícia. (As palavras
+ * eram "Mais atrasada" e "Ninguém atrasada" até a visita de E-15, D-050 item 2.)
  *
- * É a mesma leitura e a mesma linha da lista de fichinhas: nome, quanto deve, "atrasada há N
- * dias". A linha abre a ficha — é lá que se cobra (RF-09). Filtro e ordem são estado da tela,
- * e voltam ao padrão a cada entrada, como toda tela (lição de E-02).
+ * É a mesma leitura e a mesma linha da lista de fichinhas: nome, quanto deve, "em atraso há N
+ * dias" — sem as fichinhas desativadas, mesmo devendo (D-050, item 6). A linha abre a ficha —
+ * é lá que se cobra (RF-09). Filtro e ordem são estado da tela, e voltam ao padrão a cada
+ * entrada, como toda tela (lição de E-02).
  */
 export function TelaDevedoras({ aoVoltar, aoAbrirFicha }: { aoVoltar: () => void; aoAbrirFicha: (clienteId: Id) => void }) {
   const [filtro, setFiltro] = useState<FiltroDeDevedoras>('em-atraso')

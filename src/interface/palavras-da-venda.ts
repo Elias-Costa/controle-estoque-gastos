@@ -5,24 +5,26 @@ import type { Guarda } from './rascunho-da-venda.ts'
 
 /**
  * As palavras da venda, da confirmação e da anotação (RI-07) — num lugar só, como
- * `palavras-da-ficha.ts`. As do caminho principal ("Nova venda", "Para quem?", "O que a X
+ * `palavras-da-ficha.ts`. As do caminho principal ("Nova venda", "Para quem?", "O que X
  * levou", "+ Mais um", "Total", "Fiado", "À vista", "Em quantas vezes", "Hoje", "Ontem",
- * "Pronto", "Anotado na fichinha da X", "Agora ela deve", "Ver a fichinha") são as do protótipo
- * validado em 2026-09-08 (RT-15 em 48 s). As demais entraram por `D-045` e são **hipótese até
- * E-15**: "Dar desconto", "Outro dia", "Mudar datas ou valores", "Corrigir", "Desfazer esta
- * venda" e as guardas. Trocar é uma linha, aqui.
+ * "Pronto", "Anotado na fichinha de X", "Agora deve", "Ver a fichinha") são as do protótipo
+ * validado em 2026-09-08 (RT-15 em 48 s), **postas no impessoal na visita de E-15** (`D-050`,
+ * item 2: "Vender fiado para ela" virou "Vender fiado", e tudo que dizia "ela" fala da fichinha).
+ * As demais entraram por `D-045` e são **hipótese até a próxima observação**: "Dar desconto",
+ * "Outro dia", "Mudar datas ou valores", "Corrigir", "Desfazer esta venda" e as guardas.
+ * Trocar é uma linha, aqui.
  */
 export const PALAVRAS_DA_VENDA = {
   novaVenda: 'Nova venda',
-  venderFiado: 'Vender fiado para ela',
+  venderFiado: 'Vender fiado',
   paraQuem: 'Para quem?',
-  itemExemplo: 'O que ela levou',
-  precoExemplo: 'R$',
+  itemExemplo: 'O que levou',
+  precoExemplo: '0,00',
   maisUm: '+ Mais um',
   total: 'Total',
   darDesconto: 'Dar desconto',
   desconto: 'Desconto',
-  comoVaiPagar: 'Como ela vai pagar',
+  comoVaiPagar: 'Como vai pagar',
   fiado: 'Fiado',
   aVista: 'À vista',
   como: 'Como',
@@ -38,7 +40,7 @@ export const PALAVRAS_DA_VENDA = {
   naoDeu: 'Não deu para anotar. Tente de novo.',
   verAFichinha: 'Ver a fichinha',
   voltarParaOComeco: 'Voltar para o começo',
-  naoDeveNada: 'Ela não deve nada',
+  naoDeveNada: 'Não deve nada',
   anotacao: {
     fiadoEm: 'Fiado em',
     pagouNaHoraEm: 'Pagou na hora em',
@@ -52,9 +54,9 @@ export const PALAVRAS_DA_VENDA = {
   },
 } as const
 
-/** "O que a Rosa levou" — o título da tela de venda, como no protótipo. */
+/** "O que Rosa levou" — o título da tela de venda, como no protótipo, sem o artigo (D-050, item 2). */
 export function tituloDaVenda(nome: string): string {
-  return `O que a ${nome} levou`
+  return `O que ${nome} levou`
 }
 
 /** "1ª em 12/10": a linha de uma parcela na lista da venda e na anotação (formato do protótipo). */
@@ -88,9 +90,9 @@ export function fraseDaGuarda(guarda: Guarda, soma: Centavos, total: Centavos): 
 
 /** A confirmação da venda: a primeira linha (o que aconteceu) e a segunda (o saldo, que ela confere em voz alta). */
 export function linhasDaConfirmacao(nome: string, fiado: boolean, total: Centavos, saldo: Centavos): [string, string] {
-  const primeira = fiado ? `Anotado na fichinha da ${nome}` : `${nome} levou e pagou ${emReais(total)}`
+  const primeira = fiado ? `Anotado na fichinha de ${nome}` : `${nome} levou e pagou ${emReais(total)}`
   if (saldo === 0n) return [primeira, PALAVRAS_DA_VENDA.naoDeveNada]
-  return [primeira, fiado ? `Agora ela deve ${emReais(saldo)}` : `Ainda deve ${emReais(saldo)}`]
+  return [primeira, fiado ? `Agora deve ${emReais(saldo)}` : `Ainda deve ${emReais(saldo)}`]
 }
 
 /**
@@ -105,12 +107,12 @@ export function fraseDaRecusa(motivo: Motivo): string {
     case 'parcela-paga-alterada':
       return 'Uma parcela já paga não pode mudar.'
     case 'ficha-ficaria-negativa':
-      return 'Ela já pagou parte. Desfaça o recebimento antes.'
+      return 'Já pagou parte. Desfaça o pagamento antes.'
     case 'ja-estornado':
       return 'Já foi desfeita.'
     case 'nada-a-receber':
     case 'nada-a-quitar':
-      return 'Ela não deve nada.'
+      return 'Não deve nada.'
     case 'acima-do-limite-de-quitacao':
       return 'Ainda falta mais de R$ 0,10.'
     default:
