@@ -97,6 +97,9 @@ Para o app **sincronizar com a nuvem** é preciso um `.env.local` na raiz com `V
 | `bun run check` | Typecheck + lint + testes de unidade. É o portão de qualquer mudança |
 | `bun run build` | Build de produção em `dist/` |
 | `bun run preview` | Serve `dist/` na 4173, sem HTTPS — para olhar o build no desktop |
+| `bun run build:local` | O build de produção **sem nuvem**, em `dist-local/`: as duas variáveis do Supabase entram vazias, o `supabase-js` some do bundle e nada do que se fizer nele pode subir. É o ambiente para cadastrar cliente fictício e lançar à vontade. `grep -l supabase.co dist-local/assets/*.js` devolve nada |
+| `bun run preview:local` | Serve `dist-local/` na 4175, sem HTTPS — base própria no navegador, separada da do build real |
+| `bun run preview:local:lan` | O mesmo, com HTTPS na rede local — para o celular |
 | `bun run test:integracao` | As suítes contra o projeto Supabase real (~70 s). `nuvem.test.ts` tenta violar cada invariante direto no Postgres (precisa de `SUPABASE_DB_URL`; não deixa rastro). `sincronizacao.test.ts` sobe e baixa linhas pelo `supabase-js` com o usuário de teste; deixa linhas no banco |
 | `bun run test:navegador` | A prova de offline e o login no Chromium do Playwright, contra o build de laboratório (~40 s). Precisa do usuário de teste; sem ele, pula. Uma vez: `bunx playwright install chromium`. Também deixa linhas no banco |
 | `bun run build:laboratorio` | O build de produção mais `window.laboratorio`, em `dist-laboratorio/` — só para os testes de navegador. `dist/` nunca o contém: `grep -l laboratorio dist/assets/*.js dist/sw.js` devolve nada |
@@ -111,6 +114,22 @@ Para o app **sincronizar com a nuvem** é preciso um `.env.local` na raiz com `V
 | `bun run prototipo` | O protótipo das telas em `prototipo/`, na porta 5174 (HTTP, sem service worker) |
 
 `bun run typecheck`, `bun run lint` e `bun run test` existem soltos; `check` é os três em sequência.
+
+## Testando com dado fictício
+
+O app é offline-first: tudo o que se cadastra fica no IndexedDB do navegador, **por origem** (`localhost:4173`, `localhost:4175` e `https://192.168.x.x:5173` são três bases distintas), e só sobe depois de entrar numa conta. Para testar sem risco nenhum de tocar a nuvem, use o build sem nuvem:
+
+```bash
+bun run build:local
+```
+
+```bash
+bun run preview:local
+```
+
+Abre `http://localhost:4175`, sem a linha "Entrar ›" e sem nenhuma requisição de rede — cadastre, venda, receba, desative, desfaça. O indicador fica em "N para enviar" para sempre: não há para onde enviar, e é o esperado. Para zerar a base fictícia: DevTools → *Application* → *Storage* → *Clear site data* (no celular, Chrome → configurações do site → limpar). No Chrome do computador, F12 → ícone de celular (Ctrl+Shift+M) → 375 de largura mostra as telas no tamanho do iPhone; a aba *Network* → *Offline* simula sem rede (em `localhost` o service worker funciona sem HTTPS). Para o celular, `bun run preview:local:lan` e o caminho da seção seguinte, na porta 4175.
+
+O build real (`bun run build` + `preview` ou `preview:lan`) também serve para testar — mas ele sincroniza com o projeto do `.env.local` assim que houver sessão. A linha "Entrar ›" na tela inicial diz que não há; se ela não aparece, aquela origem já tem sessão guardada e cada lançamento vai subir.
 
 ## Testando no celular
 
@@ -134,6 +153,8 @@ O app é uma SPA estática de uma rota: qualquer host de arquivos estáticos ser
 **O nome do projeto vira a origem, e a origem é a identidade do IndexedDB no aparelho.** Escolhido uma vez, nunca muda: trocar o domínio depois de instalado é começar do zero no celular.
 
 **Versão nova entra na abertura seguinte**, nunca no meio de uma sessão — o service worker novo fica em espera e assume quando o app é aberto de novo. O carimbo `versão dd/mm, hh:mm` no rodapé da tela inicial diz qual build está no aparelho.
+
+**Migration antes do deploy.** Quando uma versão traz migration nova em `nuvem/migracoes/`, rode `bun run migrar` contra o projeto **antes** do push que publica: o app envia as colunas que conhece em toda gravação, e sem a coluna no banco todo envio dessa tabela falha até a migration entrar. A base no aparelho não perde nada, mas a fila não sobe enquanto isso.
 
 **Conta**, no painel do Supabase: *Authentication → Users → Add user* com auto-confirm. Em *Authentication → Sessions*, **Time-box user sessions** e **Inactivity timeout** em *never* — com prazo ali a sessão cai sozinha e o app para de enviar até alguém entrar de novo (a base local nunca é apagada por sessão). No aparelho, a tela inicial mostra "Entrar ›" enquanto não há sessão guardada; depois de entrar, a linha some e a fila sobe. Não há "Sair" nem "esqueci a senha" no app — recuperar acesso é caminho de quem administra o projeto, no painel.
 
