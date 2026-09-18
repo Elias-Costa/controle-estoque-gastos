@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { emReais } from '../dominio/dinheiro.ts'
 import { CLASSES_DE_CAMPO, CLASSES_DE_CAMPO_COMPACTO } from './Campo.tsx'
-import { EntradaDeDinheiro, LeituraDoValor } from './CampoDeDinheiro.tsx'
+import { EntradaDeDinheiro } from './CampoDeDinheiro.tsx'
 import { Vezes } from './Opcoes.tsx'
 import { PALAVRAS_DA_VENDA, quandoDaParcela } from './palavras-da-venda.ts'
 import { textoDeCentavos, type EdicaoDeParcela, type ParcelaMontada } from './rascunho-da-venda.ts'
@@ -98,7 +98,6 @@ function ParcelaEditavel({
           rotuloAcessivel={`${ordem} valor`}
         />
       </div>
-      <LeituraDoValor texto={edicao.valorTexto ?? ''} className="mt-1 text-right text-[1.125rem]" />
     </li>
   )
 }

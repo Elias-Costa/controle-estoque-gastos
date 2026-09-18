@@ -1,17 +1,19 @@
-import { useId } from 'react'
-import { emReais, lerDinheiro } from '../dominio/dinheiro.ts'
+import { useId, type MouseEvent } from 'react'
 import { Rotulo } from './Campo.tsx'
+import { aplicarMascara } from './mascara-de-dinheiro.ts'
+
+/** O que o campo mostra vazio: o `0,00` da maquininha. É placeholder — nada digitado não é um valor (D-051). */
+const EXEMPLO = '0,00'
 
 /**
- * O campo de dinheiro do kit (D-023, D-034): ela digita como quiser — `1250` é R$ 12,50,
- * `12,5` é R$ 12,50, `1.250` é R$ 1.250,00 — e quem lê é `lerDinheiro`, no domínio. Esta
- * borda não interpreta nada: mostra, **grande e enquanto ela digita**, o valor que o domínio
- * leu, para R$ 0,25 ser visível antes de confirmar (D-034). Quando o domínio não lê
- * (`39,905`, letras), a linha diz que não entendeu — guarda visível antes do toque, nunca
- * botão que não faz nada (lição de E-02).
+ * O campo de dinheiro do kit (D-023, D-051): máscara pela direita, como na maquininha. O campo
+ * mostra `0,00`; ela digita `5` → `0,05`, `2` → `0,52`, `7` → `5,27`, `0` → `52,70`; apagar tira
+ * o último dígito. Nunca há vírgula para teclar — o teclado é o numérico. O que está no campo
+ * **é** o valor, grande, a cada tecla: se ela digitar `25` esperando R$ 25,00, o `0,25` está na
+ * cara dela antes de confirmar. (Substituiu o híbrido de D-034 em 2026-09-18.)
  *
- * O texto cru fica com a tela, que decide o que fazer com o `Centavos` lido. `number` não
- * entra aqui em lugar nenhum (EL-03).
+ * O texto formatado fica com a tela, que o lê por `lerDinheiro` no domínio e decide o que
+ * fazer com o `Centavos`. `number` não entra aqui em lugar nenhum (EL-03).
  */
 export function CampoDeDinheiro({
   rotulo,
@@ -39,21 +41,23 @@ export function CampoDeDinheiro({
           selecionarAoFocar={selecionarAoFocar}
         />
       </div>
-      <LeituraDoValor texto={texto} className="mt-1.5 text-[1.25rem]" />
     </>
   )
 }
 
 /**
- * Só a entrada, sem rótulo nem leitura: para os lugares em que o campo é compacto — o preço
- * de cada item e o valor de cada parcela na venda (E-10). O teclado é o decimal (D-034).
+ * Só a entrada, sem rótulo: para os lugares em que o campo é compacto — o preço de cada item e
+ * o valor de cada parcela na venda (E-10). A máscara é a mesma (`aplicarMascara`): o `onChange`
+ * recebe o texto como ficou depois da tecla e devolve à tela o texto formatado. O caret vai
+ * para o fim quando ela toca no meio do texto (a máscara só faz sentido pela direita), exceto
+ * quando o texto inteiro está selecionado — é o toque que substitui (`selecionarAoFocar`).
  */
 export function EntradaDeDinheiro({
   texto,
   aoMudar,
   className,
   id,
-  exemplo,
+  exemplo = EXEMPLO,
   rotuloAcessivel,
   selecionarAoFocar = false,
 }: {
@@ -65,29 +69,24 @@ export function EntradaDeDinheiro({
   rotuloAcessivel?: string
   selecionarAoFocar?: boolean
 }) {
+  function caretNoFim(evento: MouseEvent<HTMLInputElement>): void {
+    const campo = evento.currentTarget
+    const tudoSelecionado = campo.selectionStart === 0 && campo.selectionEnd === campo.value.length && campo.value.length > 0
+    if (!tudoSelecionado) campo.setSelectionRange(campo.value.length, campo.value.length)
+  }
   return (
     <input
       id={id}
       className={className}
       type="text"
-      inputMode="decimal"
+      inputMode="numeric"
       autoComplete="off"
       placeholder={exemplo}
       aria-label={rotuloAcessivel}
       value={texto}
-      onChange={(evento) => aoMudar(evento.target.value)}
+      onChange={(evento) => aoMudar(aplicarMascara(evento.target.value))}
+      onClick={caretNoFim}
       onFocus={selecionarAoFocar ? (evento) => evento.target.select() : undefined}
     />
-  )
-}
-
-/** A leitura do domínio para o que ela digitou (D-034). Some quando o campo está vazio. */
-export function LeituraDoValor({ texto, className }: { texto: string; className: string }) {
-  if (texto.trim() === '') return null
-  const lido = lerDinheiro(texto)
-  return (
-    <p className={`m-0 font-semibold tabular-nums ${lido === null ? 'text-atraso' : 'text-suave'} ${className}`}>
-      {lido === null ? 'Não entendi o valor' : emReais(lido)}
-    </p>
   )
 }

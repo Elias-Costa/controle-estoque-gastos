@@ -1,5 +1,5 @@
 import type { ParcelaNova } from '../dados/operacoes.ts'
-import { lerDinheiro, repartir, somar, type Centavos } from '../dominio/dinheiro.ts'
+import { emReais, lerDinheiro, repartir, somar, type Centavos } from '../dominio/dinheiro.ts'
 import type { Dia, FormaDePagamento, ItemVenda, Parcela, Venda } from '../dominio/ficha.ts'
 import { mesesDepois } from './datas.ts'
 
@@ -166,11 +166,12 @@ export function guardaDaData(data: Dia, hoje: Dia): 'falta-a-data' | 'data-no-fu
   return null
 }
 
-/** `3990n` → `"39,90"`: centavos de volta ao texto que ela teria digitado, para preencher a correção. Sem ponto de milhar. */
+/**
+ * `3990n` → `"39,90"`, `125000n` → `"1.250,00"`: centavos de volta ao texto **como a máscara o
+ * mostra** (D-051), para a correção pré-preenchida não mudar de cara na primeira tecla.
+ */
 export function textoDeCentavos(centavos: Centavos): string {
-  const reais = centavos / 100n
-  const resto = centavos % 100n
-  return `${reais},${String(resto).padStart(2, '0')}`
+  return emReais(centavos).replace(/^R\$ /, '')
 }
 
 /**
