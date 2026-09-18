@@ -65,9 +65,14 @@ export type Nuvem = {
  */
 export const LINHAS_POR_PAGINA = 500
 
-/** As colunas pedidas, com `::text` no dinheiro: o PostgREST serializa `bigint` como número JSON, e número não entra (RI-01). */
-const COLUNAS_CLIENTE = 'id, nome, telefone, apelido, observacao, atualizado_em, recebido_em'
-const COLUNAS_LANCAMENTO =
+/**
+ * As colunas pedidas, com `::text` no dinheiro: o PostgREST serializa `bigint` como número JSON,
+ * e número não entra (RI-01). **Toda coluna que sobe pela borda tem de estar aqui** — uma que
+ * falte desce como ausente em silêncio (`testes/sincronizacao.test.ts` confere as duas listas
+ * contra `clienteParaNuvem`; lição de E-16, quando `desativado_em` subiu sem descer).
+ */
+export const COLUNAS_CLIENTE = 'id, nome, telefone, apelido, observacao, desativado_em, atualizado_em, recebido_em'
+export const COLUNAS_LANCAMENTO =
   'id, cliente_id, data, tipo, pagamento, forma, itens, desconto::text, parcelas, valor::text, observacao, estorna_id, motivo, criado_em'
 
 const CONSTRAINT = /constraint "([a-z0-9_]+)"/i

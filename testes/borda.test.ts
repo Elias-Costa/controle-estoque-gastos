@@ -9,6 +9,7 @@ import {
   normalizarCarimbo,
   type LancamentoNaNuvem,
 } from '../src/sincronizacao/borda.ts'
+import { COLUNAS_CLIENTE, COLUNAS_LANCAMENTO } from '../src/sincronizacao/nuvem.ts'
 
 /**
  * A borda (E-07, D-041, D-042): o que vai para a nuvem e o que volta é o mesmo objeto do
@@ -160,5 +161,25 @@ describe('o que não tem forma lança, em vez de virar lançamento estranho', ()
     expect(normalizarCarimbo('x', '2026-09-12T10:05:00+00:00')).toBe('2026-09-12T10:05:00.000Z')
     expect(normalizarCarimbo('x', '2026-09-12T10:05:00.123456+00:00')).toBe('2026-09-12T10:05:00.123Z')
     expect(normalizarCarimbo('x', '2026-09-12T07:05:00-03:00')).toBe('2026-09-12T10:05:00.000Z')
+  })
+})
+
+describe('toda coluna que sobe pela borda desce pelo select da nuvem (lição de E-16: desativado_em subiu sem descer)', () => {
+  const colunasDe = (lista: string) => new Set(lista.split(',').map((coluna) => coluna.trim().replace(/::text$/, '')))
+
+  test('clientes: cada chave de clienteParaNuvem está em COLUNAS_CLIENTE', () => {
+    const pedidas = colunasDe(COLUNAS_CLIENTE)
+    for (const chave of Object.keys(clienteParaNuvem({ ...cliente, desativadoEm: '2026-09-18' }))) {
+      expect(pedidas.has(chave)).toBe(true)
+    }
+  })
+
+  test('lançamentos: cada chave de lancamentoParaNuvem, para os cinco tipos, está em COLUNAS_LANCAMENTO', () => {
+    const pedidas = colunasDe(COLUNAS_LANCAMENTO)
+    for (const lancamento of [vendaFiado, vendaAVista, recebimentoComObs, desconto, estornoComMotivo]) {
+      for (const chave of Object.keys(lancamentoParaNuvem(lancamento))) {
+        expect(pedidas.has(chave)).toBe(true)
+      }
+    }
   })
 })
