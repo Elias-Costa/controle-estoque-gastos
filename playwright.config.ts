@@ -1,5 +1,5 @@
-import { existsSync } from 'node:fs'
 import { defineConfig, devices } from '@playwright/test'
+import { exigirDestinoDeTeste } from './nuvem/ambiente-de-teste.ts'
 
 /**
  * A prova de offline em navegador real (E-08, D-033, D-043): `bun run test:navegador`.
@@ -18,12 +18,12 @@ import { defineConfig, devices } from '@playwright/test'
  * e tentaria executá-los no runtime do Bun. Um worker só e nada em paralelo: os quatro testes
  * compartilham a nuvem real e o usuário de teste, e cada um deixa linhas lá (D-042).
  *
- * As credenciais (`SUPABASE_TESTE_EMAIL`/`SUPABASE_TESTE_SENHA`) vêm de `.env.local`, carregado
- * aqui pelo Node — o `bunx playwright` roda em Node, e o `bun test` não é quem está por cima.
- * Sem elas a suíte pula e diz por quê (`testes/navegador/apoio.ts`); nunca "passa".
+ * O comando de ambiente passa credenciais locais ou de homologação já validadas (D-050).
+ * Este arquivo não carrega a configuração de produção. Servidor existente não é reutilizado:
+ * poderia servir um build feito para outro banco.
  */
 
-if (existsSync('.env.local')) process.loadEnvFile('.env.local')
+exigirDestinoDeTeste()
 
 /** A porta do build de laboratório. Não é a 4173 do `preview` de produção, de propósito. */
 export const PORTA_DO_LABORATORIO = 4174
@@ -48,7 +48,7 @@ export default defineConfig({
   webServer: {
     command: 'bun run preview:laboratorio',
     url: `http://localhost:${PORTA_DO_LABORATORIO}/`,
-    reuseExistingServer: true,
+    reuseExistingServer: false,
     timeout: 30_000,
   },
 })

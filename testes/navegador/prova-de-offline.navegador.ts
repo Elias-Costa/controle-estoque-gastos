@@ -37,8 +37,8 @@ import {
  * - **RT-10** (EL-05, RNF-08): base local apagada, tudo volta da nuvem, igual.
  *
  * Um contexto do navegador é um aparelho (IndexedDB e localStorage próprios). Cada rodada usa ids
- * novos e **deixa linhas na nuvem**, sob o usuário de teste (D-042); a limpeza é
- * `migrar:reverter` + `migrar` antes de E-15. Chromium, e só ele: é a coluna "desktop" de D-036.
+ * novos e **deixa linhas no Supabase local ou de homologação**, sob o usuário fictício (D-050).
+ * Não roda em produção e não limpa dados automaticamente. Chromium é a coluna "desktop" de D-036.
  * Nada aqui é afirmação sobre o iPhone dela.
  */
 

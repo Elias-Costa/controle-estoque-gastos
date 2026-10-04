@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { SQL, type TransactionSQL } from 'bun'
 import { conectar, lerMigracoes, type Migracao } from '../../nuvem/migrar.ts'
 import { uuidv7 } from '../../src/dados/identidade.ts'
+import { exigirDestinoDeTeste } from '../../nuvem/ambiente-de-teste.ts'
 
 /**
  * A nuvem recusa o que o app não pode gravar (E-06, RI-09, D-041).
@@ -13,18 +14,19 @@ import { uuidv7 } from '../../src/dados/identidade.ts'
  * Como não deixa rastro: cada teste roda dentro de `sql.begin` e termina lançando `Revertida`,
  * então a transação é desfeita; cada tentativa de violação vai num `savepoint`, para a
  * transação seguir viva depois do erro. Importa porque a imutabilidade impede o próprio teste
- * de apagar o que criou — e porque este é o banco **dela**, não um de laboratório.
+ * de apagar o que criou. Só usa local ou homologação; produção em uso é vedada (D-050).
  *
  * Contas: `auth.uid()` do Supabase lê `request.jwt.claims` e não consulta `auth.users`, então
  * duas contas de mentira bastam — dois `sub` diferentes com `set local role authenticated`.
  * O papel `postgres` (o da conexão) ignora RLS por atributo próprio; é usado aqui só para provar
  * que os gatilhos valem para **qualquer** papel.
  *
- * Só roda com `INTEGRACAO=1` (`bun run test:integracao`): precisa de rede e de
- * `SUPABASE_DB_URL` em `.env.local`. No `check` aparece como pulada, de propósito.
+ * Só roda com `INTEGRACAO=1` e destino de teste validado: `bun run test:integracao` usa local;
+ * a variante `:homologacao` usa o projeto confirmado. No `check` aparece pulada, de propósito.
  */
 
 const LIGADA = process.env.INTEGRACAO === '1'
+if (LIGADA) exigirDestinoDeTeste()
 
 /**
  * Verificação por mutação, sem tocar o banco de verdade: um DDL que tira uma garantia (ex.:
