@@ -39,7 +39,7 @@ describe('destino de testes: preservar a produção em uso (D-050)', () => {
   })
 
   test('homologação fica fechada enquanto o mantenedor não confirmar seu identificador', () => {
-    expect(() => validarDestinoDeTeste(HOMOLOGACAO)).toThrow('Homologação bloqueada')
+    expect(() => validarDestinoDeTeste(HOMOLOGACAO, null)).toThrow('Homologação bloqueada')
     expect(() => validarDestinoDeTeste(HOMOLOGACAO, 'nome-do-projeto')).toThrow('Homologação bloqueada')
   })
 
