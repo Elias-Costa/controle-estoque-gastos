@@ -82,6 +82,9 @@ export type TabelaDaFila = TabelaSincronizada | 'categorias' | 'produtos' | 'ope
 /** Cadastro completo sujeito a LWW por registro, separado da referência derivada de compras. */
 export type ProdutoLocal = Produto & { readonly atualizadoEm: string }
 
+/** O servidor pode já ter aceitado a mesma confirmação sob outro id; preservar o vínculo local. */
+export type EncerramentoLocal = EncerramentoTentativa & { readonly remotoId?: Id }
+
 /** Ponteiro à evidência vigente: id/revisão também podem existir com outro conteúdo aceito (Q47A). */
 export type OperacaoLocal = OperacaoEstoque & { readonly versaoId: Id }
 
@@ -93,6 +96,8 @@ export type VersaoEstoque = {
   readonly aceita?: boolean
   readonly problema?: Problema
   readonly legadoId?: Id
+  /** Intenção recuperada do encerramento remoto, ainda sem uma edição feita neste aparelho. */
+  readonly restaurada?: boolean
 }
 
 /** Máximo lógico persistido; bigint é valor, nunca chave de índice (Q42, D-022). */
@@ -128,7 +133,7 @@ export type NovoItemDaFila = Omit<ItemDaFila, 'ordem'>
 
 /** Uma linha da tabela `sincronizacao`: o cursor de download de cada tabela (D-042). */
 export type CursorDeDownload = {
-  readonly chave: TabelaSincronizada
+  readonly chave: TabelaSincronizada | 'categorias' | 'produtos' | 'estoque'
   /** O maior carimbo do servidor já visto naquela tabela, ISO UTC; o download pede "desde aqui, com margem". */
   readonly valor: string
 }
@@ -177,13 +182,13 @@ export class BancoLocal extends Dexie {
   readonly clientes: Table<ClienteLocal, Id, ClienteLocal>
   readonly lancamentos: Table<Lancamento, Id, Lancamento>
   readonly fila: Table<ItemDaFila, number, NovoItemDaFila>
-  readonly sincronizacao: Table<CursorDeDownload, TabelaSincronizada, CursorDeDownload>
+  readonly sincronizacao: Table<CursorDeDownload, CursorDeDownload['chave'], CursorDeDownload>
   readonly categorias: Table<Categoria, Id, Categoria>
   readonly produtos: Table<ProdutoLocal, Id, ProdutoLocal>
   readonly operacoes: Table<OperacaoLocal, Id, OperacaoLocal>
   readonly movimentos: Table<MovimentoEstoque, [Id, number], MovimentoEstoque>
   readonly versoesEstoque: Table<VersaoEstoque, Id, VersaoEstoque>
-  readonly encerramentos: Table<EncerramentoTentativa, Id, EncerramentoTentativa>
+  readonly encerramentos: Table<EncerramentoLocal, Id, EncerramentoLocal>
   readonly relogioEstoque: Table<RelogioEstoque, string, RelogioEstoque>
 
   constructor(nome: string = NOME_DO_BANCO, dependencias?: DexieOptions) {

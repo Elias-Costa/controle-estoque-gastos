@@ -214,6 +214,9 @@ export async function sincronizar(page: Page): Promise<EstadoDaSincronizacao> {
     if (!lab) throw new Error('sem window.laboratorio: não é o build de laboratório')
     let estado = lab.sincronizacao.estado()
     for (let tentativa = 1; tentativa <= 5; tentativa += 1) {
+      // A restauração F2 pode manter o ciclo de abertura em andamento. Pedir outro garante
+      // uma consulta posterior à escrita do outro aparelho, não só aguardar a consulta antiga.
+      lab.sincronizacao.acordar()
       await lab.sincronizacao.sincronizar()
       estado = lab.sincronizacao.estado()
       if (estado.ultimaFalha === null) return estado

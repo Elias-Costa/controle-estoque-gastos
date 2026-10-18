@@ -24,7 +24,7 @@ export type EstadoLocalEstoque = {
 export type PrepararGrupoLocal = (estado: EstadoLocalEstoque) => ResultadoEstoque<GrupoEstoque>
 
 /** Fotografia durável de envio; uma resposta nunca confirma a edição feita depois dela. */
-export type EnvioEstoque = { readonly item: ItemDaFila; readonly versao: VersaoEstoque }
+export type EnvioEstoque = { readonly item: ItemDaFila; readonly versao: VersaoEstoque; readonly evidencias: readonly MovimentoEstoque[] }
 
 /** Base local de F2. Os métodos de transporte só registram resultados; não fazem rede. */
 export function criarRepositorioEstoque(banco: BancoLocal, agora: () => string = () => new Date().toISOString(),
@@ -180,7 +180,11 @@ export function criarRepositorioEstoque(banco: BancoLocal, agora: () => string =
         movimentos.push(registro)
       }
       if (conteudoDoEfeito({ operacao: grupo.operacao, lancamentos, movimentos }) !== conteudoDoEfeito(grupo)) throw new Error('Registros divergem da revisão do envio')
-      return { item, versao }
+      const evidencias = new Map<string, MovimentoEstoque>()
+      for (const movimento of estado.movimentos) {
+        if (grupo.movimentos.some((atual) => atual.id === movimento.id && atual.revisao > movimento.revisao)) evidencias.set(chaveDoEfeito(movimento), movimento)
+      }
+      return { item, versao, evidencias: [...evidencias.values()].sort((a, b) => a.id.localeCompare(b.id) || a.revisao - b.revisao) }
     })
   }
 
@@ -189,7 +193,7 @@ export function criarRepositorioEstoque(banco: BancoLocal, agora: () => string =
       const versao = await banco.versoesEstoque.get(envio.versao.id)
       if (!versao || conteudoDoEfeito(versao.grupo) !== conteudoDoEfeito(envio.versao.grupo)) throw new Error('Resposta sem versão capturada')
       const encerramentos = await banco.encerramentos.toArray()
-      if (encerramentos.some((item) => conteudoDoEfeito(item.tentativa) === conteudoDoEfeito(identidadeDaTentativa(versao.grupo)))) return
+      if (encerramentos.some((item) => conteudoDoEfeito(item.evidencia.grupo) === conteudoDoEfeito(versao.grupo))) return
       // Sucesso atrasado da revisão anterior guarda seu aceite, sem concluir nem substituir a nova.
       await banco.versoesEstoque.put({ ...versao, ...(problema ? { problema } : { aceita: true, problema: undefined }) })
       const atual = await banco.fila.get(envio.item.ordem)
@@ -203,6 +207,13 @@ export function criarRepositorioEstoque(banco: BancoLocal, agora: () => string =
     const operacoes = versoes.filter((item) => item.aceita).map((item) => item.grupo)
     const idsF2 = new Set(versoes.flatMap((item) => item.grupo.lancamentos.map((item) => item.id)))
     const movimentos = new Map<string, MovimentoEstoque>()
+    // E-21/Q39: uma restauração pode trazer a fotografia antiga sem o grupo local original.
+    // Encerrar outra tentativa não pode retirar essa base causal dos movimentos aceitos.
+    for (const movimento of estado.movimentos) {
+      if (operacoes.some((grupo) => grupo.movimentos.some((atual) => atual.id === movimento.id && atual.revisao > movimento.revisao))) {
+        movimentos.set(chaveDoEfeito(movimento), movimento)
+      }
+    }
     for (const versao of versoes.filter((versao) => operacoes.some((aceita) => aceita.operacao.id === versao.operacaoId &&
       versao.grupo.operacao.revisao < aceita.operacao.revisao))) {
       for (const movimento of versao.grupo.movimentos) movimentos.set(chaveDoEfeito(movimento), movimento)
@@ -220,14 +231,16 @@ export function criarRepositorioEstoque(banco: BancoLocal, agora: () => string =
       const versao = await banco.versoesEstoque.get(versaoId)
       if (!versao) return { ok: false, motivo: 'alvo-invalido' } as const
       const encerramentos = await banco.encerramentos.toArray()
-      const existente = encerramentos.find((item) => conteudoDoEfeito(item.tentativa) === conteudoDoEfeito(identidadeDaTentativa(versao.grupo)))
+      const existente = encerramentos.find((item) => conteudoDoEfeito(item.evidencia.grupo) === conteudoDoEfeito(versao.grupo))
       if (existente) return { ok: true, valor: existente } as const
       if (!versao.problema) return { ok: false, motivo: 'recusa-nao-confirmada' } as const
       const estado = await lerEstado()
       const versoes = await banco.versoesEstoque.toArray()
       const aceito = estadoAceito(estado, versoes)
       const pendentes = estado.grupos.filter((item) => conteudoDoEfeito(item) !== conteudoDoEfeito(versao.grupo))
-      const semTentativa = efeitosAposEncerramentos(aceito, pendentes, encerramentos)
+      // A RPC conserva o texto de identidade recebido; a projeção usa o grupo já decodificado.
+      const resolucoes = encerramentos.map((item) => ({ ...item, tentativa: identidadeDaTentativa(item.evidencia.grupo) }))
+      const semTentativa = efeitosAposEncerramentos(aceito, pendentes, resolucoes)
       const nova = entrada.prepararNova?.({ ...estado, ...semTentativa, grupos: [...aceito.operacoes, ...semTentativa.pendentes] })
       if (nova && !nova.ok) return nova
       const encerramento = encerrarTentativaEstoque({ grupo: versao.grupo, desfecho: 'recusada', diagnostico: conteudoDoEfeito(versao.problema) },
@@ -239,7 +252,7 @@ export function criarRepositorioEstoque(banco: BancoLocal, agora: () => string =
         if (!conferida.ok) return conferida
       }
       await banco.encerramentos.add(encerramento.valor)
-      const projecao = efeitosAposEncerramentos(aceito, pendentes, [...encerramentos, encerramento.valor])
+      const projecao = efeitosAposEncerramentos(aceito, pendentes, [...resolucoes, encerramento.valor])
       // Só a projeção provisória é retirada; conteúdo financeiro original permanece na evidência Q47A.
       const idsAtuais = new Set(projecao.lancamentos.map((item) => item.id))
       for (const item of versoes.flatMap((item) => item.grupo.lancamentos)) if (!idsAtuais.has(item.id)) await banco.lancamentos.delete(item.id)

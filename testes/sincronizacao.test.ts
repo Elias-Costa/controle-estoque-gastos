@@ -49,6 +49,13 @@ function conteudo(linha: LancamentoNaNuvem | LancamentoGuardado): string {
  * `recebido_em`/`criado_em` com um relógio próprio do "servidor", e recusa o que o banco recusa.
  */
 class NuvemDeMentira implements Nuvem {
+  enviarCategoria = async (): Promise<Resposta<void>> => ({ ok: true, valor: undefined })
+  enviarProduto = async (): Promise<Resposta<void>> => ({ ok: true, valor: undefined })
+  enviarGrupo = async (): Promise<Resposta<void>> => ({ ok: false, falha: { tipo: 'recusa', codigo: '23503', mensagem: 'dependência ausente' } })
+  enviarEncerramento = async (): Promise<Resposta<string>> => ({ ok: false, falha: { tipo: 'recusa', codigo: '23503', mensagem: 'dependência ausente' } })
+  buscarCategorias = async (): Promise<Resposta<readonly LinhaRecebida[]>> => ({ ok: true, valor: [] })
+  buscarProdutos = async (): Promise<Resposta<readonly LinhaRecebida[]>> => ({ ok: true, valor: [] })
+  buscarEstoque = async (): Promise<Resposta<readonly LinhaRecebida[]>> => ({ ok: true, valor: [] })
   readonly clientes = new Map<string, ClienteGuardado>()
   readonly lancamentos = new Map<string, LancamentoGuardado>()
   sessao = true
@@ -618,23 +625,25 @@ describe('parar() e sincronizar() concorrente', () => {
     if (!venda) throw new Error('sem venda')
     nuvem.lancamentos.set(venda.id, { ...lancamentoParaNuvem(venda), criado_em: '2026-10-18T10:00:00.000Z' })
     await sinc.sincronizar()
-    // O codec F1 não transporta os novos campos; o ponteiro do grupo preserva a versão local inteira.
+    // O ponteiro do grupo preserva a versão local inteira até o envio conjunto ser confirmado.
     expect(await banco.lancamentos.get(venda.id)).toEqual(venda)
     expect(await banco.fila.where('registroId').equals(resultado.valor.operacao.id).count()).toBe(1)
     sinc.parar(); banco.close()
   })
 
-  test('E-19 mantém F2 pendente e envia F1 independente, sem confirmar grupo pela rota legada', async () => {
+  test('dependência F2 ausente mantém o grupo pendente e permite F1 independente', async () => {
     const { banco, repositorio, nuvem, sinc } = preparar()
     const cliente = await vera(repositorio)
-    const pendentes = ['categorias', 'produtos', 'operacoes', 'encerramentos'] as const
-    for (const tabela of pendentes) await banco.fila.add({ tabela, registroId: `f2-${tabela}`, criadoEm: '2026-10-18T10:00:00.000Z', versao: 1 })
+    const estoque = criarOperacoesEstoque(criarRepositorioEstoque(banco))
+    const grupo = await estoque.lancarVenda({ pagamento: 'avista', forma: 'pix', clienteId: cliente.id, data: '2026-10-18',
+      desconto: 0n, itens: [{ descricao: 'Avulso F2', quantidade: 1, precoUnitario: 5000n, entregue: 0 }] })
+    if (!grupo.ok) throw new Error(grupo.motivo)
     const venda = await vendaPequena(repositorio, cliente.id)
     await sinc.sincronizar()
     expect(nuvem.lancamentos.has(venda.id)).toBe(true)
-    expect((await banco.fila.toArray()).map((item) => item.tabela)).toEqual([...pendentes])
-    expect(sinc.estado().pendentes).toBe(4)
-    expect(nuvem.requisicoes.some((item) => item.includes('f2-'))).toBe(false)
+    expect((await banco.fila.toArray()).map((item) => item.tabela)).toEqual(['operacoes'])
+    expect(sinc.estado().pendentes).toBe(1)
+    expect(nuvem.requisicoes.some((item) => item.includes(grupo.valor.lancamentos[0]?.id ?? 'sem-id'))).toBe(false)
     sinc.parar()
     banco.close()
   })

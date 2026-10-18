@@ -55,6 +55,10 @@ export type ClienteNaNuvem = {
 export type ItemNaNuvem = {
   readonly descricao: string
   readonly preco: string
+  readonly id?: Id
+  readonly produtoId?: Id
+  readonly quantidade?: number
+  readonly precoUnitario?: string
 }
 
 /** Uma parcela dentro do `jsonb`: o valor como texto de dígitos. */
@@ -176,7 +180,11 @@ export function clienteDaNuvem(linha: unknown): ClienteLocal {
 // ---------------------------------------------------------------------------------------------
 
 function itensParaNuvem(itens: readonly ItemVenda[]): ItemNaNuvem[] {
-  return itens.map((item) => ({ descricao: item.descricao, preco: centavosParaTexto(item.preco) }))
+  return itens.map((item) => ({ descricao: item.descricao, preco: centavosParaTexto(item.preco),
+    ...(item.id === undefined ? {} : { id: item.id }),
+    ...(item.produtoId === undefined ? {} : { produtoId: item.produtoId }),
+    ...(item.quantidade === undefined ? {} : { quantidade: item.quantidade }),
+    ...(item.precoUnitario === undefined ? {} : { precoUnitario: centavosParaTexto(item.precoUnitario) }) }))
 }
 
 function parcelasParaNuvem(parcelas: readonly Parcela[]): ParcelaNaNuvem[] {
@@ -238,9 +246,20 @@ function itensDaNuvem(valor: unknown): ItemVenda[] {
   return valor.map((item: unknown, posicao) => {
     if (typeof item !== 'object' || item === null) return malformada(`lancamento.itens[${posicao}]`, item)
     const campos: Record<string, unknown> = { ...item }
+    const id = textoOuNulo('item.id', campos['id'])
+    const produtoId = textoOuNulo('item.produtoId', campos['produtoId'])
+    const quantidade = campos['quantidade']
+    const precoUnitario = campos['precoUnitario']
+    if (quantidade !== undefined && (typeof quantidade !== 'number' || !Number.isSafeInteger(quantidade) || quantidade < 1)) return malformada('item.quantidade', quantidade)
+    if ((id !== undefined || produtoId !== undefined || quantidade !== undefined || precoUnitario !== undefined) &&
+      (id === undefined || quantidade === undefined || precoUnitario === undefined)) return malformada('item.f2', campos)
     return {
       descricao: texto(`lancamento.itens[${posicao}].descricao`, campos['descricao']),
       preco: textoParaCentavos(`lancamento.itens[${posicao}].preco`, campos['preco']),
+      ...(id === undefined ? {} : { id }),
+      ...(produtoId === undefined ? {} : { produtoId }),
+      ...(quantidade === undefined ? {} : { quantidade }),
+      ...(precoUnitario === undefined ? {} : { precoUnitario: textoParaCentavos('item.precoUnitario', precoUnitario) }),
     }
   })
 }
