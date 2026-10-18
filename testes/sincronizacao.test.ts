@@ -3,6 +3,8 @@ import { IDBFactory, IDBKeyRange } from 'fake-indexeddb'
 import { BancoLocal } from '../src/dados/banco.ts'
 import { cadastrarCliente, estornarLancamento, lancarVendaFiado, receber } from '../src/dados/operacoes.ts'
 import { criarRepositorioLocal, type Repositorio } from '../src/dados/repositorio.ts'
+import { criarRepositorioEstoque } from '../src/dados/repositorio-estoque.ts'
+import { criarOperacoesEstoque } from '../src/dados/operacoes-estoque.ts'
 import { saldo, type Cliente, type Resultado } from '../src/dominio/ficha.ts'
 import { lancamentoParaNuvem, type ClienteNaNuvem, type LancamentoNaNuvem } from '../src/sincronizacao/borda.ts'
 import type { Falha, LinhaRecebida, Nuvem, Resposta } from '../src/sincronizacao/nuvem.ts'
@@ -603,5 +605,37 @@ describe('parar() e sincronizar() concorrente', () => {
     const antes = esperas.length
     await sinc.sincronizar()
     expect(esperas.length).toBe(antes)
+  })
+
+  test('download legado não sobrescreve o financeiro de uma operação F2 pendente', async () => {
+    const { banco, repositorio, nuvem, sinc } = preparar()
+    const cliente = await vera(repositorio)
+    const estoque = criarOperacoesEstoque(criarRepositorioEstoque(banco))
+    const resultado = await estoque.lancarVenda({ pagamento: 'avista', forma: 'pix', clienteId: cliente.id,
+      data: '2026-10-18', desconto: 0n, itens: [{ descricao: 'Avulso F2', quantidade: 1, precoUnitario: 5000n, entregue: 0 }] })
+    if (!resultado.ok) throw new Error(resultado.motivo)
+    const venda = resultado.valor.lancamentos[0]
+    if (!venda) throw new Error('sem venda')
+    nuvem.lancamentos.set(venda.id, { ...lancamentoParaNuvem(venda), criado_em: '2026-10-18T10:00:00.000Z' })
+    await sinc.sincronizar()
+    // O codec F1 não transporta os novos campos; o ponteiro do grupo preserva a versão local inteira.
+    expect(await banco.lancamentos.get(venda.id)).toEqual(venda)
+    expect(await banco.fila.where('registroId').equals(resultado.valor.operacao.id).count()).toBe(1)
+    sinc.parar(); banco.close()
+  })
+
+  test('E-19 mantém F2 pendente e envia F1 independente, sem confirmar grupo pela rota legada', async () => {
+    const { banco, repositorio, nuvem, sinc } = preparar()
+    const cliente = await vera(repositorio)
+    const pendentes = ['categorias', 'produtos', 'operacoes', 'encerramentos'] as const
+    for (const tabela of pendentes) await banco.fila.add({ tabela, registroId: `f2-${tabela}`, criadoEm: '2026-10-18T10:00:00.000Z', versao: 1 })
+    const venda = await vendaPequena(repositorio, cliente.id)
+    await sinc.sincronizar()
+    expect(nuvem.lancamentos.has(venda.id)).toBe(true)
+    expect((await banco.fila.toArray()).map((item) => item.tabela)).toEqual([...pendentes])
+    expect(sinc.estado().pendentes).toBe(4)
+    expect(nuvem.requisicoes.some((item) => item.includes('f2-'))).toBe(false)
+    sinc.parar()
+    banco.close()
   })
 })

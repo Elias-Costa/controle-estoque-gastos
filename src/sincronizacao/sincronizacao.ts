@@ -31,6 +31,7 @@
  */
 
 import type { BancoLocal, ItemDaFila, TabelaSincronizada } from '../dados/banco.ts'
+import { itemDaFilaDoRegistro } from '../dados/fila.ts'
 import { clienteDaNuvem, clienteParaNuvem, lancamentoDaNuvem, lancamentoParaNuvem, normalizarCarimbo } from './borda.ts'
 import type { LinhaRecebida, Nuvem, Resposta } from './nuvem.ts'
 
@@ -198,6 +199,8 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
   async function enviar(nuvemLigada: Nuvem): Promise<Desfecho> {
     const itens = await banco.fila.orderBy('ordem').toArray()
     for (const item of itens) {
+      // E-19: F2 aguarda o transporte conjunto de E-21. A rota F1 jamais confirma meio grupo.
+      if (item.tabela !== 'clientes' && item.tabela !== 'lancamentos') continue
       if (item.problema !== undefined) continue
       const resposta = await enviarItem(nuvemLigada, item)
       if (resposta.ok) {
@@ -239,9 +242,8 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
   /** Lançamento é união (D-010): entra se não estiver na fila — a linha pendente é o envio quem decide. */
   async function aplicarLancamento(linha: LinhaRecebida): Promise<void> {
     const lancamento = lancamentoDaNuvem(linha)
-    await banco.transaction('rw', banco.lancamentos, banco.fila, async () => {
-      const pendente = await banco.fila.where('registroId').equals(lancamento.id).count()
-      if (pendente > 0) return
+    await banco.transaction('rw', banco.lancamentos, banco.fila, banco.operacoes, async () => {
+      if (await itemDaFilaDoRegistro(banco, lancamento.id)) return
       await banco.lancamentos.put(lancamento)
     })
   }

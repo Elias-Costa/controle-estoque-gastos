@@ -118,7 +118,14 @@ export function encerrarTentativaEstoque(tentativa: TentativaEstoque, aceito: Es
 export function efeitosAposEncerramentos(aceito: EstadoAceitoEstoque, pendentes: readonly GrupoEstoque[], encerramentos: readonly EncerramentoTentativa[]): {
   readonly lancamentos: readonly Lancamento[]; readonly movimentos: readonly MovimentoEstoque[]; readonly pendentes: readonly GrupoEstoque[]
 } {
-  const candidatos = [...pendentes, ...encerramentos.flatMap((item) => item.novaOperacao ? [item.novaOperacao] : [])]
+  const revisoes = new Map<Id, GrupoEstoque>()
+  for (const grupo of [...pendentes, ...encerramentos.flatMap((item) => item.novaOperacao ? [item.novaOperacao] : []),
+    ...encerramentos.map((item) => item.evidencia.grupo)]) {
+    const anterior = revisoes.get(grupo.operacao.id)
+    if (!anterior || grupo.operacao.revisao >= anterior.operacao.revisao) revisoes.set(grupo.operacao.id, grupo)
+  }
+  // Q47A: encerrar r2 não ressuscita r1 guardada no vínculo de uma resolução anterior.
+  const candidatos = [...revisoes.values()]
   const vivos = candidatos.filter((grupo) => !encerramentos.some((encerramento) => mesmaTentativa(encerramento.tentativa, identidadeDaTentativa(grupo))))
   const operacoes = new Map<Id, GrupoEstoque>()
   for (const grupo of vivos) {

@@ -37,6 +37,10 @@
 
 import Dexie, { type DexieOptions, type Table } from 'dexie'
 import type { Cliente, Id, Lancamento } from '../dominio/ficha.ts'
+import type { MovimentoEstoque } from '../dominio/estoque.ts'
+import type { Categoria, Produto } from '../dominio/produtos.ts'
+import type { EncerramentoTentativa } from '../dominio/recuperacao-estoque.ts'
+import type { GrupoEstoque, OperacaoEstoque } from '../dominio/vendas-estoque.ts'
 
 /**
  * A linha de cliente como fica na base: o tipo do domínio mais o carimbo do último-que-escreve
@@ -72,6 +76,28 @@ export const NOME_DO_BANCO = 'controle-fiado'
 /** As tabelas que sobem para a nuvem. A fila não sobe: é só deste aparelho. */
 export type TabelaSincronizada = 'clientes' | 'lancamentos'
 
+/** F2 usa a mesma FIFO; seu transporte conjunto entra em E-21, nunca pela rota financeira F1. */
+export type TabelaDaFila = TabelaSincronizada | 'categorias' | 'produtos' | 'operacoes' | 'encerramentos'
+
+/** Cadastro completo sujeito a LWW por registro, separado da referência derivada de compras. */
+export type ProdutoLocal = Produto & { readonly atualizadoEm: string }
+
+/** Ponteiro à evidência vigente: id/revisão também podem existir com outro conteúdo aceito (Q47A). */
+export type OperacaoLocal = OperacaoEstoque & { readonly versaoId: Id }
+
+/** Fotografia histórica imutável do conteúdo; aceite/recusa se referem a esta versão (Q37/47A). */
+export type VersaoEstoque = {
+  readonly id: Id
+  readonly operacaoId: Id
+  readonly grupo: GrupoEstoque
+  readonly aceita?: boolean
+  readonly problema?: Problema
+  readonly legadoId?: Id
+}
+
+/** Máximo lógico persistido; bigint é valor, nunca chave de índice (Q42, D-022). */
+export type RelogioEstoque = { readonly chave: 'cadastro'; readonly ultimo: bigint }
+
 /**
  * Um item da fila de sincronização: "a linha `registroId` de `tabela` precisa subir".
  * Há no máximo um item pendente por registro (`repositorio.ts`). `criadoEm` é informativo —
@@ -83,7 +109,7 @@ export type TabelaSincronizada = 'clientes' | 'lancamentos'
 export type ItemDaFila = {
   /** Autoincremento local: a ordem de entrada é a ordem de envio. */
   readonly ordem: number
-  readonly tabela: TabelaSincronizada
+  readonly tabela: TabelaDaFila
   readonly registroId: Id
   /** Instante em que entrou na fila, ISO 8601. */
   readonly criadoEm: string
@@ -129,6 +155,18 @@ export const ESQUEMA_V2 = {
   sincronizacao: 'chave',
 } as const
 
+/** Versão aditiva de E-19: nenhuma linha F1 é convertida ou reinterpretada. */
+export const ESQUEMA_V3 = {
+  ...ESQUEMA_V2,
+  categorias: 'id',
+  produtos: 'id, categoriaId',
+  operacoes: 'id',
+  movimentos: '[id+revisao], produtoId, operacaoId',
+  versoesEstoque: 'id, operacaoId',
+  encerramentos: 'id',
+  relogioEstoque: 'chave',
+} as const
+
 /**
  * A base local. `dependencias` existe para os testes injetarem um IndexedDB de mentira
  * isolado por teste (`fake-indexeddb`); em produção ninguém passa nada e o Dexie usa o do
@@ -140,14 +178,29 @@ export class BancoLocal extends Dexie {
   readonly lancamentos: Table<Lancamento, Id, Lancamento>
   readonly fila: Table<ItemDaFila, number, NovoItemDaFila>
   readonly sincronizacao: Table<CursorDeDownload, TabelaSincronizada, CursorDeDownload>
+  readonly categorias: Table<Categoria, Id, Categoria>
+  readonly produtos: Table<ProdutoLocal, Id, ProdutoLocal>
+  readonly operacoes: Table<OperacaoLocal, Id, OperacaoLocal>
+  readonly movimentos: Table<MovimentoEstoque, [Id, number], MovimentoEstoque>
+  readonly versoesEstoque: Table<VersaoEstoque, Id, VersaoEstoque>
+  readonly encerramentos: Table<EncerramentoTentativa, Id, EncerramentoTentativa>
+  readonly relogioEstoque: Table<RelogioEstoque, string, RelogioEstoque>
 
   constructor(nome: string = NOME_DO_BANCO, dependencias?: DexieOptions) {
     super(nome, dependencias)
     this.version(1).stores(ESQUEMA_V1)
     this.version(2).stores(ESQUEMA_V2)
+    this.version(3).stores(ESQUEMA_V3)
     this.clientes = this.table('clientes')
     this.lancamentos = this.table('lancamentos')
     this.fila = this.table('fila')
     this.sincronizacao = this.table('sincronizacao')
+    this.categorias = this.table('categorias')
+    this.produtos = this.table('produtos')
+    this.operacoes = this.table('operacoes')
+    this.movimentos = this.table('movimentos')
+    this.versoesEstoque = this.table('versoesEstoque')
+    this.encerramentos = this.table('encerramentos')
+    this.relogioEstoque = this.table('relogioEstoque')
   }
 }
