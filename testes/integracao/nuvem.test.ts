@@ -623,10 +623,12 @@ describe.skipIf(!LIGADA)('a nuvem recusa o que o app não pode gravar (E-06, RI-
       })
     })
 
-    test('a 0002 sozinha: reverter tira as colunas e o gatilho e deixa a 0001 de pé; aplicar devolve', async () => {
+    test('a 0002 após reverter as posteriores: tira colunas/gatilho e deixa a 0001 de pé; aplicar devolve', async () => {
       const segunda = migracoes.find((migracao) => migracao.nome.startsWith('0002_'))
       if (segunda === undefined) throw new Error('sem 0002')
       await numaTransacao(async (tx) => {
+        // D-041: desfazer dependências em ordem inversa, como o runner. F2 também usa o LWW.
+        for (const posterior of migracoes.filter((m) => m.nome > segunda.nome).reverse()) await tx.unsafe(posterior.reverter)
         await tx.unsafe(segunda.reverter)
         const [colunas] = await tx<{ n: number }[]>`select count(*)::int as n from information_schema.columns
           where table_schema = 'public' and table_name = 'clientes' and column_name in ('atualizado_em', 'recebido_em')`
