@@ -23,7 +23,8 @@
  * entra como argumento onde importa.
  */
 
-import { somar, type Centavos } from './dinheiro.ts'
+import { multiplicar, somar, type Centavos } from './dinheiro.ts'
+import { quantidadeValida } from './regras-estoque.ts'
 
 /** Identidade de um registro. Gerada fora do domínio, no dispositivo (UUIDv7, D-029, E-05). */
 export type Id = string
@@ -49,10 +50,14 @@ export type Cliente = {
   readonly desativadoEm?: Dia
 }
 
-/** Um item da venda: descrição livre e preço, e só isso em F1 (D-011). Sem produto, sem quantidade. */
+/** Item F1 permanece válido. Em F2, preco continua sendo o total da linha que F1 soma (D-057). */
 export type ItemVenda = {
   readonly descricao: string
   readonly preco: Centavos
+  readonly id?: Id
+  readonly produtoId?: Id
+  readonly quantidade?: number
+  readonly precoUnitario?: Centavos
 }
 
 /**
@@ -392,6 +397,16 @@ function motivoDasParcelas(lista: readonly Parcela[], ids: Set<Id>): Motivo | nu
 function motivoDaVenda(venda: Venda): Motivo | null {
   if (venda.itens.length === 0) return 'sem-itens'
   if (venda.itens.some((item) => item.preco < 0n)) return 'preco-negativo'
+  const idsDosItens = new Set<Id>()
+  for (const item of venda.itens) {
+    if (item.id === undefined && item.produtoId === undefined && item.quantidade === undefined && item.precoUnitario === undefined) continue
+    if (!item.id || item.quantidade === undefined || !quantidadeValida(item.quantidade, 1) ||
+      typeof item.precoUnitario !== 'bigint' || item.precoUnitario < 0n ||
+      item.preco !== multiplicar(item.precoUnitario, item.quantidade) || item.produtoId === '') return 'valor-invalido'
+    // O id pode reaparecer em vendas históricas relacionadas, mas não duas vezes nesta ocorrência.
+    if (idsDosItens.has(item.id)) return 'id-repetido'
+    idsDosItens.add(item.id)
+  }
   if (venda.desconto < 0n || venda.desconto > somar(venda.itens.map((item) => item.preco))) {
     return 'desconto-invalido'
   }
