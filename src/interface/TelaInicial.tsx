@@ -8,6 +8,7 @@ import { PALAVRAS_DA_COBRANCA } from './palavras-da-cobranca.ts'
 import { PALAVRAS } from './palavras-da-ficha.ts'
 import { PALAVRAS_DA_VENDA } from './palavras-da-venda.ts'
 import { BotaoEntrar } from './TelaEntrar.tsx'
+import { PALAVRAS_DOS_PRODUTOS } from './palavras-dos-produtos.ts'
 
 /**
  * A tela inicial (E-09): a lista de fichinhas com busca — quem deve e quanto (RF-01, RF-10 em
@@ -31,6 +32,7 @@ export function TelaInicial({
   aoVender,
   aoVerDevedoras,
   aoEntrar,
+  aoVerProdutos,
 }: {
   busca: string
   aoBuscar: (texto: string) => void
@@ -39,6 +41,7 @@ export function TelaInicial({
   aoVender: () => void
   aoVerDevedoras: () => void
   aoEntrar: () => void
+  aoVerProdutos: () => void
 }) {
   return (
     <main className="tela">
@@ -52,6 +55,9 @@ export function TelaInicial({
         </div>
         <IndicadorDeEnvio />
         <BotaoEntrar aoTocar={aoEntrar} />
+        <button type="button" className="min-h-11 border-0 bg-transparent px-1 text-acento" onClick={aoVerProdutos}>
+          {PALAVRAS_DOS_PRODUTOS.titulo} <span aria-hidden="true">&rsaquo;</span>
+        </button>
       </header>
 
       <ListaDeFichas busca={busca} aoBuscar={aoBuscar} aoAbrir={aoAbrirFicha} chave="inicio" comDesativadas />

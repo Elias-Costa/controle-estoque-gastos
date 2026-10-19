@@ -27,6 +27,14 @@ export type PrepararGrupoLocal = (estado: EstadoLocalEstoque) => ResultadoEstoqu
 /** Fotografia durável de envio; uma resposta nunca confirma a edição feita depois dela. */
 export type EnvioEstoque = { readonly item: ItemDaFila; readonly versao: VersaoEstoque; readonly evidencias: readonly MovimentoEstoque[] }
 
+/** Retrato local consistente para consulta/cadastro; não leva originais de foto para a lista. */
+export type CatalogoProdutos = {
+  readonly categorias: readonly Categoria[]
+  readonly produtos: readonly Produto[]
+  readonly movimentos: readonly MovimentoEstoque[]
+  readonly miniaturas: readonly { readonly fotoId: Id; readonly binario: Uint8Array }[]
+}
+
 /** Base local de F2. Os métodos de transporte só registram resultados; não fazem rede. */
 export function criarRepositorioEstoque(banco: BancoLocal, agora: () => string = () => new Date().toISOString(),
   aoEnfileirar: () => void = () => undefined) {
@@ -325,7 +333,20 @@ export function criarRepositorioEstoque(banco: BancoLocal, agora: () => string =
     })
   }
 
-  return { executar, cadastrarCategoria, salvarProduto, capturarEnvio, responderEnvio, encerrar, registrarRecusaLegada,
+  async function lerCatalogo(): Promise<CatalogoProdutos> {
+    return banco.transaction('r', banco.categorias, banco.produtos, banco.movimentos, banco.fotos, async () => {
+      const produtos = await banco.produtos.toArray()
+      const miniaturas: { fotoId: Id; binario: Uint8Array }[] = []
+      // Uma foto por vez: originais pendentes não ficam retidos no retrato de 400 produtos.
+      for (const fotoId of new Set(produtos.flatMap((produto) => produto.fotoId ? [produto.fotoId] : []))) {
+        const foto = await banco.fotos.get(fotoId)
+        if (foto?.miniatura) miniaturas.push({ fotoId, binario: foto.miniatura })
+      }
+      return { produtos, miniaturas, categorias: await banco.categorias.toArray(), movimentos: await banco.movimentos.toArray() }
+    })
+  }
+
+  return { executar, cadastrarCategoria, salvarProduto, capturarEnvio, responderEnvio, encerrar, registrarRecusaLegada, lerCatalogo,
     listarCategorias: () => banco.categorias.toArray(), listarProdutos: () => banco.produtos.toArray(),
     lerEstado: () => banco.transaction('r', tabelas, lerEstado) }
 }

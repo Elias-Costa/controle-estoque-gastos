@@ -9,9 +9,12 @@ import { emReais } from '../dominio/dinheiro.ts'
  * Sem dígito nenhum devolve `''` — e `''` não é R$ 0,00: é "nada digitado" (`lerDinheiro`
  * devolve `null`, a guarda `sem-valor` continua). O `0,00` que ela vê é o placeholder.
  * Zeros à esquerda somem (`0052` → `0,52`). Nada aqui passa por `number` (EL-03).
+ * `permitirZero` distingue o zero digitado do vazio no produto (RF-11/D-055).
  */
-export function aplicarMascara(texto: string): string {
-  const digitos = texto.replace(/\D/g, '').replace(/^0+/, '')
-  if (digitos === '') return ''
-  return emReais(BigInt(digitos)).replace(/^R\$ /, '')
+export function aplicarMascara(texto: string, permitirZero = false): string {
+  const digitados = texto.replace(/\D/g, '')
+  const digitos = digitados.replace(/^0+/, '')
+  // RF-11/D-055: nos campos opcionais do produto, zero digitado é distinto de nada informado.
+  if (digitos === '' && (!permitirZero || digitados === '')) return ''
+  return emReais(BigInt(digitos || '0')).replace(/^R\$ /, '')
 }

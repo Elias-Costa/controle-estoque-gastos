@@ -10,6 +10,7 @@ import { criarItemVendido, prepararCancelamento, prepararCorrecaoVenda, preparar
 import { uuidv7 } from './identidade.ts'
 import type { ParcelaNova } from './operacoes.ts'
 import type { EstadoLocalEstoque, RepositorioEstoque } from './repositorio-estoque.ts'
+import type { FotoPreparada } from './tipos-fotos.ts'
 
 /** Dados físicos do fato; somente ids, revisões e causalidade são acrescentados pelo sistema. */
 export type EntradaMovimentoLocal = { readonly produtoId: Id; readonly data: Dia } & (
@@ -174,7 +175,7 @@ export function criarOperacoesEstoque(repositorio: RepositorioEstoque) {
   }
 
   return { cadastrarCategoria: repositorio.cadastrarCategoria,
-    cadastrarProduto: (entrada: Omit<Produto, 'id'>) => repositorio.salvarProduto({ ...entrada, id: uuidv7() }),
+    cadastrarProduto: (entrada: Omit<Produto, 'id'>, foto?: FotoPreparada) => repositorio.salvarProduto({ ...entrada, id: uuidv7() }, foto),
     alterarProduto: repositorio.salvarProduto, registrarMovimento, lancarVenda, entregar, corrigirRegistroMovimento, corrigirVenda,
     cancelarVenda: (vendaId: Id, data: Dia, retornos: readonly { readonly itemId: Id; readonly quantidade: number }[]) => retornoOuCancelamento(vendaId, data, retornos, true),
     registrarRetorno: (vendaId: Id, data: Dia, retornos: readonly { readonly itemId: Id; readonly quantidade: number }[]) => retornoOuCancelamento(vendaId, data, retornos, false) }

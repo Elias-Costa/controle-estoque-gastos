@@ -14,6 +14,8 @@ import { TelaRecebimento } from './TelaRecebimento.tsx'
 import { TelaSaldoAnterior } from './TelaSaldoAnterior.tsx'
 import { TelaVenda } from './TelaVenda.tsx'
 import { TelaVendido } from './TelaVendido.tsx'
+import { TelaProdutos } from './tela-produtos.tsx'
+import { TelaProduto } from './tela-produto.tsx'
 
 /**
  * Onde ela está. Sem roteador e sem URL: uma mão, o "‹" do topo (como o protótipo). A venda
@@ -30,6 +32,8 @@ import { TelaVendido } from './TelaVendido.tsx'
  */
 type Rota =
   | { readonly tela: 'inicio' }
+  | { readonly tela: 'produtos' }
+  | { readonly tela: 'produto'; readonly produtoId?: Id }
   | { readonly tela: 'entrar' }
   | { readonly tela: 'devedoras' }
   | { readonly tela: 'ficha'; readonly clienteId: Id; readonly origem?: 'devedoras' }
@@ -74,8 +78,13 @@ export function Aplicativo() {
           aoVender={() => setRota({ tela: 'para-quem' })}
           aoVerDevedoras={() => setRota({ tela: 'devedoras' })}
           aoEntrar={() => setRota({ tela: 'entrar' })}
+          aoVerProdutos={() => setRota({ tela: 'produtos' })}
         />
       )
+    case 'produtos':
+      return <TelaProdutos aoVoltar={irParaInicio} aoNovo={() => setRota({ tela: 'produto' })} aoAbrir={(produtoId) => setRota({ tela: 'produto', produtoId })} />
+    case 'produto':
+      return <TelaProduto key={rota.produtoId ?? 'novo'} produtoId={rota.produtoId} aoVoltar={() => setRota({ tela: 'produtos' })} aoSalvar={() => setRota({ tela: 'produtos' })} />
     case 'entrar':
       return <TelaEntrar aoVoltar={irParaInicio} aoEntrar={irParaInicio} />
     case 'devedoras':
