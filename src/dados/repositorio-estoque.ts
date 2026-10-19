@@ -314,6 +314,39 @@ export function criarRepositorioEstoque(banco: BancoLocal, agora: () => string =
     return resultado
   }
 
+  async function listarRecusas() {
+    return banco.transaction('r', tabelas, async () => {
+      const versoes = await banco.versoesEstoque.toArray(), encerradas = await banco.encerramentos.toArray()
+      const recusas: { id: Id; versao: VersaoEstoque | undefined; legadoId?: Id }[] = versoes.filter((v) => v.problema && !v.aceita && !encerradas.some((e) =>
+        conteudoDoEfeito(e.evidencia.grupo) === conteudoDoEfeito(v.grupo))).map((v) => ({ id: v.id, versao: v, legadoId: v.legadoId }))
+      const lancamentos = await banco.lancamentos.toArray()
+      for (const fila of await banco.fila.toArray()) {
+        if (!fila.problema || fila.tabela !== 'lancamentos' || versoes.some((v) => v.legadoId === fila.registroId)) continue
+        const estorno = lancamentos.find((l) => l.id === fila.registroId)
+        if (estorno?.tipo !== 'estorno') continue
+        const venda = lancamentos.find((l) => l.id === estorno.estornaId)
+        if (venda?.tipo === 'venda' && venda.itens.some((i) => i.id && i.quantidade !== undefined)) {
+          recusas.push({ id: estorno.id, versao: undefined, legadoId: estorno.id })
+        }
+      }
+      return recusas
+    })
+  }
+
+  async function lerConferencia(versaoId: Id) {
+    return banco.transaction('r', tabelas, async () => {
+      const versao = await banco.versoesEstoque.get(versaoId)
+      if (!versao?.problema || versao.aceita) return undefined
+      const estado = await lerEstado(), versoes = await banco.versoesEstoque.toArray()
+      const encerramentos = await banco.encerramentos.toArray()
+      const aceito = estadoAceito(estado, versoes)
+      const resolucoes = encerramentos.map((e) => ({ ...e, tentativa: identidadeDaTentativa(e.evidencia.grupo) }))
+      const sem = efeitosAposEncerramentos(aceito, estado.grupos.filter((g) => conteudoDoEfeito(g) !== conteudoDoEfeito(versao.grupo)), resolucoes)
+      return { versao, estado, aceito, semTentativa: { ...estado, ...sem, grupos: [...aceito.operacoes, ...sem.pendentes] },
+        encerrada: encerramentos.some((e) => conteudoDoEfeito(e.evidencia.grupo) === conteudoDoEfeito(versao.grupo)) }
+    })
+  }
+
   async function registrarRecusaLegada(lancamentoId: Id): Promise<ResultadoEstoque<VersaoEstoque>> {
     return banco.transaction('rw', tabelas, async () => {
       const existentes = await banco.versoesEstoque.toArray()
@@ -346,7 +379,7 @@ export function criarRepositorioEstoque(banco: BancoLocal, agora: () => string =
     })
   }
 
-  return { executar, cadastrarCategoria, salvarProduto, capturarEnvio, responderEnvio, encerrar, registrarRecusaLegada, lerCatalogo,
+  return { executar, cadastrarCategoria, salvarProduto, capturarEnvio, responderEnvio, encerrar, registrarRecusaLegada, lerCatalogo, listarRecusas, lerConferencia,
     listarCategorias: () => banco.categorias.toArray(), listarProdutos: () => banco.produtos.toArray(),
     lerEstado: () => banco.transaction('r', tabelas, lerEstado) }
 }

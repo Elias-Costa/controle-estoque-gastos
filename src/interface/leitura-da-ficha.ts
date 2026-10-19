@@ -196,7 +196,7 @@ export function linhasDaFicha(ficha: Ficha, hoje: Dia): LinhaDaFicha[] {
     estornado,
     desfeita: estornado || lancamento.tipo === 'estorno',
     ...((lancamento.tipo === 'venda' || lancamento.tipo === 'recebimento' || lancamento.tipo === 'saldo-anterior') &&
-      !estornado && { lancamentoId: lancamento.id }),
+      (!estornado || lancamento.tipo === 'venda' && lancamento.itens.some((i) => i.id && i.produtoId)) && { lancamentoId: lancamento.id }),
   }))
 
   // Ordenação estável: no mesmo dia, parcela antes de evento — como o protótipo.

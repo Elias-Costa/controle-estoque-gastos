@@ -13,7 +13,7 @@ export type VendaEstoque = (Omit<VendaFiado, 'itens'> | Omit<VendaAVista, 'itens
 /** Manifesto do conjunto a gravar em E-19; valores permanecem nos registros próprios (Q37). */
 export type OperacaoEstoque = ReferenciaEfeito & {
   readonly formato: 1
-  readonly tipo: 'venda' | 'entrega' | 'cancelamento' | 'retorno' | 'correcao' | 'movimento'
+  readonly tipo: 'venda' | 'entrega' | 'cancelamento' | 'retorno' | 'correcao' | 'movimento' | 'troca'
   readonly lancamentos: readonly ReferenciaEfeito[]
   readonly movimentos: readonly ReferenciaEfeito[]
   readonly dependencias: readonly ReferenciaEfeito[]
@@ -27,6 +27,11 @@ export type GrupoEstoque = {
 }
 /** Identidades/revisão geradas e lidas fora do domínio, antes de qualquer rede. */
 export type IdentidadeOperacao = { readonly id: Id; readonly revisao: number; readonly dependencias: readonly ReferenciaEfeito[] }
+
+/** Identifica o formato F2 sem converter descrições antigas em produtos (D-011/057). */
+export function ehVendaEstoque(venda: VendaFiado | VendaAVista): venda is VendaEstoque {
+  return venda.itens.every((item) => item.id !== undefined && item.quantidade !== undefined && item.precoUnitario !== undefined)
+}
 
 function grupo(identidade: IdentidadeOperacao, tipo: OperacaoEstoque['tipo'], lancamentos: readonly Lancamento[], movimentos: readonly MovimentoEstoque[], alvo?: ReferenciaEfeito): ResultadoEstoque<GrupoEstoque> {
   if (!identidade.id || !quantidadeValida(identidade.revisao, 1)) return { ok: false, motivo: 'revisao-invalida' }
@@ -110,7 +115,8 @@ export function situacaoDoItem(item: ItemVendido, historico: readonly MovimentoE
   }
   if (!quantidadeValida(entregue) || !quantidadeValida(retornado)) return { ok: false, motivo: 'quantidade-invalida' }
   if (retornado > entregue) return { ok: false, motivo: 'excede-retorno' }
-  const restante = item.quantidade - entregue
+  // D-059: as unidades devolvidas não continuam contando como mercadoria com a cliente.
+  const restante = item.quantidade - (entregue - retornado)
   return { ok: true, valor: { entregue, retornado, pendente: cancelado || restante < 0 ? 0 : restante,
     excesso: restante < 0 ? -restante : 0, podeRetornar: entregue - retornado } }
 }

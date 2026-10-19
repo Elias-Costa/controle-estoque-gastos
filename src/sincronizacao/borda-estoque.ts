@@ -91,7 +91,7 @@ export function grupoDaNuvem(valor: unknown): GrupoEstoque {
   const g = objeto(valor), op = objeto(g['operacao'])
   if (op['formato'] !== 1) return erro('formato')
   const grupo: GrupoEstoque = {
-    operacao: { ...referencia(op), formato: 1, tipo: escolha(op['tipo'], ['venda', 'entrega', 'cancelamento', 'retorno', 'correcao', 'movimento']),
+    operacao: { ...referencia(op), formato: 1, tipo: escolha(op['tipo'], ['venda', 'entrega', 'cancelamento', 'retorno', 'correcao', 'movimento', 'troca']),
       lancamentos: lista(op['lancamentos'], referencia), movimentos: lista(op['movimentos'], referencia),
       dependencias: lista(op['dependencias'], referencia), ...opcional('alvo', op['alvo'], referencia) },
     lancamentos: lista(g['lancamentos'], (v) => {

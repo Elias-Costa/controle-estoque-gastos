@@ -4,6 +4,7 @@ import { baseConhecida, chaveDoEfeito, corrigirMovimento, novaContagem,
   type AnulacaoEstoque, type MovimentoEstoque, type ReferenciaEfeito, type SaidaEstoque } from '../dominio/estoque.ts'
 import type { Produto } from '../dominio/produtos.ts'
 import type { ResultadoEstoque } from '../dominio/regras-estoque.ts'
+import { prepararTrocaVenda, type DevolucaoItem } from '../dominio/trocas-venda.ts'
 import { criarItemVendido, prepararCancelamento, prepararCorrecaoVenda, prepararEntrega, prepararMovimentosEstoque,
   prepararRetorno, prepararVendaEstoque, revisarGrupoPendente, type CorrecaoDeEntrega,
   type IdentidadeOperacao, type ItemVendido, type VendaEstoque } from '../dominio/vendas-estoque.ts'
@@ -154,7 +155,10 @@ export function criarOperacoesEstoque(repositorio: RepositorioEstoque) {
       if (!original.ok) return original
       const ref = revisaoVenda(estado, vendaId)
       const grupo = estado.grupos.find((item) => item.operacao.lancamentos.some((item) => item.id === vendaId))
-      const pendente = grupo && estado.fila.some((item) => item.tabela === 'operacoes' && item.registroId === grupo.operacao.id)
+      // Um fato posterior de troca, ou uma entrega de outro grupo, não é reescrito como parte da venda original.
+      const pendente = grupo && grupo.operacao.tipo !== 'troca' &&
+        (correcao.entregas ?? []).every((m) => grupo.movimentos.some((anterior) => anterior.id === m.alvo.id)) &&
+        estado.fila.some((item) => item.tabela === 'operacoes' && item.registroId === grupo.operacao.id)
       const nova = montarVenda(estado, entrada, pendente ? vendaId : uuidv7(), true, !!pendente)
       if (!nova.ok) return nova
       const operacao = identidade(estado, [], pendente ? [] : [ref], pendente ? grupo.operacao.id : uuidv7(), pendente ? grupo.operacao.revisao + 1 : 1)
@@ -165,7 +169,8 @@ export function criarOperacoesEstoque(repositorio: RepositorioEstoque) {
         entregas.push({ alvo: mudanca.alvo,
           substituto: { ...anterior, id: pendente ? anterior.id : uuidv7(), operacaoId: operacao.id,
             revisao: pendente ? anterior.revisao + 1 : 1, produtoId: mudanca.produtoId, quantidade: mudanca.quantidade,
-            custoUnitario: mudanca.custoUnitario, conhecidos: baseConhecida(estado.movimentos, mudanca.produtoId) },
+            custoUnitario: mudanca.produtoId === anterior.produtoId ? anterior.custoUnitario : mudanca.custoUnitario,
+            conhecidos: baseConhecida(estado.movimentos, mudanca.produtoId) },
           anulacao: pendente ? undefined : { tipo: 'anulacao', id: uuidv7(), revisao: 1, operacaoId: operacao.id,
             produtoId: anterior.produtoId, data: correcao.data, alvo: mudanca.alvo, conhecidos: baseConhecida(estado.movimentos, anterior.produtoId) } })
       }
@@ -174,9 +179,30 @@ export function criarOperacoesEstoque(repositorio: RepositorioEstoque) {
     })
   }
 
+  function trocarDevolver(vendaId: Id, data: Dia, devolucoes: readonly DevolucaoItem[], novos: readonly ItemVendaLocal[] = []) {
+    return repositorio.executar((estado) => {
+      const original = vendaAtual(estado, vendaId)
+      if (!original.ok) return original
+      const referencia = revisaoVenda(estado, vendaId)
+      const itens: { item: ItemVendido; entregue: number; movimentoId: Id }[] = []
+      for (const entrada of novos) {
+        const produto = estado.produtos.find((p) => p.id === entrada.produtoId)
+        if (entrada.produtoId && !produto) return { ok: false, motivo: 'produto-inexistente' }
+        const item = criarItemVendido({ ...entrada, id: uuidv7(), produto })
+        if (!item.ok) return item
+        itens.push({ item: item.valor, entregue: entrada.entregue, movimentoId: uuidv7() })
+      }
+      return prepararTrocaVenda(estado.lancamentos, estado.movimentos, original.valor, estado.produtos, {
+        operacao: identidade(estado, [...original.valor.itens, ...itens.map((i) => i.item)].flatMap((i) => i.produtoId ? [i.produtoId] : []), [referencia]),
+        data, revisaoVenda: referencia.revisao, estornoId: uuidv7(), vendaId: uuidv7(),
+        parcelaIds: original.valor.pagamento === 'fiado' ? original.valor.parcelas.map(() => uuidv7()) : [],
+        devolucoes: devolucoes.map((d) => ({ ...d, movimentoId: uuidv7() })), novos: itens })
+    })
+  }
+
   return { cadastrarCategoria: repositorio.cadastrarCategoria,
     cadastrarProduto: (entrada: Omit<Produto, 'id'>, foto?: FotoPreparada) => repositorio.salvarProduto({ ...entrada, id: uuidv7() }, foto),
-    alterarProduto: repositorio.salvarProduto, registrarMovimento, lancarVenda, entregar, corrigirRegistroMovimento, corrigirVenda,
+    alterarProduto: repositorio.salvarProduto, registrarMovimento, lancarVenda, entregar, corrigirRegistroMovimento, corrigirVenda, trocarDevolver,
     cancelarVenda: (vendaId: Id, data: Dia, retornos: readonly { readonly itemId: Id; readonly quantidade: number }[]) => retornoOuCancelamento(vendaId, data, retornos, true),
     registrarRetorno: (vendaId: Id, data: Dia, retornos: readonly { readonly itemId: Id; readonly quantidade: number }[]) => retornoOuCancelamento(vendaId, data, retornos, false) }
 }

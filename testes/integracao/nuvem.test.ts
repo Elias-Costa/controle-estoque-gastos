@@ -89,6 +89,18 @@ async function recusa(tx: TransactionSQL, fn: (sp: SQL) => Promise<unknown>): Pr
   throw new Error('o banco aceitou o que deveria recusar')
 }
 
+/** Com trocas gravadas a 0006 recusa downgrade; provar preservação em vez de apagar o ensaio acumulado. */
+async function provarGuardaDeTrocas(tx: TransactionSQL): Promise<boolean> {
+  const [antes] = await tx<{ quantidade: string }[]>`select count(*)::text quantidade from public.operacoes_estoque where tipo='troca'`
+  if (!antes || antes.quantidade === '0') return false
+  const migracao = migracoes.find((m) => m.nome === '0006_trocas')
+  if (!migracao) throw new Error('sem migration de trocas')
+  const erro = await recusa(tx, (sp) => sp.unsafe(migracao.reverter))
+  expect(erro.code).toBe('P0001')
+  expect(await tx<{ quantidade: string }[]>`select count(*)::text quantidade from public.operacoes_estoque where tipo='troca'`).toEqual([antes])
+  return true
+}
+
 /** Passa a agir como uma conta do app, até o fim da transação (ou do savepoint). */
 async function assumir(tx: SQL, conta: string): Promise<void> {
   const claims = JSON.stringify({ sub: conta, role: 'authenticated' })
@@ -595,7 +607,7 @@ describe.skipIf(!LIGADA)('a nuvem recusa o que o app não pode gravar (E-06, RI-
   })
 
   describe('reversibilidade (E-06): o reverter desfaz, a migration refaz', () => {
-    test('reverter todas, da última à primeira → tabelas somem → aplicar todas → voltam, numa transação desfeita no fim', async () => {
+    test('sem trocas, reverte/refaz todas; com histórico de trocas, recusa downgrade e preserva dados', async () => {
       if (migracoes.length === 0) throw new Error('sem migration')
       const existe = async (tx: SQL, tabela: string): Promise<boolean> => {
         const [linha] = await tx<{ existe: boolean }[]>`select to_regclass(${`public.${tabela}`}) is not null as existe`
@@ -608,6 +620,7 @@ describe.skipIf(!LIGADA)('a nuvem recusa o que o app não pode gravar (E-06, RI-
         return linha?.existe === true
       }
       await numaTransacao(async (tx) => {
+        if (await provarGuardaDeTrocas(tx)) return
         expect(await existe(tx, 'lancamentos')).toBe(true)
         expect(await coluna(tx, 'clientes', 'atualizado_em')).toBe(true)
         // Cada reverter desfaz só a sua migration: depois da 0002, a 0001 ainda está lá.
@@ -623,10 +636,11 @@ describe.skipIf(!LIGADA)('a nuvem recusa o que o app não pode gravar (E-06, RI-
       })
     })
 
-    test('a 0002 após reverter as posteriores: tira colunas/gatilho e deixa a 0001 de pé; aplicar devolve', async () => {
+    test('a 0002 só reverte após dependências; histórico de trocas impede downgrade sem perda', async () => {
       const segunda = migracoes.find((migracao) => migracao.nome.startsWith('0002_'))
       if (segunda === undefined) throw new Error('sem 0002')
       await numaTransacao(async (tx) => {
+        if (await provarGuardaDeTrocas(tx)) return
         // D-041: desfazer dependências em ordem inversa, como o runner. F2 também usa o LWW.
         for (const posterior of migracoes.filter((m) => m.nome > segunda.nome).reverse()) await tx.unsafe(posterior.reverter)
         await tx.unsafe(segunda.reverter)

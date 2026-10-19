@@ -119,6 +119,68 @@ async function encerrar(tx: SQL, documento: Documento): Promise<Documento> {
 }
 
 describe.skipIf(!LIGADA)('estoque no Postgres: contrato E-20 sem passar pelo domínio', () => {
+  test('D-059: devolução parcial é atômica, mantém identidade/custo e reenvio não repete retorno', async () => {
+    await transacao(async (tx) => {
+      const { produtoId, clienteId } = await preparar(tx)
+      const original = venda(clienteId, produtoId, 3, 1)
+      await aceitar(tx, original)
+      const antiga = original.lancamentos[0], entrega = original.movimentos[0]
+      if (!antiga || !entrega || !Array.isArray(antiga['itens'])) throw new Error('amostra incompleta')
+      const itemOriginal = antiga['itens'][0]
+      const item = { ...itemOriginal, quantidade: 2, preco: '6000' }
+      const nova = { ...antiga, id: uuidv7(), itens: [item], parcelas: [{ id: uuidv7(), vencimento: DIA, valor: '6000' }] }
+      const id = uuidv7(), retorno: Documento = { ...entrega, id: uuidv7(), tipo: 'retorno', quantidade: 1, operacaoId: id }
+      delete retorno['custoUnitario']
+      const grupo = manifesto('troca', [{ id: uuidv7(), clienteId, data: DIA, tipo: 'estorno', estornaId: antiga['id'] }, nova],
+        [retorno], { alvo: { id: antiga['id'], revisao: 1 } }, id)
+      const desfez = grupo.lancamentos[0]
+      if (!desfez) throw new Error('sem estorno')
+      const violacoes: Grupo[] = [
+        { ...grupo, movimentos: [] },
+        { ...grupo, lancamentos: [desfez, { ...nova, desconto: '1', parcelas: [{ id: uuidv7(), vencimento: DIA, valor: '5999' }] }] },
+        { ...grupo, movimentos: [{ ...retorno, quantidade: 2 }] },
+        { ...grupo, movimentos: [retorno, { ...entrega, id: uuidv7(), operacaoId: id }] },
+        { ...grupo, lancamentos: [desfez, { ...nova, itens: [{ ...item, produtoId: uuidv7() }] }] },
+      ]
+      for (const violacao of violacoes) expect((await recusa(tx, (sp) => aceitar(sp, violacao))).startsWith('23')).toBe(true)
+      expect(await tx`select id from public.lancamentos where id=${nova.id}::uuid`).toHaveLength(0)
+      const posicao = await aceitar(tx, grupo)
+      expect(await aceitar(tx, grupo)).toBe(posicao)
+      expect(await tx`select id from public.movimentos_estoque where operacao_id=${id}::uuid`).toHaveLength(1)
+      const baixados = await baixar(tx)
+      expect(baixados.some((r) => JSON.stringify(r).includes(id))).toBe(true)
+      const concorrente = { ...grupo, operacao: { ...grupo.operacao, id: uuidv7() } }
+      expect((await recusa(tx, (sp) => aceitar(sp, concorrente))).startsWith('23')).toBe(true)
+    })
+  })
+
+  test('D-059: parcela paga impede devolução; novo item de troca exige custo e entrega coerentes', async () => {
+    await transacao(async (tx) => {
+      const { produtoId, categoriaId, clienteId } = await preparar(tx)
+      const novoProduto = await produto(tx, categoriaId, { custoManual: '700' })
+      const original = venda(clienteId, produtoId, 3, 1)
+      await aceitar(tx, original)
+      const antiga = original.lancamentos[0], entrega = original.movimentos[0]
+      if (!antiga || !entrega || !Array.isArray(antiga['itens'])) throw new Error('amostra incompleta')
+      const id = uuidv7(), novoItem = { id: uuidv7(), descricao: 'Novo', produtoId: novoProduto, quantidade: 1, precoUnitario: '4000', preco: '4000' }
+      const nova = { ...antiga, id: uuidv7(), itens: [{ ...antiga['itens'][0], quantidade: 2, preco: '6000' }, novoItem],
+        parcelas: [{ id: uuidv7(), vencimento: DIA, valor: '10000' }] }
+      const retorno: Documento = { ...entrega, id: uuidv7(), tipo: 'retorno', quantidade: 1, operacaoId: id }
+      delete retorno['custoUnitario']
+      const saida = { id: uuidv7(), revisao: 1, operacaoId: id, produtoId: novoProduto, itemId: novoItem.id, data: DIA,
+        tipo: 'entrega', quantidade: 1, custoUnitario: '700', conhecidos: [] }
+      const grupo = manifesto('troca', [{ id: uuidv7(), clienteId, data: DIA, tipo: 'estorno', estornaId: antiga['id'] }, nova],
+        [retorno, saida], { alvo: { id: antiga['id'], revisao: 1 } }, id)
+      expect(await recusa(tx, (sp) => aceitar(sp, { ...grupo, movimentos: [retorno, { ...saida, custoUnitario: '0' }] }), 'estoque_troca_custo')).toBe('23514')
+      expect(await recusa(tx, async (sp) => {
+        await sp`insert into public.lancamentos(id,cliente_id,data,tipo,valor,forma) values(${uuidv7()}::uuid,${clienteId}::uuid,${DIA}::date,'recebimento',1,'pix')`
+        await aceitar(sp, grupo)
+      }, 'estoque_troca_parcela_paga')).toBe('23514')
+      await aceitar(tx, grupo)
+      expect(await tx<Documento[]>`select custo_unitario::text from public.movimentos_estoque where id=${saida.id}::uuid`).toEqual([{ custo_unitario: '700' }])
+    })
+  })
+
   test('categorias offline iguais conservam ids/vínculos; produto exige categoria da conta; LWW inteiro', async () => {
     await transacao(async (tx) => {
       const c1 = await categoria(tx)

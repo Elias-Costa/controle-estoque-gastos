@@ -1,4 +1,4 @@
-import { repositorioEstoque } from '../dados/instancia.ts'
+import { repositorio, repositorioEstoque } from '../dados/instancia.ts'
 import { emReais, multiplicar } from '../dominio/dinheiro.ts'
 import { chaveDoEfeito, type MovimentoEstoque, type ReferenciaEfeito } from '../dominio/estoque.ts'
 import { Botao } from './Botao.tsx'
@@ -19,11 +19,12 @@ function detalhes(movimento: MovimentoEstoque): string {
 }
 
 /** Consulta de RF-12/25: posição relida após gravar, histórico e acesso à correção de D-013. */
-export function TelaEstoque({ produtoId, aoVoltar, aoCompra, aoInicial, aoCorrigir, aoCadastro }: {
+export function TelaEstoque({ produtoId, aoVoltar, aoCompra, aoInicial, aoCorrigir, aoCadastro, aoVenda }: {
   produtoId: string; aoVoltar: () => void; aoCompra: () => void; aoInicial: () => void
   aoCorrigir: (alvo: ReferenciaEfeito) => void; aoCadastro: () => void
+  aoVenda: (clienteId: string, vendaId: string) => void
 }) {
-  const leitura = useLeitura(async () => lerEstoque(await repositorioEstoque.lerEstado(), produtoId), produtoId)
+  const leitura = useLeitura(async () => ({ ...lerEstoque(await repositorioEstoque.lerEstado(), produtoId), clientes: await repositorio.listarClientes() }), produtoId)
   return <main className="tela">
     <Topo titulo={P.titulo} aoVoltar={aoVoltar} />
     <IndicadorDeEnvio />
@@ -31,10 +32,22 @@ export function TelaEstoque({ produtoId, aoVoltar, aoCompra, aoInicial, aoCorrig
       <h2 className="break-words">{leitura.valor.produto.nome}</h2>
       <section aria-label={P.fisico} className="rounded-xl border border-borda bg-papel p-4">
         <p className="m-0">{P.fisico}: <strong className="text-3xl" data-estoque-fisico>{leitura.valor.fisico}</strong></p>
+        <p className="my-1">Prometido: <strong data-estoque-prometido>{leitura.valor.prometido}</strong></p>
+        <p className="my-1">Disponível: <strong>{leitura.valor.disponivel}</strong>{leitura.valor.falta > 0 && ` · Faltam ${leitura.valor.falta}`}</p>
         <p className="mb-0">{P.custoAtual}: {leitura.valor.custo === undefined ? P.desconhecido : emReais(leitura.valor.custo)}</p>
       </section>
       {leitura.valor.contagensAfetadas && <p role="status" className="font-semibold text-atraso">{P.afetada}</p>}
       {leitura.valor.fisico < 0 && <p role="status" className="font-semibold text-atraso">{P.divergencia}</p>}
+      {leitura.valor.pendencias.length > 0 && <section aria-label="A entregar">
+        <h2>A entregar</h2>
+        {leitura.valor.pendencias.map((p) => {
+          const cliente = leitura.valor.clientes.find((c) => c.id === p.clienteId)
+          return <div key={p.itemId} className="my-2 border-b border-borda py-2">
+            <p>{cliente?.nome ?? 'Fichinha'} · {p.pendente} a entregar{p.excesso > 0 && ` · ${p.excesso} entregue(s) além da venda: conferir`}</p>
+            {cliente && !cliente.desativadoEm ? <Botao tipo="secundario" aoTocar={() => aoVenda(p.clienteId, p.vendaId)}>Ver venda de {cliente.nome}</Botao> : <p>Fichinha desativada</p>}
+          </div>
+        })}
+      </section>}
       <Botao tipo="secundario" className="mt-4" aoTocar={aoInicial}>{P.inicial}</Botao>
       <Botao tipo="secundario" className="mt-3" aoTocar={aoCadastro}>{P.cadastro}</Botao>
       <h2 className="mt-6">{P.historico}</h2>
