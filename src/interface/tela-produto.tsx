@@ -12,12 +12,13 @@ import { IndicadorDeEnvio } from './IndicadorDeEnvio.tsx'
 import { lerProdutos, rotuloDaCategoria, type LinhaProduto } from './leitura-de-produtos.ts'
 import { MiniaturaProduto } from './miniatura-produto.tsx'
 import { fraseDaGuardaDoProduto, PALAVRAS_DOS_PRODUTOS as P } from './palavras-dos-produtos.ts'
+import { PALAVRAS_DO_ESTOQUE } from './palavras-do-estoque.ts'
 import { conferirProduto, produtosParecidos, rascunhoDoProduto, type RascunhoDoProduto } from './rascunho-do-produto.ts'
 import { Topo } from './Topo.tsx'
 import { useLeitura } from './useLeitura.ts'
 
 /** Cadastro/edição lê a base antes de abrir o formulário; nenhuma leitura aguarda rede. */
-export function TelaProduto({ produtoId, aoVoltar, aoSalvar }: { produtoId?: string; aoVoltar: () => void; aoSalvar: () => void }) {
+export function TelaProduto({ produtoId, aoVoltar, aoSalvar, aoEstoque }: { produtoId?: string; aoVoltar: () => void; aoSalvar: () => void; aoEstoque: () => void }) {
   const leitura = useLeitura(async () => {
     const catalogo = await repositorioEstoque.lerCatalogo()
     const linhas = lerProdutos(catalogo)
@@ -25,12 +26,12 @@ export function TelaProduto({ produtoId, aoVoltar, aoSalvar }: { produtoId?: str
     return { catalogo, linhas }
   }, `produto-${produtoId ?? 'novo'}`)
   return leitura.estado === 'lido'
-    ? <FormularioProduto catalogo={leitura.valor.catalogo} linhas={leitura.valor.linhas} produtoId={produtoId} aoVoltar={aoVoltar} aoSalvar={aoSalvar} />
+    ? <FormularioProduto catalogo={leitura.valor.catalogo} linhas={leitura.valor.linhas} produtoId={produtoId} aoVoltar={aoVoltar} aoSalvar={aoSalvar} aoEstoque={aoEstoque} />
     : <main className="tela"><Topo titulo={produtoId ? P.editar : P.cadastro} aoVoltar={aoVoltar} /><p role="status">{leitura.estado === 'lendo' ? P.lendo : P.falhaLeitura}</p></main>
 }
 
-function FormularioProduto({ catalogo, linhas, produtoId, aoVoltar, aoSalvar }: {
-  catalogo: CatalogoProdutos; linhas: readonly LinhaProduto[]; produtoId?: string; aoVoltar: () => void; aoSalvar: () => void
+function FormularioProduto({ catalogo, linhas, produtoId, aoVoltar, aoSalvar, aoEstoque }: {
+  catalogo: CatalogoProdutos; linhas: readonly LinhaProduto[]; produtoId?: string; aoVoltar: () => void; aoSalvar: () => void; aoEstoque: () => void
 }) {
   const linha = linhas.find((item) => item.produto.id === produtoId)
   // Uma releitura após sincronização atualiza avisos/custo sem apagar o que ela está digitando.
@@ -122,6 +123,7 @@ function FormularioProduto({ catalogo, linhas, produtoId, aoVoltar, aoSalvar }: 
   return <main className="tela">
     <Topo titulo={original ? P.editar : P.cadastro} aoVoltar={() => { if (!trava.current) aoVoltar() }} />
     <IndicadorDeEnvio />
+    {original && <Botao tipo="secundario" className="mt-3" desabilitado={ocupado} aoTocar={aoEstoque}>{PALAVRAS_DO_ESTOQUE.ver}</Botao>}
     <p className="text-sm text-suave">{P.opcionais}</p>
     <fieldset className="min-w-0 border-0 p-0" disabled={ocupado}>
       <Campo rotulo={P.nome} valor={rascunho.nome} aoMudar={(nome) => mudar({ nome })} />

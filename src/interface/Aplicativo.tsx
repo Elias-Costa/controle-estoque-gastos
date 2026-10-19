@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import type { Centavos } from '../dominio/dinheiro.ts'
 import type { Dia, Id } from '../dominio/ficha.ts'
+import type { ReferenciaEfeito } from '../dominio/estoque.ts'
 import { TelaCadastro } from './TelaCadastro.tsx'
 import { TelaDadosDoCliente } from './TelaDadosDoCliente.tsx'
 import { TelaDevedoras } from './TelaDevedoras.tsx'
@@ -16,6 +17,8 @@ import { TelaVenda } from './TelaVenda.tsx'
 import { TelaVendido } from './TelaVendido.tsx'
 import { TelaProdutos } from './tela-produtos.tsx'
 import { TelaProduto } from './tela-produto.tsx'
+import { TelaEstoque } from './tela-estoque.tsx'
+import { TelaEntrada } from './tela-entrada.tsx'
 
 /**
  * Onde ela está. Sem roteador e sem URL: uma mão, o "‹" do topo (como o protótipo). A venda
@@ -33,7 +36,9 @@ import { TelaProduto } from './tela-produto.tsx'
 type Rota =
   | { readonly tela: 'inicio' }
   | { readonly tela: 'produtos' }
-  | { readonly tela: 'produto'; readonly produtoId?: Id }
+  | { readonly tela: 'produto'; readonly produtoId?: Id; readonly origem?: 'estoque' }
+  | { readonly tela: 'estoque'; readonly produtoId: Id }
+  | { readonly tela: 'entrada'; readonly produtoId: Id; readonly tipo: 'compra' | 'estoque-inicial'; readonly alvo?: ReferenciaEfeito }
   | { readonly tela: 'entrar' }
   | { readonly tela: 'devedoras' }
   | { readonly tela: 'ficha'; readonly clienteId: Id; readonly origem?: 'devedoras' }
@@ -83,8 +88,22 @@ export function Aplicativo() {
       )
     case 'produtos':
       return <TelaProdutos aoVoltar={irParaInicio} aoNovo={() => setRota({ tela: 'produto' })} aoAbrir={(produtoId) => setRota({ tela: 'produto', produtoId })} />
-    case 'produto':
-      return <TelaProduto key={rota.produtoId ?? 'novo'} produtoId={rota.produtoId} aoVoltar={() => setRota({ tela: 'produtos' })} aoSalvar={() => setRota({ tela: 'produtos' })} />
+    case 'produto': {
+      const { produtoId, origem } = rota
+      const voltar = () => setRota(origem === 'estoque' && produtoId ? { tela: 'estoque', produtoId } : { tela: 'produtos' })
+      return <TelaProduto key={produtoId ?? 'novo'} produtoId={produtoId} aoVoltar={voltar} aoSalvar={voltar} aoEstoque={() => { if (produtoId) setRota({ tela: 'estoque', produtoId }) }} />
+    }
+    case 'estoque': {
+      const { produtoId } = rota
+      return <TelaEstoque key={produtoId} produtoId={produtoId} aoVoltar={() => setRota({ tela: 'produtos' })}
+        aoCompra={() => setRota({ tela: 'entrada', produtoId, tipo: 'compra' })}
+        aoInicial={() => setRota({ tela: 'entrada', produtoId, tipo: 'estoque-inicial' })}
+        aoCorrigir={(alvo) => setRota({ tela: 'entrada', produtoId, tipo: 'compra', alvo })}
+        aoCadastro={() => setRota({ tela: 'produto', produtoId, origem: 'estoque' })} />
+    }
+    case 'entrada':
+      return <TelaEntrada key={`${rota.produtoId}/${rota.alvo?.id ?? rota.tipo}/${rota.alvo?.revisao ?? ''}`} produtoId={rota.produtoId} tipo={rota.tipo} alvo={rota.alvo}
+        aoVoltar={() => setRota({ tela: 'estoque', produtoId: rota.produtoId })} aoSalvar={(produtoId) => setRota({ tela: 'estoque', produtoId })} />
     case 'entrar':
       return <TelaEntrar aoVoltar={irParaInicio} aoEntrar={irParaInicio} />
     case 'devedoras':
