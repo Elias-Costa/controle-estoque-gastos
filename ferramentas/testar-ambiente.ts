@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { exigirDestinoDeTeste } from '../nuvem/ambiente-de-teste.ts'
 import { PROJETO_DE_HOMOLOGACAO } from '../nuvem/destinos-de-teste.ts'
+import { criarContaFicticia } from './conta-ficticia.ts'
 
 // D-050: o local não herda credenciais de produção, mesmo que o shell já as tenha carregado.
 const CAMPOS = ['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY', 'SUPABASE_DB_URL', 'SUPABASE_TESTE_EMAIL', 'SUPABASE_TESTE_SENHA']
@@ -127,10 +128,15 @@ async function principal(): Promise<void> {
   // Integração e navegador sempre recebem todas as migrations do mesmo runner, sem reset.
   await executar(['run', 'nuvem/migrar.ts'])
   if (acao === 'migrar') return
+  if (acao === 'integracao' || acao === 'navegador') {
+    process.env.SUPABASE_TESTE_EMAIL = await criarContaFicticia()
+    console.log('Conta fictícia exclusiva desta rodada; dados anteriores preservados.')
+  }
   await executar(['run', 'typecheck'])
   if (acao === 'integracao') {
     process.env.INTEGRACAO = '1'
-    await executar(['test', '--timeout', '60000', 'testes/integracao'])
+    await executar(['test', '--timeout', '60000', 'testes/integracao',
+      ...(process.env.TESTE_NOME ? ['--test-name-pattern', process.env.TESTE_NOME] : [])])
     return
   }
   process.env.VITE_LABORATORIO = '1'

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import Dexie, { type DexieOptions } from 'dexie'
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb'
-import { BancoLocal, ESQUEMA_V1, ESQUEMA_V2, ESQUEMA_V3, NOME_DO_BANCO } from '../src/dados/banco.ts'
+import { BancoLocal, ESQUEMA_V1, ESQUEMA_V2, ESQUEMA_V3, ESQUEMA_V4, NOME_DO_BANCO } from '../src/dados/banco.ts'
 import type { Cliente, VendaFiado } from '../src/dominio/ficha.ts'
 
 /**
@@ -27,6 +27,10 @@ const ESQUEMAS_PUBLICADOS: Readonly<Record<number, Readonly<Record<string, strin
   3: { clientes: 'id', lancamentos: 'id, clienteId', fila: '++ordem, registroId', sincronizacao: 'chave',
     categorias: 'id', produtos: 'id, categoriaId', operacoes: 'id', movimentos: '[id+revisao], produtoId, operacaoId',
     versoesEstoque: 'id, operacaoId', encerramentos: 'id', relogioEstoque: 'chave' },
+  4: { clientes: 'id', lancamentos: 'id, clienteId', fila: '++ordem, registroId', sincronizacao: 'chave',
+    categorias: 'id', produtos: 'id, categoriaId', operacoes: 'id', movimentos: '[id+revisao], produtoId, operacaoId',
+    versoesEstoque: 'id, operacaoId', encerramentos: 'id', relogioEstoque: 'chave', fotos: 'id, produtoId',
+    protecoesFotos: 'id, fotoId, copiaId', enviosProdutoFoto: 'id, produtoId', usosFotos: 'id, fotoId', estadoFotos: 'chave' },
 }
 
 /**
@@ -34,7 +38,7 @@ const ESQUEMAS_PUBLICADOS: Readonly<Record<number, Readonly<Record<string, strin
  * entra aqui (D-022); um índice novo é acrescentado de propósito, com a versão nova. `chave`
  * é o nome da tabela no cursor de download (v2).
  */
-const INDICES_PERMITIDOS = new Set(['id', 'clienteId', 'ordem', 'registroId', 'chave', 'categoriaId', 'produtoId', 'operacaoId', 'revisao'])
+const INDICES_PERMITIDOS = new Set(['id', 'clienteId', 'ordem', 'registroId', 'chave', 'categoriaId', 'produtoId', 'operacaoId', 'revisao', 'fotoId', 'copiaId'])
 
 /** Uma fábrica de IndexedDB de mentira por teste: nenhum estado atravessa de um para outro. */
 function abrir(nome = 'teste', indexedDB: DexieOptions['indexedDB'] = new IDBFactory()): BancoLocal {
@@ -74,6 +78,7 @@ describe('esquema local (D-020, D-040)', () => {
     expect(v1).toEqual({ ...ESQUEMA_V1 })
     expect(v2).toEqual({ ...ESQUEMA_V2 })
     expect(ESQUEMAS_PUBLICADOS[3]).toEqual({ ...ESQUEMA_V3 })
+    expect(ESQUEMAS_PUBLICADOS[4]).toEqual({ ...ESQUEMA_V4 })
   })
 
   test('todo índice está na lista de permissão — nenhum campo de dinheiro é chave (D-022)', async () => {
@@ -120,7 +125,7 @@ describe('esquema local (D-020, D-040)', () => {
     // `versao`, e o código lê as duas formas.
     const atual = abrir(nome, indexedDB)
     await atual.open()
-    expect(atual.verno).toBe(3)
+    expect(atual.verno).toBe(4)
     const cliente: Cliente | undefined = await atual.clientes.get('c1')
     expect(cliente).toEqual(vera)
     const lida = await atual.lancamentos.get('v1')

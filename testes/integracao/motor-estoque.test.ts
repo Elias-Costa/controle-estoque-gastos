@@ -30,7 +30,10 @@ beforeAll(async () => {
     { auth: { persistSession: false, autoRefreshToken: false } })
   const { error } = await clienteRemoto.auth.signInWithPassword({ email: process.env.SUPABASE_TESTE_EMAIL ?? '', password: process.env.SUPABASE_TESTE_SENHA ?? '' })
   if (error) throw new Error(`Login fictício E-21: ${error.message}`)
-  nuvem = criarNuvemSupabase(clienteRemoto)
+  // Esta suíte conserva o transporte de metadados de E-21. E-22 prova o novo motor de fotos
+  // em suíte própria, com Canvas real no navegador; Bun não tem decoder de imagem nativo.
+  const { fotos: _fotos, ...metadados } = criarNuvemSupabase(clienteRemoto)
+  nuvem = metadados
 })
 afterAll(async () => { for (const b of bancos) b.close(); if (LIGADA) await clienteRemoto.auth.signOut() })
 

@@ -32,6 +32,7 @@
 import { createClient, type PostgrestError, type SupabaseClient } from '@supabase/supabase-js'
 import type { ClienteNaNuvem, LancamentoNaNuvem } from './borda.ts'
 import { COLUNAS_CATEGORIA, COLUNAS_PRODUTO, type DocumentoEstoque } from './borda-estoque.ts'
+import { criarNuvemFotos, type NuvemFotos } from './nuvem-fotos.ts'
 
 /** Por que uma ida à nuvem não deu certo. */
 export type Falha =
@@ -50,6 +51,7 @@ export type LinhaRecebida = Readonly<Record<string, unknown>>
  * o download devolve as linhas com o carimbo do servidor (`recebido_em` / `criado_em`) dentro.
  */
 export type Nuvem = {
+  readonly fotos?: NuvemFotos
   readonly temSessao: () => Promise<boolean>
   /** Avisa quando a sessão muda (entrou, saiu, renovou). Devolve a função que cancela. */
   readonly aoMudarSessao: (ouvinte: () => void) => () => void
@@ -142,6 +144,7 @@ export function criarNuvemSupabase(supabase: SupabaseClient): Nuvem {
   }
 
   return {
+    fotos: criarNuvemFotos(supabase),
     temSessao: async () => {
       const { data } = await supabase.auth.getSession()
       return data.session !== null

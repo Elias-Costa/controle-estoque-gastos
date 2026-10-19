@@ -16,6 +16,7 @@ import { BancoLocal } from './banco.ts'
 import { criarRepositorioLocal } from './repositorio.ts'
 import { criarRepositorioEstoque } from './repositorio-estoque.ts'
 import { criarOperacoesEstoque } from './operacoes-estoque.ts'
+import { criarRepositorioFotos } from './fotos.ts'
 
 export const banco = new BancoLocal()
 
@@ -41,3 +42,6 @@ export const repositorioEstoque = criarRepositorioEstoque(banco, undefined, () =
 
 /** Operações de estoque do aplicativo; interfaces de F2 serão ligadas nas etapas próprias. */
 export const operacoesEstoque = criarOperacoesEstoque(repositorioEstoque)
+
+/** Miniaturas e retenção local usadas no cadastro; não depende da sessão nem da rede. */
+export const repositorioFotos = criarRepositorioFotos(banco)

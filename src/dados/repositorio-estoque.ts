@@ -7,6 +7,7 @@ import { conteudoDoEfeito, quantidadeValida, type ResultadoEstoque } from '../do
 import type { GrupoEstoque, OperacaoEstoque } from '../dominio/vendas-estoque.ts'
 import type { BancoLocal, ItemDaFila, Problema, TabelaDaFila, VersaoEstoque } from './banco.ts'
 import { uuidv7 } from './identidade.ts'
+import { LIMITE_FOTO_BYTES, LIMITE_MINIATURA_BYTES, type FotoPreparada } from './tipos-fotos.ts'
 
 /** Estado lido dentro da mesma transação que valida/grava F2; nunca aguardamos rede aqui. */
 export type EstadoLocalEstoque = {
@@ -31,7 +32,7 @@ export function criarRepositorioEstoque(banco: BancoLocal, agora: () => string =
   aoEnfileirar: () => void = () => undefined) {
   // O mesmo escopo em todas as escritas serializa abas, inclusive o máximo lógico de Q42.
   const tabelas = [banco.clientes, banco.lancamentos, banco.fila, banco.categorias, banco.produtos,
-    banco.operacoes, banco.movimentos, banco.versoesEstoque, banco.encerramentos, banco.relogioEstoque]
+    banco.operacoes, banco.movimentos, banco.versoesEstoque, banco.encerramentos, banco.relogioEstoque, banco.fotos]
 
   async function enfileirar(tabela: TabelaDaFila, registroId: Id, revisao?: number): Promise<void> {
     const item = await banco.fila.where('registroId').equals(registroId).first()
@@ -136,7 +137,9 @@ export function criarRepositorioEstoque(banco: BancoLocal, agora: () => string =
     return resultado
   }
 
-  async function salvarProduto(produto: Produto): Promise<ResultadoEstoque<Produto>> {
+  async function salvarProduto(entrada: Produto, foto?: FotoPreparada): Promise<ResultadoEstoque<Produto>> {
+    // A preparação pesada e SHA-256 aconteceram antes do rw; IDs nascem no cliente (RI-02/04).
+    const produto = foto ? { ...entrada, fotoId: uuidv7() } : entrada
     const resultado = await banco.transaction('rw', tabelas, async () => {
       const conferido = novoProduto(produto, await banco.categorias.toArray())
       if (!conferido.ok) return conferido
@@ -148,7 +151,20 @@ export function criarRepositorioEstoque(banco: BancoLocal, agora: () => string =
         const custo = alterarCustoManual(produto, produto.custoManual, projecao.valor.comprasVigentes)
         if (!custo.ok) return custo
       }
-      await banco.produtos.put({ ...conferido.valor, atualizadoEm: agora() })
+      const atualizadoEm = agora()
+      if (foto) {
+        if (!/^[0-9a-f]{64}$/.test(foto.sha256) || foto.binario.byteLength < 1 || foto.binario.byteLength > LIMITE_FOTO_BYTES ||
+          foto.miniatura.byteLength < 1 || foto.miniatura.byteLength > LIMITE_MINIATURA_BYTES ||
+          !Number.isSafeInteger(foto.largura) || !Number.isSafeInteger(foto.altura) || foto.largura < 1 || foto.altura < 1 ||
+          Math.max(foto.largura, foto.altura) > 1024 || !produto.fotoId) throw new Error('Foto não foi preparada nos limites aprovados')
+        await banco.fotos.add({ id: produto.fotoId, copiaId: uuidv7(), produtoId: produto.id, cadastroEm: atualizadoEm,
+          geracaoEnvio: uuidv7(), sha256: foto.sha256, bytes: foto.binario.byteLength, largura: foto.largura, altura: foto.altura,
+          binario: foto.binario, miniatura: foto.miniatura, situacao: 'pendente' })
+        await enfileirar('fotos', produto.fotoId)
+      } else if (produto.fotoId && (await banco.fotos.get(produto.fotoId))?.dispensada) {
+        throw new Error('A referência da foto mudou; releia o cadastro antes de salvar')
+      }
+      await banco.produtos.put({ ...conferido.valor, atualizadoEm })
       await enfileirar('produtos', produto.id)
       return conferido
     })

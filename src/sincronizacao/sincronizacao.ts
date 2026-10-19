@@ -38,6 +38,7 @@ import { clienteDaNuvem, clienteParaNuvem, lancamentoDaNuvem, lancamentoParaNuve
 import { categoriaDaNuvem, documentoEstoque, produtoDaNuvem, recepcaoDaNuvem } from './borda-estoque.ts'
 import { LINHAS_POR_PAGINA, type Falha, type LinhaRecebida, type Nuvem, type Resposta } from './nuvem.ts'
 import { aplicarRecepcaoEstoque } from './recepcao-estoque.ts'
+import { criarSincronizacaoFotos } from './fotos.ts'
 
 /** O que o indicador mostra (RF-25) e o que o mantenedor lê no console. */
 export type EstadoDaSincronizacao = {
@@ -120,6 +121,7 @@ const agendarPadrao: Agendar = (fn, ms) => {
 export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao {
   const { banco, nuvem } = dependencias
   const estoque = criarRepositorioEstoque(banco)
+  const fotos = nuvem?.fotos ? criarSincronizacaoFotos(banco, nuvem, nuvem.fotos) : null
   const agora = dependencias.agora ?? (() => new Date())
   const agendar = dependencias.agendar ?? agendarPadrao
   const janela = dependencias.janela === undefined ? (typeof window === 'undefined' ? null : window) : dependencias.janela
@@ -195,7 +197,7 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
     if (item.tabela === 'produtos') {
       const produto = await banco.produtos.get(item.registroId)
       if (!produto) throw new Error('Fila sem produto')
-      return nuvemLigada.enviarProduto(documentoEstoque(produto))
+      return fotos ? fotos.enviarProduto(produto) : nuvemLigada.enviarProduto(documentoEstoque(produto))
     }
     if (item.tabela === 'encerramentos') {
       const encerramento = await banco.encerramentos.get(item.registroId)
@@ -227,6 +229,8 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
   async function enviar(nuvemLigada: Nuvem): Promise<Desfecho> {
     const itens = await banco.fila.orderBy('ordem').toArray()
     for (const item of itens) {
+      // E-22: o ciclo de binários vem depois das operações; foto nunca segue pela rota financeira.
+      if (item.tabela === 'fotos') continue
       if (item.problema !== undefined) continue
       if (item.tabela === 'operacoes') {
         const envio = await estoque.capturarEnvio(item.registroId)
@@ -332,7 +336,8 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
         await banco.categorias.put(categoria)
       })
     }
-    const produtos = await baixarTabela('produtos', (desde) => nuvemLigada.buscarProdutos(desde), 'recebido_em', async (linha) => {
+    const produtos = await baixarTabela('produtos', (desde) => fotos ? fotos.buscarProdutos(desde) : nuvemLigada.buscarProdutos(desde), 'recebido_em', async (linha) => {
+      if (fotos) return fotos.receberProduto(linha)
       const produto = produtoDaNuvem(linha)
       await banco.transaction('rw', banco.produtos, banco.categorias, async () => {
         if (!await banco.categorias.get(produto.categoriaId)) throw new Error('Produto remoto sem categoria')
@@ -377,6 +382,10 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
     try {
       desfecho = await enviar(nuvem)
       if (desfecho === 'ok') desfecho = await baixar(nuvem)
+      if (desfecho === 'ok' && fotos) {
+        const resposta = await fotos.ciclo()
+        if (!resposta.ok) desfecho = resposta.falha.tipo === 'sessao' ? 'sessao' : 'rede'
+      }
     } catch (erro) {
       // Erro de programador (linha malformada, base fechada). Não pode virar tela (EL-06) nem
       // sumir: fica no console e o motor tenta de novo com espera crescente.

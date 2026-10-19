@@ -41,6 +41,7 @@ import type { MovimentoEstoque } from '../dominio/estoque.ts'
 import type { Categoria, Produto } from '../dominio/produtos.ts'
 import type { EncerramentoTentativa } from '../dominio/recuperacao-estoque.ts'
 import type { GrupoEstoque, OperacaoEstoque } from '../dominio/vendas-estoque.ts'
+import type { EnvioProdutoFoto, EstadoFotos, FotoLocal, ProtecaoFotoLocal, UsoFotoLocal } from './tipos-fotos.ts'
 
 /**
  * A linha de cliente como fica na base: o tipo do domínio mais o carimbo do último-que-escreve
@@ -77,7 +78,7 @@ export const NOME_DO_BANCO = 'controle-fiado'
 export type TabelaSincronizada = 'clientes' | 'lancamentos'
 
 /** F2 usa a mesma FIFO; seu transporte conjunto entra em E-21, nunca pela rota financeira F1. */
-export type TabelaDaFila = TabelaSincronizada | 'categorias' | 'produtos' | 'operacoes' | 'encerramentos'
+export type TabelaDaFila = TabelaSincronizada | 'categorias' | 'produtos' | 'operacoes' | 'encerramentos' | 'fotos'
 
 /** Cadastro completo sujeito a LWW por registro, separado da referência derivada de compras. */
 export type ProdutoLocal = Produto & { readonly atualizadoEm: string }
@@ -172,6 +173,16 @@ export const ESQUEMA_V3 = {
   relogioEstoque: 'chave',
 } as const
 
+/** E-22 é aditiva: binários/miniaturas e prova durável de uso/envio, sem reescrever F1 ou estoque. */
+export const ESQUEMA_V4 = {
+  ...ESQUEMA_V3,
+  fotos: 'id, produtoId',
+  protecoesFotos: 'id, fotoId, copiaId',
+  enviosProdutoFoto: 'id, produtoId',
+  usosFotos: 'id, fotoId',
+  estadoFotos: 'chave',
+} as const
+
 /**
  * A base local. `dependencias` existe para os testes injetarem um IndexedDB de mentira
  * isolado por teste (`fake-indexeddb`); em produção ninguém passa nada e o Dexie usa o do
@@ -190,12 +201,18 @@ export class BancoLocal extends Dexie {
   readonly versoesEstoque: Table<VersaoEstoque, Id, VersaoEstoque>
   readonly encerramentos: Table<EncerramentoLocal, Id, EncerramentoLocal>
   readonly relogioEstoque: Table<RelogioEstoque, string, RelogioEstoque>
+  readonly fotos: Table<FotoLocal, Id, FotoLocal>
+  readonly protecoesFotos: Table<ProtecaoFotoLocal, string, ProtecaoFotoLocal>
+  readonly enviosProdutoFoto: Table<EnvioProdutoFoto, Id, EnvioProdutoFoto>
+  readonly usosFotos: Table<UsoFotoLocal, Id, UsoFotoLocal>
+  readonly estadoFotos: Table<EstadoFotos, string, EstadoFotos>
 
   constructor(nome: string = NOME_DO_BANCO, dependencias?: DexieOptions) {
     super(nome, dependencias)
     this.version(1).stores(ESQUEMA_V1)
     this.version(2).stores(ESQUEMA_V2)
     this.version(3).stores(ESQUEMA_V3)
+    this.version(4).stores(ESQUEMA_V4)
     this.clientes = this.table('clientes')
     this.lancamentos = this.table('lancamentos')
     this.fila = this.table('fila')
@@ -207,5 +224,10 @@ export class BancoLocal extends Dexie {
     this.versoesEstoque = this.table('versoesEstoque')
     this.encerramentos = this.table('encerramentos')
     this.relogioEstoque = this.table('relogioEstoque')
+    this.fotos = this.table('fotos')
+    this.protecoesFotos = this.table('protecoesFotos')
+    this.enviosProdutoFoto = this.table('enviosProdutoFoto')
+    this.usosFotos = this.table('usosFotos')
+    this.estadoFotos = this.table('estadoFotos')
   }
 }
