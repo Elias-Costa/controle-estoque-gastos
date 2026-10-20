@@ -18,6 +18,9 @@ export const PALAVRAS_DOS_PRODUTOS = {
   fotoProtegida: 'Não consegui abrir a foto para mudar o produto. Volte e abra de novo.',
   abrindoFoto: 'Abrindo a foto para mudar o produto…',
   salvando: 'Salvando…', criandoCategoria: 'Guardando a categoria…',
+  noMinimo: 'No mínimo', disponivel: 'Disponível', prometido: 'Prometido', faltam: 'Faltam',
+  explicacaoDoMinimo: 'Produtos com estoque físico menos o prometido igual ou abaixo do mínimo. Só aparecem os que têm mínimo informado.',
+  vazioNoMinimo: 'Nenhum produto no mínimo',
 } as const
 
 /** Traduz as guardas locais antes do toque em Salvar, sem código técnico na tela. */

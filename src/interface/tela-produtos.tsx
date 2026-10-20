@@ -10,14 +10,14 @@ import { Topo } from './Topo.tsx'
 import { useLeitura } from './useLeitura.ts'
 
 /** Consulta local de RF-11/25; cada linha abre o cadastro, sem filtro ou manutenção de categorias. */
-export function TelaProdutos({ aoVoltar, aoNovo, aoAbrir }: { aoVoltar: () => void; aoNovo: () => void; aoAbrir: (id: string) => void }) {
+export function TelaProdutos({ aoVoltar, aoNovo, aoAbrir, aoMinimo }: { aoVoltar: () => void; aoNovo: () => void; aoAbrir: (id: string) => void; aoMinimo: () => void }) {
   const leitura = useLeitura(async () => {
     const catalogo = await repositorioEstoque.lerCatalogo()
     return { catalogo, linhas: lerProdutos(catalogo) }
   }, 'produtos')
   return (
     <main className="tela">
-      <Topo titulo={P.titulo} aoVoltar={aoVoltar} />
+      <Topo titulo={P.titulo} aoVoltar={aoVoltar} acao={{ texto: P.noMinimo, aoTocar: aoMinimo }} />
       <IndicadorDeEnvio />
       {leitura.estado !== 'lido' ? <p role="status">{leitura.estado === 'lendo' ? P.lendo : P.falhaLeitura}</p> : <>
         {leitura.valor.catalogo.categorias.some((categoria) => categoriasComMesmoNome(categoria, leitura.valor.catalogo.categorias).length > 0) &&
