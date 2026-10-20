@@ -1,7 +1,7 @@
 import type { MovimentoEstoque } from '../dominio/estoque.ts'
 import type { MotivoEstoque } from '../dominio/regras-estoque.ts'
 
-/** Palavras de E-24 são hipóteses até E-28; não expõem fila, revisão ou causalidade. */
+/** Palavras de E-24/26 são hipóteses até E-28; não expõem fila, revisão ou causalidade. */
 export const PALAVRAS_DO_ESTOQUE = {
   ver: 'Ver estoque ›', titulo: 'Estoque', compra: 'Anotar compra', inicial: 'Anotar estoque inicial',
   corrigir: 'Corrigir', correcao: 'Corrigir entrada', produto: 'Produto', quantidade: 'Quantidade', contado: 'Total contado',
@@ -17,7 +17,24 @@ export const PALAVRAS_DO_ESTOQUE = {
   divergencia: 'Há mais saídas anotadas do que entradas. Confira as quantidades.',
   problema: 'Esta anotação precisa de conferência antes de outra correção.',
   anulada: 'Anulada', corrigida: 'Corrigida', conferir: 'Conferir contagem',
+  ajuste: 'Ajustar estoque', corrigirAjuste: 'Corrigir ajuste', motivo: 'Motivo', escolherMotivo: 'Escolha o motivo',
+  efeito: 'Efeito desta anotação', efeitoCorrigido: 'Efeito da anotação corrigida', resolvida: 'Conferida novamente',
+  contagemExplicacao: 'Informe o total que contou agora. A diferença é calculada pelo estoque físico, sem descontar o que está prometido.',
+  corrigirContagemExplicacao: 'Corrija o total anotado naquela contagem. Se contou de novo agora, volte e use “Conferir contagem”.',
+  correcaoAjusteExplicacao: 'Se já foi enviado, o original fica no histórico com sua anulação e o ajuste corrigido.',
 } as const
+
+/** Motivos aprovados de RF-14: seleção obrigatória, sem acrescentar despesa ou caixa de F3. */
+export const MOTIVOS_DO_AJUSTE = [
+  { valor: 'perda', rotulo: 'Perda' }, { valor: 'quebra', rotulo: 'Quebra' },
+  { valor: 'uso-pessoal', rotulo: 'Uso pessoal' }, { valor: 'brinde', rotulo: 'Brinde' },
+  { valor: 'conferencia', rotulo: 'Correção de contagem' },
+] as const
+
+/** Sinal explícito da diferença, inclusive zero, sem pedir que ela calcule a saída. */
+export function quantidadeComSinal(quantidade: number): string {
+  return quantidade > 0 ? `+${quantidade}` : quantidade < 0 ? `−${-quantidade}` : '0'
+}
 
 /** O tipo do movimento vira o fato reconhecível no histórico, inclusive inversos e saídas existentes. */
 export function nomeDoMovimento(movimento: MovimentoEstoque): string {
@@ -41,5 +58,15 @@ export function fraseDaGuardaDaEntrada(motivo: MotivoEstoque): string {
     case 'confirmacao-necessaria': return PALAVRAS_DO_ESTOQUE.problema
     case 'alvo-invalido': case 'ja-anulado': case 'revisao-invalida': return 'Essa entrada mudou. Volte ao estoque e confira antes de corrigir.'
     default: return PALAVRAS_DO_ESTOQUE.falhaGravacao
+  }
+}
+
+/** Guardas de RF-14 distinguem saída positiva de total contado que pode ser zero. */
+export function fraseDaGuardaDoAjuste(motivo: MotivoEstoque): string {
+  switch (motivo) {
+    case 'motivo-obrigatorio': return 'Escolha o motivo do ajuste.'
+    case 'quantidade-invalida': return 'Informe uma quantidade inteira. Para uma saída, precisa ser maior que zero; na contagem, pode ser zero.'
+    case 'alvo-invalido': case 'ja-anulado': case 'revisao-invalida': return 'Esse ajuste mudou. Volte ao estoque e confira antes de corrigir.'
+    default: return fraseDaGuardaDaEntrada(motivo)
   }
 }

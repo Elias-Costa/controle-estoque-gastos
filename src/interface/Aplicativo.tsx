@@ -19,6 +19,7 @@ import { TelaProdutos } from './tela-produtos.tsx'
 import { TelaProduto } from './tela-produto.tsx'
 import { TelaEstoque } from './tela-estoque.tsx'
 import { TelaEntrada } from './tela-entrada.tsx'
+import { TelaAjuste } from './tela-ajuste.tsx'
 import { TelaConferencias } from './tela-conferencias.tsx'
 
 /**
@@ -41,6 +42,7 @@ type Rota =
   | { readonly tela: 'produto'; readonly produtoId?: Id; readonly origem?: 'estoque' }
   | { readonly tela: 'estoque'; readonly produtoId: Id }
   | { readonly tela: 'entrada'; readonly produtoId: Id; readonly tipo: 'compra' | 'estoque-inicial'; readonly alvo?: ReferenciaEfeito }
+  | { readonly tela: 'ajuste'; readonly produtoId: Id; readonly alvo?: ReferenciaEfeito; readonly conferir?: boolean }
   | { readonly tela: 'entrar' }
   | { readonly tela: 'devedoras' }
   | { readonly tela: 'ficha'; readonly clienteId: Id; readonly origem?: 'devedoras' }
@@ -103,12 +105,18 @@ export function Aplicativo() {
         aoCompra={() => setRota({ tela: 'entrada', produtoId, tipo: 'compra' })}
         aoInicial={() => setRota({ tela: 'entrada', produtoId, tipo: 'estoque-inicial' })}
         aoCorrigir={(alvo) => setRota({ tela: 'entrada', produtoId, tipo: 'compra', alvo })}
+        aoAjuste={(conferir) => setRota({ tela: 'ajuste', produtoId, conferir })}
+        aoCorrigirAjuste={(alvo) => setRota({ tela: 'ajuste', produtoId, alvo })}
         aoCadastro={() => setRota({ tela: 'produto', produtoId, origem: 'estoque' })}
         aoVenda={(clienteId, lancamentoId) => setRota({ tela: 'lancamento', clienteId, lancamentoId, estoqueId: produtoId })} />
     }
     case 'entrada':
       return <TelaEntrada key={`${rota.produtoId}/${rota.alvo?.id ?? rota.tipo}/${rota.alvo?.revisao ?? ''}`} produtoId={rota.produtoId} tipo={rota.tipo} alvo={rota.alvo}
         aoVoltar={() => setRota({ tela: 'estoque', produtoId: rota.produtoId })} aoSalvar={(produtoId) => setRota({ tela: 'estoque', produtoId })} />
+    case 'ajuste': {
+      const voltar = () => setRota({ tela: 'estoque', produtoId: rota.produtoId })
+      return <TelaAjuste key={`${rota.produtoId}/${rota.alvo?.id ?? 'novo'}/${rota.alvo?.revisao ?? ''}`} produtoId={rota.produtoId} alvo={rota.alvo} conferir={rota.conferir} aoVoltar={voltar} aoSalvar={voltar} />
+    }
     case 'entrar':
       return <TelaEntrar aoVoltar={irParaInicio} aoEntrar={irParaInicio} />
     case 'devedoras':

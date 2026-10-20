@@ -13,12 +13,16 @@ export function lerEstoque(estado: EstadoLocalEstoque, produtoId: string) {
   for (const movimento of estado.movimentos) atuais.set(movimento.id, Math.max(atuais.get(movimento.id) ?? 0, movimento.revisao))
   const vigentes = new Set(projecao.valor.movimentosVigentes.map(chaveDoEfeito))
   const afetadas = new Set(projecao.valor.contagensAfetadas.map(chaveDoEfeito))
+  const anuladas = new Set(estado.movimentos.flatMap((item) => item.tipo === 'anulacao' && item.revisao === atuais.get(item.id) ? [chaveDoEfeito(item.alvo)] : []))
+  const resolvidas = new Set(estado.movimentos.flatMap((item) => item.tipo === 'contagem' && item.revisao === atuais.get(item.id) && !anuladas.has(chaveDoEfeito(item)) ? item.resolvidas.map(chaveDoEfeito) : []))
   const historico = estado.movimentos.filter((item) => item.produtoId === produtoId).map((movimento) => {
     const superada = movimento.revisao !== atuais.get(movimento.id)
-    const anulada = !superada && !vigentes.has(chaveDoEfeito(movimento)) && !afetadas.has(chaveDoEfeito(movimento)) && movimento.tipo !== 'anulacao'
+    const anulada = !superada && anuladas.has(chaveDoEfeito(movimento))
+    const resolvida = !superada && !anulada && resolvidas.has(chaveDoEfeito(movimento))
     const problema = estado.fila.some((item) => item.tabela === 'operacoes' && item.registroId === movimento.operacaoId && item.problema)
-    return { movimento, superada, anulada, problema, afetada: afetadas.has(chaveDoEfeito(movimento)),
-      corrigivel: !superada && !anulada && !problema && (movimento.tipo === 'compra' || (movimento.tipo === 'contagem' && movimento.motivo === 'estoque-inicial')) }
+    return { movimento, superada, anulada, resolvida, problema, afetada: afetadas.has(chaveDoEfeito(movimento)),
+      corrigivel: !superada && !anulada && !resolvida && !problema && (vigentes.has(chaveDoEfeito(movimento)) || afetadas.has(chaveDoEfeito(movimento))) &&
+        (movimento.tipo === 'compra' || movimento.tipo === 'saida' || movimento.tipo === 'contagem') }
   }).sort((a, b) => b.movimento.data.localeCompare(a.movimento.data) || b.movimento.id.localeCompare(a.movimento.id) || b.movimento.revisao - a.movimento.revisao)
   const pendencias = estado.lancamentos.flatMap((venda) => {
     if (venda.tipo !== 'venda' || !ehVendaEstoque(venda) || estado.lancamentos.some((l) => l.tipo === 'estorno' && l.estornaId === venda.id)) return []

@@ -63,7 +63,10 @@ export function aceitarGrupoEstoque(estado: EstadoAceitoEstoque, grupo: GrupoEst
   if (operacao.alvo) {
     const alvo = operacao.alvo
     const referencias = [...estado.operacoes.flatMap((item) => item.operacao.lancamentos), ...estado.movimentos]
-    const conhecida = referencias.find((item) => item.id === alvo.id) ?? (estado.lancamentos.some((item) => item.id === alvo.id) ? { id: alvo.id, revisao: 1 } : undefined)
+    // Revisões antigas são evidência de contagem (Q39), não o alvo vigente da correção (Q40).
+    const conhecida = referencias.filter((item) => item.id === alvo.id).reduce<ReferenciaEfeito | undefined>(
+      (atual, item) => !atual || item.revisao > atual.revisao ? item : atual, undefined,
+    ) ?? (estado.lancamentos.some((item) => item.id === alvo.id) ? { id: alvo.id, revisao: 1 } : undefined)
     if (!conhecida || conhecida.revisao !== alvo.revisao || estado.operacoes.some((item) => item.operacao.alvo && chaveDoEfeito(item.operacao.alvo) === chaveDoEfeito(alvo))) return { ok: false, motivo: 'alvo-invalido' }
   }
   const lancamentos = [...estado.lancamentos, ...grupo.lancamentos]
