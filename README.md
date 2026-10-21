@@ -31,7 +31,9 @@ Vendas e recebimentos podem ser registrados sem acesso à internet. As operaçõ
 
 ## Estado atual
 
-Em uso real, com a gestão de fichas e fiado disponível. Controle de estoque, registro de gastos e indicadores do negócio estão previstos para as próximas fases.
+Em uso real, com a gestão de fichas e fiado disponível. O controle de estoque está implementado
+em desenvolvimento e aguarda a validação de uso e a entrega. Gastos e indicadores do negócio
+continuam previstos para as próximas fases.
 
 ## Verificação
 
@@ -45,4 +47,8 @@ com o projeto confirmado em `nuvem/destinos-de-teste.ts`. O mantenedor configura
 `.env.homologacao.local` com `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `SUPABASE_DB_URL`
 (Session pooler, TLS), `SUPABASE_TESTE_EMAIL` e `SUPABASE_TESTE_SENHA`. Produção não recebe
 suítes nem resets. `TESTE_NOME` é um filtro opcional de integração para diagnóstico;
-removê-lo para executar o portão completo. A migration de fotos precede a publicação do app.
+removê-lo para executar o portão completo. Antes da publicação de estoque, o mantenedor roda
+`bun run migrar` em produção: o runner aplica somente pendentes, em ordem, de `0004_estoque`
+até `0007_conferencia-por-identidade`, preservando os dados de F1. Só depois promove para
+`main`, que publica pelo deploy existente. Não reverter migrations nem limpar dados para
+atualizar o app; conferir carimbo, fichas e envios pendentes na abertura seguinte.
