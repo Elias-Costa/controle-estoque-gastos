@@ -19,7 +19,7 @@ export function Topo({
   acao?: { readonly texto: string; readonly aoTocar: () => void }
 }) {
   return (
-    <header className="mb-3 flex items-center gap-1">
+    <header className="mb-3 flex flex-wrap items-center gap-1">
       {aoVoltar !== undefined && (
         <button
           type="button"
@@ -30,12 +30,12 @@ export function Topo({
           &lsaquo;
         </button>
       )}
-      <div className="min-w-0 flex-1">
-        <h1 className="m-0 truncate text-2xl leading-tight">{titulo}</h1>
-        {subtitulo !== undefined && subtitulo !== '' && <p className="m-0 truncate text-[0.95rem] text-suave">{subtitulo}</p>}
+      <div className="min-w-0 flex-1 basis-40">
+        <h1 className="m-0 text-2xl leading-tight [overflow-wrap:anywhere]">{titulo}</h1>
+        {subtitulo !== undefined && subtitulo !== '' && <p className="m-0 text-[0.95rem] text-suave [overflow-wrap:anywhere]">{subtitulo}</p>}
       </div>
       {acao !== undefined && (
-        <button type="button" className="min-h-11 flex-none border-0 bg-transparent px-1 py-0 text-[1rem] font-semibold text-acento" onClick={acao.aoTocar}>
+        <button type="button" className="min-h-11 max-w-full border-0 bg-transparent px-1 py-0 text-left text-[1rem] font-semibold text-acento" onClick={acao.aoTocar}>
           {acao.texto} <span aria-hidden="true">&rsaquo;</span>
         </button>
       )}

@@ -1,3 +1,4 @@
+import { RodapeDeAcoes } from './rodape-de-acoes.tsx'
 import { useEffect, useState } from 'react'
 import { repositorio } from '../dados/instancia.ts'
 import { estornarLancamento } from '../dados/operacoes.ts'
@@ -112,7 +113,7 @@ export function TelaLancamento({
       {vendaF2 && !desativada && <AcoesDaVenda venda={anotado} cancelada={desfeito} comProblema={comProblema}
         aoCorrigir={() => aoCorrigir('venda')} aoConcluir={aoVoltar} />}
       {!desfeito && !vendaF2 && !desativada && (
-        <div className="rodape-acao">
+        <RodapeDeAcoes>
           {caminho === 'corrigir' && (
             <Botao tipo="principal" aoTocar={() => aoCorrigir(anotado.tipo)}>
               {PALAVRAS_DA_VENDA.anotacao.corrigir}
@@ -133,7 +134,7 @@ export function TelaLancamento({
               </Botao>
             </>
           )}
-        </div>
+        </RodapeDeAcoes>
       )}
     </main>
   )

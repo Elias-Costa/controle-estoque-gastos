@@ -1,3 +1,4 @@
+import { RodapeDeAcoes } from './rodape-de-acoes.tsx'
 import { useEffect, useId, useRef, useState, type ChangeEvent } from 'react'
 import { operacoesEstoque, repositorioEstoque, repositorioFotos } from '../dados/instancia.ts'
 import type { CatalogoProdutos } from '../dados/repositorio-estoque.ts'
@@ -170,6 +171,6 @@ function FormularioProduto({ catalogo, linhas, produtoId, aoVoltar, aoSalvar, ao
     {!conferencia.ok && <p role="status" className="font-semibold text-atraso">{fraseDaGuardaDoProduto(conferencia.motivo)}</p>}
     {!fotoRetida && <p role="status" className="font-semibold text-atraso">{falhaRetencao ? P.fotoProtegida : P.abrindoFoto}</p>}
     {erro && <p role="alert" className="font-semibold text-atraso">{erro}</p>}
-    <div className="rodape-acao"><Botao tipo="principal" aoTocar={() => void salvar()} desabilitado={!conferencia.ok || ocupado || !fotoRetida}>{gravando ? P.salvando : P.salvar}</Botao></div>
+    <RodapeDeAcoes><Botao tipo="principal" aoTocar={() => void salvar()} desabilitado={!conferencia.ok || ocupado || !fotoRetida}>{gravando ? P.salvando : P.salvar}</Botao></RodapeDeAcoes>
   </main>
 }

@@ -1,3 +1,4 @@
+import { RodapeDeAcoes } from './rodape-de-acoes.tsx'
 import { repositorio, repositorioEstoque } from '../dados/instancia.ts'
 import { emReais, multiplicar } from '../dominio/dinheiro.ts'
 import { chaveDoEfeito, type MovimentoEstoque, type ReferenciaEfeito } from '../dominio/estoque.ts'
@@ -74,7 +75,7 @@ export function TelaEstoque({ produtoId, aoVoltar, aoCompra, aoInicial, aoAjuste
           }}>{P.corrigir}</Botao>}
         </li>)}
       </ul>
-      <div className="rodape-acao"><Botao tipo="principal" aoTocar={aoCompra}>{P.compra}</Botao></div>
+      <RodapeDeAcoes><Botao tipo="principal" aoTocar={aoCompra}>{P.compra}</Botao></RodapeDeAcoes>
     </>}
   </main>
 }

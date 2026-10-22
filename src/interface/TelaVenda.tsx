@@ -1,3 +1,4 @@
+import { RodapeDeAcoes } from './rodape-de-acoes.tsx'
 import { useEffect, useState } from 'react'
 import { repositorio, repositorioEstoque, operacoesEstoque } from '../dados/instancia.ts'
 import type { CatalogoProdutos, EstadoLocalEstoque } from '../dados/repositorio-estoque.ts'
@@ -318,11 +319,11 @@ function Formulario({
         </div>
       )}
 
-      <div className="rodape-acao">
+      <RodapeDeAcoes>
         <Botao tipo="principal" aoTocar={() => void gravar()} desabilitado={!podeGravar}>
           {PALAVRAS_DA_VENDA.pronto}
         </Botao>
-      </div>
+      </RodapeDeAcoes>
     </main>
   )
 }

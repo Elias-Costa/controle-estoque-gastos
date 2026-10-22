@@ -1,3 +1,4 @@
+import { RodapeDeAcoes } from './rodape-de-acoes.tsx'
 import type { ReactNode } from 'react'
 import { Botao } from './Botao.tsx'
 import { PALAVRAS_DA_VENDA } from './palavras-da-venda.ts'
@@ -44,7 +45,7 @@ export function Confirmacao({
       {terceira !== undefined && <p className="mt-2 mb-0 text-[1.25rem] tabular-nums">{terceira}</p>}
       {aviso != null && <p className="mt-4 mb-0 font-semibold text-atraso">{aviso}</p>}
       {complemento !== undefined && <div className="mt-8">{complemento}</div>}
-      <div className="rodape-acao">
+      <RodapeDeAcoes>
         {acaoPropria}
         <Botao tipo={acaoPropria === undefined ? 'principal' : 'secundario'} aoTocar={aoVerFicha}>
           {PALAVRAS_DA_VENDA.verAFichinha}
@@ -52,7 +53,7 @@ export function Confirmacao({
         <Botao tipo="secundario" aoTocar={aoVoltarAoInicio}>
           {PALAVRAS_DA_VENDA.voltarParaOComeco}
         </Botao>
-      </div>
+      </RodapeDeAcoes>
     </main>
   )
 }

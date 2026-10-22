@@ -1,3 +1,4 @@
+import { RodapeDeAcoes } from './rodape-de-acoes.tsx'
 import { useState } from 'react'
 import { operacoesEstoque, repositorioEstoque } from '../dados/instancia.ts'
 import { emReais } from '../dominio/dinheiro.ts'
@@ -75,14 +76,14 @@ export function AcoesDaVenda({ venda, cancelada, comProblema, aoCorrigir, aoConc
       {!comProblema && !cancelada && l.pendente > 0 && modo === null && <Botao tipo="secundario" aoTocar={() => setModo(l.item.id)}>Entregar {l.item.descricao}</Botao>}
     </div>)}
     {comProblema ? <p role="status">Esta anotação precisa de conferência. Abra “Conferir anotações” no começo.</p> : <>
-      {modo === null && <div className="rodape-acao">
+      {modo === null && <RodapeDeAcoes>
         {!cancelada && <>
           <Botao tipo="principal" aoTocar={aoCorrigir}>Corrigir anotação</Botao>
           <Botao tipo="secundario" aoTocar={() => setModo('trocar')}>Devolução ou troca</Botao>
           <Botao tipo="secundario" aoTocar={() => setModo('cancelar')}>Desfazer esta venda</Botao>
         </>}
         {cancelada && !substituida && linhas.some((l) => l.podeRetornar > 0) && <Botao tipo="secundario" aoTocar={() => setModo('retornar')}>Voltou mercadoria depois</Botao>}
-      </div>}
+      </RodapeDeAcoes>}
       {modo !== null && <fieldset className="my-4 rounded-xl border border-borda p-3">
         <legend>{selecionada ? 'Confirmar entrega' : modo === 'trocar' ? 'Devolução ou troca' : modo === 'retornar' ? 'Mercadoria que voltou depois' : 'Desfazer esta venda'}</legend>
         {selecionada ? <>

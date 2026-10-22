@@ -24,8 +24,8 @@ export function ItensDaVenda({ rascunho, estado, catalogo, aoMudar, correcao = f
   return <>
     <ul className="m-0 mt-2 list-none p-0" aria-label="Itens da venda">
       {rascunho.itens.map((item, i) => <li key={i} className="mb-4 border-b border-borda pb-3" data-item-venda={i}>
-        <div className="flex gap-2">
-          <input className={`${CLASSES_DE_CAMPO} min-w-0 flex-1`} type="text" autoComplete="off" placeholder="O que levou" aria-label={`Item ${i + 1}`} autoFocus={!correcao && i === 0}
+        <div className="flex flex-wrap gap-2">
+          <input className={`${CLASSES_DE_CAMPO} min-w-0 flex-1 basis-36`} type="text" autoComplete="off" placeholder="O que levou" aria-label={`Item ${i + 1}`} autoFocus={!correcao && i === 0}
             value={item.descricao} onChange={(e) => mudar(i, { descricao: e.target.value })} />
           <EntradaDeDinheiro className={`${CLASSES_DE_CAMPO_COMPACTO} w-[6.5rem] flex-none text-right tabular-nums`}
             texto={item.precoTexto} aoMudar={(precoTexto) => mudar(i, { precoTexto })} exemplo="0,00" rotuloAcessivel={`Preço unitário ${i + 1}`} permitirZero />

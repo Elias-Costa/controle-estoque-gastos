@@ -15,7 +15,7 @@ import { palavrasDoEstado } from './palavras-do-envio'
 export function IndicadorDeEnvio() {
   const estado = useSyncExternalStore(sincronizacao.assinar, sincronizacao.estado, sincronizacao.estado)
   return (
-    <p className="indicador m-0 text-[0.9rem] text-suave" data-pendentes={estado.pendentes} data-com-problema={estado.comProblema}>
+    <p role="status" aria-atomic="true" className="indicador m-0 text-[0.9rem] text-suave" data-pendentes={estado.pendentes} data-com-problema={estado.comProblema}>
       {palavrasDoEstado(estado)}
     </p>
   )

@@ -1,3 +1,4 @@
+import { RodapeDeAcoes } from './rodape-de-acoes.tsx'
 import { useId, useRef, useState } from 'react'
 import { operacoesEstoque, repositorioEstoque } from '../dados/instancia.ts'
 import type { EstadoLocalEstoque } from '../dados/repositorio-estoque.ts'
@@ -74,6 +75,6 @@ function FormularioAjuste({ estado, produtoId, original, conferir, aoVoltar, aoS
     {conferencia.ok && <p className="text-2xl font-semibold" aria-live="polite">{alvo ? P.efeitoCorrigido : P.efeito}: {quantidadeComSinal(efeitoDoAjuste(conferencia.valor, estoque.fisico, alvo))}</p>}
     {!conferencia.ok && <p role="status" className="font-semibold text-atraso">{fraseDaGuardaDoAjuste(conferencia.motivo)}</p>}
     {erro && <p role="alert" className="font-semibold text-atraso">{erro}</p>}
-    <div className="rodape-acao"><Botao tipo="principal" aoTocar={() => void salvar()} desabilitado={!conferencia.ok || gravando}>{gravando ? P.salvando : P.salvar}</Botao></div>
+    <RodapeDeAcoes><Botao tipo="principal" aoTocar={() => void salvar()} desabilitado={!conferencia.ok || gravando}>{gravando ? P.salvando : P.salvar}</Botao></RodapeDeAcoes>
   </main>
 }

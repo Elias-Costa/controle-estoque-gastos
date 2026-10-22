@@ -1,3 +1,4 @@
+import { RodapeDeAcoes } from './rodape-de-acoes.tsx'
 import { useEffect, useState } from 'react'
 import { repositorio } from '../dados/instancia.ts'
 import { corrigirSaldoAnterior, lancarSaldoAnterior } from '../dados/operacoes.ts'
@@ -177,11 +178,11 @@ function Formulario({
         </div>
       )}
 
-      <div className="rodape-acao">
+      <RodapeDeAcoes>
         <Botao tipo="principal" aoTocar={() => void gravar()} desabilitado={!podeGravar}>
           {PALAVRAS_DO_SALDO_ANTERIOR.pronto}
         </Botao>
-      </div>
+      </RodapeDeAcoes>
     </main>
   )
 }

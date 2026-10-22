@@ -26,6 +26,7 @@
   --tinta: #16181d;
   --suave: #555961;
   --borda: #d9dbe0;
+  --contorno: #767b84;
   --acento: #0b5f3a;
   --acento-tinta: #ffffff;
   --atraso: #9a1b1b;
@@ -40,6 +41,7 @@
     --tinta: #f2f3f5;
     --suave: #a8adb8;
     --borda: #2c313a;
+    --contorno: #7b8494;
     --acento: #2f9e6b;
     --acento-tinta: #06120c;
     --atraso: #ff8f8f;
@@ -53,6 +55,7 @@
   --color-tinta: var(--tinta);
   --color-suave: var(--suave);
   --color-borda: var(--borda);
+  --color-contorno: var(--contorno);
   --color-acento: var(--acento);
   --color-acento-tinta: var(--acento-tinta);
   --color-atraso: var(--atraso);
@@ -61,6 +64,11 @@
 }
 
 @layer base {
+  html {
+    /* A navegação por teclado também precisa enxergar o campo acima das ações (RNF-03). */
+    scroll-padding-block: 1rem calc(var(--altura-rodape, 0px) + 1rem);
+  }
+
   body {
     background: var(--fundo);
     color: var(--tinta);
@@ -73,8 +81,20 @@
   /* 44px é o mínimo de RNF-03, e vale para todo controle desde já — não por lembrança, por padrão. */
   button,
   input,
-  textarea {
+  textarea,
+  select {
     min-height: 44px;
+  }
+
+  :where(button, a, input, textarea, select):focus-visible {
+    outline: 3px solid var(--acento);
+    outline-offset: 3px;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--suave);
+    opacity: 1;
   }
 }
 
@@ -87,8 +107,8 @@
   .tela {
     max-width: 34rem;
     margin: 0 auto;
-    /* 7rem embaixo: espaço para o rodapé fixo com até dois botões, sem esconder a última linha. */
-    padding: max(0.75rem, env(safe-area-inset-top)) 1rem 7rem;
+    /* RodapeDeAcoes inclui quebra de linha e área segura na altura medida (RNF-03). */
+    padding: max(0.75rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) calc(var(--altura-rodape, 0px) + 1rem) max(1rem, env(safe-area-inset-left));
   }
 
   /*
@@ -97,6 +117,7 @@
    */
   .rodape-acao {
     position: fixed;
+    z-index: 10;
     left: 0;
     right: 0;
     bottom: 0;
@@ -104,8 +125,15 @@
     flex-direction: column;
     gap: 0.5rem;
     max-width: 34rem;
+    /* Em janela baixa/texto ampliado, as ações continuam alcançáveis sem cobrir tudo. */
+    max-height: 50dvh;
+    overflow-y: auto;
     margin: 0 auto;
-    padding: 0.75rem 1rem max(0.75rem, env(safe-area-inset-bottom));
+    padding: 0.75rem max(1rem, env(safe-area-inset-right)) max(0.75rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
     background: linear-gradient(to top, var(--fundo) 72%, transparent);
+  }
+
+  .rodape-acao > * {
+    flex-shrink: 0;
   }
 }

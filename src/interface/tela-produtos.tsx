@@ -1,3 +1,4 @@
+import { RodapeDeAcoes } from './rodape-de-acoes.tsx'
 import { repositorioEstoque } from '../dados/instancia.ts'
 import { emReais } from '../dominio/dinheiro.ts'
 import { categoriasComMesmoNome } from '../dominio/produtos.ts'
@@ -37,7 +38,7 @@ export function TelaProdutos({ aoVoltar, aoNovo, aoAbrir, aoMinimo }: { aoVoltar
           </li>)}
         </ul>
       </>}
-      <div className="rodape-acao"><Botao tipo="principal" aoTocar={aoNovo}>{P.novo}</Botao></div>
+      <RodapeDeAcoes><Botao tipo="principal" aoTocar={aoNovo}>{P.novo}</Botao></RodapeDeAcoes>
     </main>
   )
 }

@@ -43,7 +43,7 @@ export function BotaoLink({ tipo, href, children, className = '' }: { tipo: 'pri
 }
 
 function classesDoBotao(tipo: 'principal' | 'secundario'): string {
-  const base = 'w-full min-h-14 px-4 rounded-[14px] text-[1.125rem] font-semibold leading-none'
+  const base = 'w-full min-h-14 px-4 py-3 rounded-[14px] text-[1.125rem] font-semibold leading-snug break-words'
   const variante =
     tipo === 'principal'
       ? 'bg-acento text-acento-tinta border-0 disabled:bg-borda disabled:text-suave'

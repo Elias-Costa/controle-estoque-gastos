@@ -1,3 +1,4 @@
+import { RodapeDeAcoes } from './rodape-de-acoes.tsx'
 import type { Id } from '../dominio/ficha.ts'
 import { CARIMBO_DE_BUILD } from '../plataforma/versao.ts'
 import { Botao } from './Botao.tsx'
@@ -49,10 +50,10 @@ export function TelaInicial({
   return (
     <main className="tela">
       <header className="mb-3">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="m-0 text-2xl leading-tight">{PALAVRAS.titulo}</h1>
           {/* A lista de devedores (RF-10, E-12) mora numa tela própria, aberta daqui: zero altura, o caminho cronometrado não muda (D-047). */}
-          <button type="button" className="min-h-11 flex-none border-0 bg-transparent px-1 py-0 text-[1rem] font-semibold text-acento" onClick={aoVerDevedoras}>
+          <button type="button" className="min-h-11 max-w-full border-0 bg-transparent px-1 py-0 text-left text-[1rem] font-semibold text-acento" onClick={aoVerDevedoras}>
             {PALAVRAS_DA_COBRANCA.quemEstaDevendo} <span aria-hidden="true">&rsaquo;</span>
           </button>
         </div>
@@ -71,14 +72,14 @@ export function TelaInicial({
       {/* Discreto de propósito: serve ao mantenedor durante o teste, não a ela (RF-23, D-032). */}
       <p className="mt-6 text-[0.8rem] text-suave">versão {CARIMBO_DE_BUILD}</p>
 
-      <div className="rodape-acao">
+      <RodapeDeAcoes>
         <Botao tipo="principal" aoTocar={aoVender}>
           {PALAVRAS_DA_VENDA.novaVenda}
         </Botao>
         <Botao tipo="secundario" aoTocar={() => aoCadastrar(busca.trim())}>
           {PALAVRAS.clienteNova}
         </Botao>
-      </div>
+      </RodapeDeAcoes>
     </main>
   )
 }

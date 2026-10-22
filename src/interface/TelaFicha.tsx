@@ -1,3 +1,4 @@
+import { RodapeDeAcoes } from './rodape-de-acoes.tsx'
 import { useEffect, useState } from 'react'
 import { repositorio } from '../dados/instancia.ts'
 import { quitar, reativarCliente } from '../dados/operacoes.ts'
@@ -128,7 +129,7 @@ export function TelaFicha({
         </button>
       )}
       {erro !== null && <p className="mt-4 mb-0 font-semibold text-atraso">{erro}</p>}
-      <div className="rodape-acao">
+      <RodapeDeAcoes>
         {desativada ? (
           <Botao tipo="principal" aoTocar={() => void reativar(resumo.cliente)} desabilitado={quitando}>
             {PALAVRAS.reativar}
@@ -151,7 +152,7 @@ export function TelaFicha({
             </Botao>
           </>
         )}
-      </div>
+      </RodapeDeAcoes>
     </main>
   )
 }

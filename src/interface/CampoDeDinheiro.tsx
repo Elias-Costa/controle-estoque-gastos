@@ -34,11 +34,11 @@ export function CampoDeDinheiro({
   return (
     <>
       <Rotulo para={id}>{rotulo}</Rotulo>
-      <div className="flex items-center gap-2 rounded-xl border border-borda bg-papel px-3.5 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-acento">
+      <div className="flex items-center gap-2 rounded-xl border border-contorno bg-papel px-3.5 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-acento">
         <span className="text-2xl text-suave">R$</span>
         <EntradaDeDinheiro
           id={id}
-          className="min-h-16 w-full border-0 bg-transparent text-[2.25rem] leading-none font-bold text-tinta tabular-nums outline-none"
+          className="min-h-16 min-w-0 w-full border-0 bg-transparent text-[2.25rem] leading-none font-bold text-tinta tabular-nums outline-none"
           texto={texto}
           aoMudar={aoMudar}
           selecionarAoFocar={selecionarAoFocar}

@@ -6,7 +6,7 @@ import { useId } from 'react'
  * largura própria — `w-full` e `w-[6.5rem]` juntos deixariam o Tailwind decidir qual vale.
  */
 export const CLASSES_DE_CAMPO_COMPACTO =
-  'min-h-[52px] rounded-xl border border-borda bg-papel px-3 text-tinta focus:outline-2 focus:outline-offset-2 focus:outline-acento'
+  'min-h-[52px] min-w-0 rounded-xl border border-contorno bg-papel px-3 text-tinta focus:outline-2 focus:outline-offset-2 focus:outline-acento'
 
 /** As classes de todo campo de texto do kit, na largura inteira. */
 export const CLASSES_DE_CAMPO = `w-full ${CLASSES_DE_CAMPO_COMPACTO}`

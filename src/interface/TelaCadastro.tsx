@@ -1,3 +1,4 @@
+import { RodapeDeAcoes } from './rodape-de-acoes.tsx'
 import { useState } from 'react'
 import { repositorio } from '../dados/instancia.ts'
 import { cadastrarCliente, lancarSaldoAnterior } from '../dados/operacoes.ts'
@@ -129,11 +130,11 @@ export function TelaCadastro({
         </div>
       )}
 
-      <div className="rodape-acao">
+      <RodapeDeAcoes>
         <Botao tipo="principal" aoTocar={() => void gravar()} desabilitado={!podeGravar}>
           {PALAVRAS.cadastro.pronto}
         </Botao>
-      </div>
+      </RodapeDeAcoes>
     </main>
   )
 }

@@ -49,7 +49,7 @@ export function ListaDeFichas({
       {leitura.estado === 'lido' && (
         <ListaLida resumos={leitura.valor} busca={busca} aoAbrir={aoAbrir} mostrandoDesativadas={comDesativadas && mostrandoDesativadas} aoAlternar={comDesativadas ? () => setMostrandoDesativadas((atual) => !atual) : undefined} />
       )}
-      {leitura.estado === 'falhou' && <p className="mt-3 text-atraso">{PALAVRAS.naoDeuParaAbrir}</p>}
+      {leitura.estado === 'falhou' && <p role="alert" className="mt-3 text-atraso">{PALAVRAS.naoDeuParaAbrir}</p>}
     </>
   )
 }
@@ -90,7 +90,7 @@ function ListaLida({
  */
 export function Lista({ resumos, vazia, aoAbrir }: { resumos: ResumoDaFicha[]; vazia: string; aoAbrir: (clienteId: Id) => void }) {
   if (resumos.length === 0) {
-    return <p className="mt-3 text-suave">{vazia}</p>
+    return <p role="status" className="mt-3 text-suave">{vazia}</p>
   }
   return (
     <ul className="m-0 mt-3 list-none p-0">
@@ -103,7 +103,7 @@ export function Lista({ resumos, vazia, aoAbrir }: { resumos: ResumoDaFicha[]; v
               className="mb-2 flex min-h-[60px] w-full items-center justify-between gap-3 rounded-xl border border-borda bg-papel px-3.5 py-3 text-left text-tinta"
               onClick={() => aoAbrir(resumo.cliente.id)}
             >
-              <span className="min-w-0 font-semibold">
+              <span className="min-w-0 font-semibold [overflow-wrap:anywhere]">
                 {resumo.cliente.nome}
                 {resumo.cliente.apelido !== undefined && resumo.cliente.apelido !== '' && (
                   <span className="block truncate text-[0.85rem] font-normal text-suave">{resumo.cliente.apelido}</span>
