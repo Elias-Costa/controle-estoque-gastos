@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import type { Centavos } from '../dominio/dinheiro.ts'
 import type { Dia, Id } from '../dominio/ficha.ts'
+import type { ReferenciaEfeito } from '../dominio/estoque.ts'
 import { TelaCadastro } from './TelaCadastro.tsx'
 import { TelaDadosDoCliente } from './TelaDadosDoCliente.tsx'
 import { TelaDevedoras } from './TelaDevedoras.tsx'
@@ -14,6 +15,13 @@ import { TelaRecebimento } from './TelaRecebimento.tsx'
 import { TelaSaldoAnterior } from './TelaSaldoAnterior.tsx'
 import { TelaVenda } from './TelaVenda.tsx'
 import { TelaVendido } from './TelaVendido.tsx'
+import { TelaProdutos } from './tela-produtos.tsx'
+import { TelaProduto } from './tela-produto.tsx'
+import { TelaEstoque } from './tela-estoque.tsx'
+import { TelaEntrada } from './tela-entrada.tsx'
+import { TelaAjuste } from './tela-ajuste.tsx'
+import { TelaConferencias } from './tela-conferencias.tsx'
+import { TelaProdutosNoMinimo } from './tela-produtos-no-minimo.tsx'
 
 /**
  * Onde ela está. Sem roteador e sem URL: uma mão, o "‹" do topo (como o protótipo). A venda
@@ -30,6 +38,13 @@ import { TelaVendido } from './TelaVendido.tsx'
  */
 type Rota =
   | { readonly tela: 'inicio' }
+  | { readonly tela: 'conferencias' }
+  | { readonly tela: 'produtos' }
+  | { readonly tela: 'minimo' }
+  | { readonly tela: 'produto'; readonly produtoId?: Id; readonly origem?: 'estoque' }
+  | { readonly tela: 'estoque'; readonly produtoId: Id }
+  | { readonly tela: 'entrada'; readonly produtoId: Id; readonly tipo: 'compra' | 'estoque-inicial'; readonly alvo?: ReferenciaEfeito }
+  | { readonly tela: 'ajuste'; readonly produtoId: Id; readonly alvo?: ReferenciaEfeito; readonly conferir?: boolean }
   | { readonly tela: 'entrar' }
   | { readonly tela: 'devedoras' }
   | { readonly tela: 'ficha'; readonly clienteId: Id; readonly origem?: 'devedoras' }
@@ -40,7 +55,7 @@ type Rota =
   | { readonly tela: 'vendido'; readonly clienteId: Id; readonly vendaId: Id }
   | { readonly tela: 'recebimento'; readonly clienteId: Id; readonly origem: 'ficha' | 'lancamento'; readonly corrigirId?: Id }
   | { readonly tela: 'recebido'; readonly clienteId: Id; readonly recebimentoId: Id; readonly troco: Centavos }
-  | { readonly tela: 'lancamento'; readonly clienteId: Id; readonly lancamentoId: Id }
+  | { readonly tela: 'lancamento'; readonly clienteId: Id; readonly lancamentoId: Id; readonly estoqueId?: Id }
   | { readonly tela: 'saldo-anterior'; readonly clienteId: Id; readonly origem: 'ficha' | 'lancamento'; readonly corrigirId?: Id }
 
 /**
@@ -58,6 +73,8 @@ type Rota =
 export function Aplicativo() {
   const [rota, setRota] = useState<Rota>({ tela: 'inicio' })
   const [busca, setBusca] = useState('')
+  // Conserva a lista de origem durante entrada, ajuste, edição ou entrega pelo estoque.
+  const [origemEstoque, setOrigemEstoque] = useState<'produtos' | 'minimo'>('produtos')
   const [outroDiaLembrado, setOutroDiaLembrado] = useState<Dia>('')
   const irParaInicio = useCallback(() => setRota({ tela: 'inicio' }), [])
   const irParaDevedoras = useCallback(() => setRota({ tela: 'devedoras' }), [])
@@ -74,8 +91,41 @@ export function Aplicativo() {
           aoVender={() => setRota({ tela: 'para-quem' })}
           aoVerDevedoras={() => setRota({ tela: 'devedoras' })}
           aoEntrar={() => setRota({ tela: 'entrar' })}
+          aoVerProdutos={() => setRota({ tela: 'produtos' })}
+          aoConferir={() => setRota({ tela: 'conferencias' })}
         />
       )
+    case 'conferencias': return <TelaConferencias aoVoltar={irParaInicio} />
+    case 'produtos':
+      return <TelaProdutos aoVoltar={irParaInicio} aoNovo={() => setRota({ tela: 'produto' })}
+        aoMinimo={() => setRota({ tela: 'minimo' })}
+        aoAbrir={(produtoId) => { setOrigemEstoque('produtos'); setRota({ tela: 'produto', produtoId }) }} />
+    case 'minimo':
+      return <TelaProdutosNoMinimo aoVoltar={() => setRota({ tela: 'produtos' })}
+        aoAbrir={(produtoId) => { setOrigemEstoque('minimo'); setRota({ tela: 'estoque', produtoId }) }} />
+    case 'produto': {
+      const { produtoId, origem } = rota
+      const voltar = () => setRota(origem === 'estoque' && produtoId ? { tela: 'estoque', produtoId } : { tela: 'produtos' })
+      return <TelaProduto key={produtoId ?? 'novo'} produtoId={produtoId} aoVoltar={voltar} aoSalvar={voltar} aoEstoque={() => { if (produtoId) setRota({ tela: 'estoque', produtoId }) }} />
+    }
+    case 'estoque': {
+      const { produtoId } = rota
+      return <TelaEstoque key={produtoId} produtoId={produtoId} aoVoltar={() => setRota({ tela: origemEstoque })}
+        aoCompra={() => setRota({ tela: 'entrada', produtoId, tipo: 'compra' })}
+        aoInicial={() => setRota({ tela: 'entrada', produtoId, tipo: 'estoque-inicial' })}
+        aoCorrigir={(alvo) => setRota({ tela: 'entrada', produtoId, tipo: 'compra', alvo })}
+        aoAjuste={(conferir) => setRota({ tela: 'ajuste', produtoId, conferir })}
+        aoCorrigirAjuste={(alvo) => setRota({ tela: 'ajuste', produtoId, alvo })}
+        aoCadastro={() => setRota({ tela: 'produto', produtoId, origem: 'estoque' })}
+        aoVenda={(clienteId, lancamentoId) => setRota({ tela: 'lancamento', clienteId, lancamentoId, estoqueId: produtoId })} />
+    }
+    case 'entrada':
+      return <TelaEntrada key={`${rota.produtoId}/${rota.alvo?.id ?? rota.tipo}/${rota.alvo?.revisao ?? ''}`} produtoId={rota.produtoId} tipo={rota.tipo} alvo={rota.alvo}
+        aoVoltar={() => setRota({ tela: 'estoque', produtoId: rota.produtoId })} aoSalvar={(produtoId) => setRota({ tela: 'estoque', produtoId })} />
+    case 'ajuste': {
+      const voltar = () => setRota({ tela: 'estoque', produtoId: rota.produtoId })
+      return <TelaAjuste key={`${rota.produtoId}/${rota.alvo?.id ?? 'novo'}/${rota.alvo?.revisao ?? ''}`} produtoId={rota.produtoId} alvo={rota.alvo} conferir={rota.conferir} aoVoltar={voltar} aoSalvar={voltar} />
+    }
     case 'entrar':
       return <TelaEntrar aoVoltar={irParaInicio} aoEntrar={irParaInicio} />
     case 'devedoras':
@@ -142,7 +192,7 @@ export function Aplicativo() {
           aoLembrarOutroDia={setOutroDiaLembrado}
           aoVoltar={voltar}
           aoVender={(vendaId) => setRota({ tela: 'vendido', clienteId, vendaId })}
-          aoCorrigir={() => irParaFicha(clienteId)}
+          aoCorrigir={(destino) => irParaFicha(destino ?? clienteId)}
         />
       )
     }
@@ -181,7 +231,7 @@ export function Aplicativo() {
         <TelaLancamento
           clienteId={rota.clienteId}
           lancamentoId={rota.lancamentoId}
-          aoVoltar={() => irParaFicha(rota.clienteId)}
+          aoVoltar={() => rota.estoqueId ? setRota({ tela: 'estoque', produtoId: rota.estoqueId }) : irParaFicha(rota.clienteId)}
           aoCorrigir={(tipo) => setRota({ tela: tipo, clienteId: rota.clienteId, origem: 'lancamento', corrigirId: rota.lancamentoId })}
         />
       )

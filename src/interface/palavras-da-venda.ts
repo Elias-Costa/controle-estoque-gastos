@@ -1,5 +1,6 @@
 import { emReais, type Centavos } from '../dominio/dinheiro.ts'
-import type { Dia, Motivo } from '../dominio/ficha.ts'
+import type { Dia } from '../dominio/ficha.ts'
+import type { MotivoEstoque } from '../dominio/regras-estoque.ts'
 import { diaCurto } from './datas.ts'
 import type { Guarda } from './rascunho-da-venda.ts'
 
@@ -100,7 +101,7 @@ export function linhasDaConfirmacao(nome: string, fiado: boolean, total: Centavo
  * palavras dela (RI-07); o resto é "não deu". As três últimas só acontecem se a ficha mudou
  * por outro aparelho entre abrir a tela e tocar — a tela já não oferece o botão nesses casos.
  */
-export function fraseDaRecusa(motivo: Motivo): string {
+export function fraseDaRecusa(motivo: MotivoEstoque): string {
   switch (motivo) {
     case 'ja-sincronizado':
       return 'Já foi enviada. Desfaça e anote de novo.'

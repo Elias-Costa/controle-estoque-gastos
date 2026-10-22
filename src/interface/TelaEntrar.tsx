@@ -1,3 +1,4 @@
+import { RodapeDeAcoes } from './rodape-de-acoes.tsx'
 import { useState, useSyncExternalStore } from 'react'
 import { conta } from '../sincronizacao/instancia.ts'
 import { Botao } from './Botao.tsx'
@@ -41,13 +42,13 @@ export function TelaEntrar({ aoVoltar, aoEntrar }: { aoVoltar: () => void; aoEnt
       <Campo rotulo={PALAVRAS_DA_CONTA.email} valor={email} aoMudar={setEmail} tipo="email" autoFoco />
       <Campo rotulo={PALAVRAS_DA_CONTA.senha} valor={senha} aoMudar={setSenha} tipo="senha" />
 
-      {recusa !== null && <p className="mt-4 mb-0 font-semibold text-atraso">{recusa}</p>}
+      {recusa !== null && <p role="alert" className="mt-4 mb-0 font-semibold text-atraso">{recusa}</p>}
 
-      <div className="rodape-acao">
+      <RodapeDeAcoes>
         <Botao tipo="principal" aoTocar={() => void entrar()} desabilitado={!podeEntrar}>
           {enviando ? PALAVRAS_DA_CONTA.entrando : PALAVRAS_DA_CONTA.entrar}
         </Botao>
-      </div>
+      </RodapeDeAcoes>
     </main>
   )
 }

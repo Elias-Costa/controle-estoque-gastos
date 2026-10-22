@@ -10,19 +10,33 @@
  */
 
 import type { BancoLocal } from '../dados/banco.ts'
-import { banco, repositorio } from '../dados/instancia.ts'
+import { banco, repositorio, repositorioEstoque, operacoesEstoque, repositorioFotos } from '../dados/instancia.ts'
+import { prepararFoto } from './fotos.ts'
 import { cadastrarCliente, lancarVendaFiado, receber } from '../dados/operacoes.ts'
 import type { Repositorio } from '../dados/repositorio.ts'
 import { saldo } from '../dominio/ficha.ts'
+import { projetarEstoque } from '../dominio/estoque.ts'
+import { custoDoProduto } from '../dominio/produtos.ts'
+import { conteudoDoEfeito } from '../dominio/regras-estoque.ts'
+import { prepararCancelamento, prepararRetorno } from '../dominio/vendas-estoque.ts'
 import { sincronizacao, supabaseDoApp } from '../sincronizacao/instancia.ts'
 import type { Sincronizacao } from '../sincronizacao/sincronizacao.ts'
 
 /** O que o teste encontra em `window.laboratorio`. As operações já vêm presas ao repositório do app. */
 export type Laboratorio = {
+  readonly prepararFoto: typeof prepararFoto
+  readonly repositorioFotos: typeof repositorioFotos
   readonly banco: BancoLocal
   readonly repositorio: Repositorio
   readonly sincronizacao: Sincronizacao
   readonly saldo: typeof saldo
+  readonly repositorioEstoque: typeof repositorioEstoque
+  readonly operacoesEstoque: typeof operacoesEstoque
+  readonly projetarEstoque: typeof projetarEstoque
+  readonly custoDoProduto: typeof custoDoProduto
+  readonly conteudoDoEfeito: typeof conteudoDoEfeito
+  readonly prepararCancelamento: typeof prepararCancelamento
+  readonly prepararRetorno: typeof prepararRetorno
   readonly cadastrarCliente: (entrada: Parameters<typeof cadastrarCliente>[1]) => ReturnType<typeof cadastrarCliente>
   readonly lancarVendaFiado: (entrada: Parameters<typeof lancarVendaFiado>[1]) => ReturnType<typeof lancarVendaFiado>
   readonly receber: (entrada: Parameters<typeof receber>[1]) => ReturnType<typeof receber>
@@ -60,10 +74,19 @@ async function sair(): Promise<void> {
 }
 
 window.laboratorio = {
+  prepararFoto,
+  repositorioFotos,
   banco,
   repositorio,
   sincronizacao,
   saldo,
+  repositorioEstoque,
+  operacoesEstoque,
+  projetarEstoque,
+  custoDoProduto,
+  conteudoDoEfeito,
+  prepararCancelamento,
+  prepararRetorno,
   cadastrarCliente: (entrada) => cadastrarCliente(repositorio, entrada),
   lancarVendaFiado: (entrada) => lancarVendaFiado(repositorio, entrada),
   receber: (entrada) => receber(repositorio, entrada),

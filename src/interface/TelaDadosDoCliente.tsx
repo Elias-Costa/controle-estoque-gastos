@@ -1,3 +1,4 @@
+import { RodapeDeAcoes } from './rodape-de-acoes.tsx'
 import { useEffect, useState } from 'react'
 import { repositorio } from '../dados/instancia.ts'
 import { alterarCliente, desativarCliente } from '../dados/operacoes.ts'
@@ -110,7 +111,7 @@ function Formulario({ cliente, aoVoltar, aoPronto, aoDesativar }: { cliente: Cli
       {confirmando && <p className="mt-5 mb-0 font-semibold">{PALAVRAS.dados.desativarMesmo}</p>}
       {erro !== null && <p className="mt-4 mb-0 font-semibold text-atraso">{erro}</p>}
 
-      <div className="rodape-acao">
+      <RodapeDeAcoes>
         {confirmando ? (
           <>
             <Botao tipo="principal" aoTocar={() => void desativar()} desabilitado={gravando}>
@@ -130,7 +131,7 @@ function Formulario({ cliente, aoVoltar, aoPronto, aoDesativar }: { cliente: Cli
             </Botao>
           </>
         )}
-      </div>
+      </RodapeDeAcoes>
     </main>
   )
 }

@@ -31,7 +31,7 @@ export function Escolha<T extends string>({
           return (
             <label
               key={opcao.valor}
-              className={`flex min-h-12 items-center gap-2 rounded-full border bg-papel px-4 ${marcada ? `${MARCADA} font-semibold` : 'border-borda'}`}
+              className={`flex min-h-12 items-center gap-2 rounded-full border bg-papel px-4 has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-3 has-[:focus-visible]:outline-acento ${marcada ? `${MARCADA} font-semibold` : 'border-borda'}`}
             >
               <input
                 type="radio"
@@ -64,7 +64,7 @@ export function Vezes({ rotulo, maximo, valor, aoEscolher }: { rotulo: string; m
   return (
     <div>
       <p className="mt-5 mb-1.5 text-[0.95rem] text-suave">{rotulo}</p>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {vezes.map((quantidade) => {
           const ativa = quantidade === valor
           return (
@@ -72,7 +72,7 @@ export function Vezes({ rotulo, maximo, valor, aoEscolher }: { rotulo: string; m
               key={quantidade}
               type="button"
               aria-pressed={ativa}
-              className={`min-h-[52px] flex-1 rounded-xl border bg-papel text-tinta ${ativa ? `${MARCADA} font-bold` : 'border-borda'}`}
+              className={`min-h-[52px] min-w-11 flex-1 rounded-xl border bg-papel text-tinta ${ativa ? `${MARCADA} font-bold` : 'border-borda'}`}
               onClick={() => aoEscolher(quantidade)}
             >
               {quantidade}&times;

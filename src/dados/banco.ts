@@ -37,6 +37,11 @@
 
 import Dexie, { type DexieOptions, type Table } from 'dexie'
 import type { Cliente, Id, Lancamento } from '../dominio/ficha.ts'
+import type { MovimentoEstoque } from '../dominio/estoque.ts'
+import type { Categoria, Produto } from '../dominio/produtos.ts'
+import type { EncerramentoTentativa } from '../dominio/recuperacao-estoque.ts'
+import type { GrupoEstoque, OperacaoEstoque } from '../dominio/vendas-estoque.ts'
+import type { EnvioProdutoFoto, EstadoFotos, FotoLocal, ProtecaoFotoLocal, UsoFotoLocal } from './tipos-fotos.ts'
 
 /**
  * A linha de cliente como fica na base: o tipo do domínio mais o carimbo do último-que-escreve
@@ -72,6 +77,33 @@ export const NOME_DO_BANCO = 'controle-fiado'
 /** As tabelas que sobem para a nuvem. A fila não sobe: é só deste aparelho. */
 export type TabelaSincronizada = 'clientes' | 'lancamentos'
 
+/** F2 usa a mesma FIFO; seu transporte conjunto entra em E-21, nunca pela rota financeira F1. */
+export type TabelaDaFila = TabelaSincronizada | 'categorias' | 'produtos' | 'operacoes' | 'encerramentos' | 'fotos'
+
+/** Cadastro completo sujeito a LWW por registro, separado da referência derivada de compras. */
+export type ProdutoLocal = Produto & { readonly atualizadoEm: string }
+
+/** O servidor pode já ter aceitado a mesma confirmação sob outro id; preservar o vínculo local. */
+export type EncerramentoLocal = EncerramentoTentativa & { readonly remotoId?: Id }
+
+/** Ponteiro à evidência vigente: id/revisão também podem existir com outro conteúdo aceito (Q47A). */
+export type OperacaoLocal = OperacaoEstoque & { readonly versaoId: Id }
+
+/** Fotografia histórica imutável do conteúdo; aceite/recusa se referem a esta versão (Q37/47A). */
+export type VersaoEstoque = {
+  readonly id: Id
+  readonly operacaoId: Id
+  readonly grupo: GrupoEstoque
+  readonly aceita?: boolean
+  readonly problema?: Problema
+  readonly legadoId?: Id
+  /** Intenção recuperada do encerramento remoto, ainda sem uma edição feita neste aparelho. */
+  readonly restaurada?: boolean
+}
+
+/** Máximo lógico persistido; bigint é valor, nunca chave de índice (Q42, D-022). */
+export type RelogioEstoque = { readonly chave: 'cadastro'; readonly ultimo: bigint }
+
 /**
  * Um item da fila de sincronização: "a linha `registroId` de `tabela` precisa subir".
  * Há no máximo um item pendente por registro (`repositorio.ts`). `criadoEm` é informativo —
@@ -83,7 +115,7 @@ export type TabelaSincronizada = 'clientes' | 'lancamentos'
 export type ItemDaFila = {
   /** Autoincremento local: a ordem de entrada é a ordem de envio. */
   readonly ordem: number
-  readonly tabela: TabelaSincronizada
+  readonly tabela: TabelaDaFila
   readonly registroId: Id
   /** Instante em que entrou na fila, ISO 8601. */
   readonly criadoEm: string
@@ -102,7 +134,7 @@ export type NovoItemDaFila = Omit<ItemDaFila, 'ordem'>
 
 /** Uma linha da tabela `sincronizacao`: o cursor de download de cada tabela (D-042). */
 export type CursorDeDownload = {
-  readonly chave: TabelaSincronizada
+  readonly chave: TabelaSincronizada | 'categorias' | 'produtos' | 'estoque'
   /** O maior carimbo do servidor já visto naquela tabela, ISO UTC; o download pede "desde aqui, com margem". */
   readonly valor: string
 }
@@ -129,6 +161,28 @@ export const ESQUEMA_V2 = {
   sincronizacao: 'chave',
 } as const
 
+/** Versão aditiva de E-19: nenhuma linha F1 é convertida ou reinterpretada. */
+export const ESQUEMA_V3 = {
+  ...ESQUEMA_V2,
+  categorias: 'id',
+  produtos: 'id, categoriaId',
+  operacoes: 'id',
+  movimentos: '[id+revisao], produtoId, operacaoId',
+  versoesEstoque: 'id, operacaoId',
+  encerramentos: 'id',
+  relogioEstoque: 'chave',
+} as const
+
+/** E-22 é aditiva: binários/miniaturas e prova durável de uso/envio, sem reescrever F1 ou estoque. */
+export const ESQUEMA_V4 = {
+  ...ESQUEMA_V3,
+  fotos: 'id, produtoId',
+  protecoesFotos: 'id, fotoId, copiaId',
+  enviosProdutoFoto: 'id, produtoId',
+  usosFotos: 'id, fotoId',
+  estadoFotos: 'chave',
+} as const
+
 /**
  * A base local. `dependencias` existe para os testes injetarem um IndexedDB de mentira
  * isolado por teste (`fake-indexeddb`); em produção ninguém passa nada e o Dexie usa o do
@@ -139,15 +193,41 @@ export class BancoLocal extends Dexie {
   readonly clientes: Table<ClienteLocal, Id, ClienteLocal>
   readonly lancamentos: Table<Lancamento, Id, Lancamento>
   readonly fila: Table<ItemDaFila, number, NovoItemDaFila>
-  readonly sincronizacao: Table<CursorDeDownload, TabelaSincronizada, CursorDeDownload>
+  readonly sincronizacao: Table<CursorDeDownload, CursorDeDownload['chave'], CursorDeDownload>
+  readonly categorias: Table<Categoria, Id, Categoria>
+  readonly produtos: Table<ProdutoLocal, Id, ProdutoLocal>
+  readonly operacoes: Table<OperacaoLocal, Id, OperacaoLocal>
+  readonly movimentos: Table<MovimentoEstoque, [Id, number], MovimentoEstoque>
+  readonly versoesEstoque: Table<VersaoEstoque, Id, VersaoEstoque>
+  readonly encerramentos: Table<EncerramentoLocal, Id, EncerramentoLocal>
+  readonly relogioEstoque: Table<RelogioEstoque, string, RelogioEstoque>
+  readonly fotos: Table<FotoLocal, Id, FotoLocal>
+  readonly protecoesFotos: Table<ProtecaoFotoLocal, string, ProtecaoFotoLocal>
+  readonly enviosProdutoFoto: Table<EnvioProdutoFoto, Id, EnvioProdutoFoto>
+  readonly usosFotos: Table<UsoFotoLocal, Id, UsoFotoLocal>
+  readonly estadoFotos: Table<EstadoFotos, string, EstadoFotos>
 
   constructor(nome: string = NOME_DO_BANCO, dependencias?: DexieOptions) {
     super(nome, dependencias)
     this.version(1).stores(ESQUEMA_V1)
     this.version(2).stores(ESQUEMA_V2)
+    this.version(3).stores(ESQUEMA_V3)
+    this.version(4).stores(ESQUEMA_V4)
     this.clientes = this.table('clientes')
     this.lancamentos = this.table('lancamentos')
     this.fila = this.table('fila')
     this.sincronizacao = this.table('sincronizacao')
+    this.categorias = this.table('categorias')
+    this.produtos = this.table('produtos')
+    this.operacoes = this.table('operacoes')
+    this.movimentos = this.table('movimentos')
+    this.versoesEstoque = this.table('versoesEstoque')
+    this.encerramentos = this.table('encerramentos')
+    this.relogioEstoque = this.table('relogioEstoque')
+    this.fotos = this.table('fotos')
+    this.protecoesFotos = this.table('protecoesFotos')
+    this.enviosProdutoFoto = this.table('enviosProdutoFoto')
+    this.usosFotos = this.table('usosFotos')
+    this.estadoFotos = this.table('estadoFotos')
   }
 }

@@ -1,9 +1,12 @@
+import { RodapeDeAcoes } from './rodape-de-acoes.tsx'
 import { useEffect, useState } from 'react'
 import { repositorio } from '../dados/instancia.ts'
 import { estornarLancamento } from '../dados/operacoes.ts'
 import { emReais, somar } from '../dominio/dinheiro.ts'
 import type { Id, Recebimento, SaldoAnterior, Venda } from '../dominio/ficha.ts'
 import { caminhoDeCorrecao } from '../dominio/lancamentos.ts'
+import { ehVendaEstoque } from '../dominio/vendas-estoque.ts'
+import { AcoesDaVenda } from './acoes-da-venda.tsx'
 import { Botao } from './Botao.tsx'
 import { diaCurto, hoje } from './datas.ts'
 import { comoPagou, descricaoDosItens, PALAVRAS } from './palavras-da-ficha.ts'
@@ -51,6 +54,7 @@ export function TelaLancamento({
     if (anotado === undefined || (anotado.tipo !== 'venda' && anotado.tipo !== 'recebimento' && anotado.tipo !== 'saldo-anterior')) return null
     return {
       nome: cliente.nome,
+      desativada: cliente.desativadoEm !== undefined,
       anotado,
       desfeito: ficha.some((lancamento) => lancamento.tipo === 'estorno' && lancamento.estornaId === lancamentoId),
       sincronizado: await repositorio.sincronizado(lancamentoId),
@@ -72,7 +76,8 @@ export function TelaLancamento({
     )
   }
 
-  const { nome, anotado, desfeito, sincronizado, comProblema } = leitura.valor
+  const { nome, anotado, desfeito, sincronizado, comProblema, desativada } = leitura.valor
+  const vendaF2 = anotado.tipo === 'venda' && ehVendaEstoque(anotado)
   const caminho = comProblema ? 'estornar' : caminhoDeCorrecao(sincronizado)
   const palavras = palavrasDe(anotado)
 
@@ -105,8 +110,10 @@ export function TelaLancamento({
       {confirmando && <p className="mt-5 mb-0 font-semibold">{PALAVRAS_DA_VENDA.anotacao.desfazerMesmo}</p>}
       {erro !== null && <p className="mt-4 mb-0 font-semibold text-atraso">{erro}</p>}
 
-      {!desfeito && (
-        <div className="rodape-acao">
+      {vendaF2 && !desativada && <AcoesDaVenda venda={anotado} cancelada={desfeito} comProblema={comProblema}
+        aoCorrigir={() => aoCorrigir('venda')} aoConcluir={aoVoltar} />}
+      {!desfeito && !vendaF2 && !desativada && (
+        <RodapeDeAcoes>
           {caminho === 'corrigir' && (
             <Botao tipo="principal" aoTocar={() => aoCorrigir(anotado.tipo)}>
               {PALAVRAS_DA_VENDA.anotacao.corrigir}
@@ -127,7 +134,7 @@ export function TelaLancamento({
               </Botao>
             </>
           )}
-        </div>
+        </RodapeDeAcoes>
       )}
     </main>
   )

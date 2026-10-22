@@ -20,6 +20,7 @@
 
 import type { Cliente, Ficha, Id, Lancamento } from '../dominio/ficha.ts'
 import type { BancoLocal, TabelaSincronizada } from './banco.ts'
+import { itemDaFilaDoRegistro } from './fila.ts'
 
 /** O que o app precisa da base. Só isto; o que a sincronização precisa ela pega no banco (E-07). */
 export type Repositorio = {
@@ -90,13 +91,17 @@ export function criarRepositorioLocal(
     },
     gravarLancamento: async (lancamento) => {
       const instante = agora()
-      await banco.transaction('rw', banco.lancamentos, banco.fila, async () => {
+      await banco.transaction('rw', banco.lancamentos, banco.fila, banco.operacoes, async () => {
+        const envolvidos = [lancamento.id, ...(lancamento.tipo === 'estorno' ? [lancamento.estornaId] : [])]
+        if ((await banco.operacoes.toArray()).some((item) => item.lancamentos.some((ref) => envolvidos.includes(ref.id)))) {
+          throw new Error('Lançamento F2 exige operação completa de estoque')
+        }
         await banco.lancamentos.put(lancamento)
         await enfileirar('lancamentos', lancamento.id, instante)
       })
       aoEnfileirar()
     },
-    sincronizado: async (id) => (await banco.fila.where('registroId').equals(id).count()) === 0,
-    comProblema: async (id) => (await banco.fila.where('registroId').equals(id).first())?.problema !== undefined,
+    sincronizado: async (id) => (await itemDaFilaDoRegistro(banco, id)) === undefined,
+    comProblema: async (id) => (await itemDaFilaDoRegistro(banco, id))?.problema !== undefined,
   }
 }

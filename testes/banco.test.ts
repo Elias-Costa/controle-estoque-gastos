@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import Dexie, { type DexieOptions } from 'dexie'
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb'
-import { BancoLocal, ESQUEMA_V1, ESQUEMA_V2, NOME_DO_BANCO } from '../src/dados/banco.ts'
+import { BancoLocal, ESQUEMA_V1, ESQUEMA_V2, ESQUEMA_V3, ESQUEMA_V4, NOME_DO_BANCO } from '../src/dados/banco.ts'
 import type { Cliente, VendaFiado } from '../src/dominio/ficha.ts'
 
 /**
@@ -24,6 +24,13 @@ import type { Cliente, VendaFiado } from '../src/dominio/ficha.ts'
 const ESQUEMAS_PUBLICADOS: Readonly<Record<number, Readonly<Record<string, string>>>> = {
   1: { clientes: 'id', lancamentos: 'id, clienteId', fila: '++ordem, registroId' },
   2: { clientes: 'id', lancamentos: 'id, clienteId', fila: '++ordem, registroId', sincronizacao: 'chave' },
+  3: { clientes: 'id', lancamentos: 'id, clienteId', fila: '++ordem, registroId', sincronizacao: 'chave',
+    categorias: 'id', produtos: 'id, categoriaId', operacoes: 'id', movimentos: '[id+revisao], produtoId, operacaoId',
+    versoesEstoque: 'id, operacaoId', encerramentos: 'id', relogioEstoque: 'chave' },
+  4: { clientes: 'id', lancamentos: 'id, clienteId', fila: '++ordem, registroId', sincronizacao: 'chave',
+    categorias: 'id', produtos: 'id, categoriaId', operacoes: 'id', movimentos: '[id+revisao], produtoId, operacaoId',
+    versoesEstoque: 'id, operacaoId', encerramentos: 'id', relogioEstoque: 'chave', fotos: 'id, produtoId',
+    protecoesFotos: 'id, fotoId, copiaId', enviosProdutoFoto: 'id, produtoId', usosFotos: 'id, fotoId', estadoFotos: 'chave' },
 }
 
 /**
@@ -31,7 +38,7 @@ const ESQUEMAS_PUBLICADOS: Readonly<Record<number, Readonly<Record<string, strin
  * entra aqui (D-022); um índice novo é acrescentado de propósito, com a versão nova. `chave`
  * é o nome da tabela no cursor de download (v2).
  */
-const INDICES_PERMITIDOS = new Set(['id', 'clienteId', 'ordem', 'registroId', 'chave'])
+const INDICES_PERMITIDOS = new Set(['id', 'clienteId', 'ordem', 'registroId', 'chave', 'categoriaId', 'produtoId', 'operacaoId', 'revisao', 'fotoId', 'copiaId'])
 
 /** Uma fábrica de IndexedDB de mentira por teste: nenhum estado atravessa de um para outro. */
 function abrir(nome = 'teste', indexedDB: DexieOptions['indexedDB'] = new IDBFactory()): BancoLocal {
@@ -70,6 +77,8 @@ describe('esquema local (D-020, D-040)', () => {
     if (v1 === undefined || v2 === undefined) throw new Error('sem v1 ou v2')
     expect(v1).toEqual({ ...ESQUEMA_V1 })
     expect(v2).toEqual({ ...ESQUEMA_V2 })
+    expect(ESQUEMAS_PUBLICADOS[3]).toEqual({ ...ESQUEMA_V3 })
+    expect(ESQUEMAS_PUBLICADOS[4]).toEqual({ ...ESQUEMA_V4 })
   })
 
   test('todo índice está na lista de permissão — nenhum campo de dinheiro é chave (D-022)', async () => {
@@ -116,7 +125,7 @@ describe('esquema local (D-020, D-040)', () => {
     // `versao`, e o código lê as duas formas.
     const atual = abrir(nome, indexedDB)
     await atual.open()
-    expect(atual.verno).toBe(2)
+    expect(atual.verno).toBe(4)
     const cliente: Cliente | undefined = await atual.clientes.get('c1')
     expect(cliente).toEqual(vera)
     const lida = await atual.lancamentos.get('v1')
@@ -134,17 +143,19 @@ describe('esquema local (D-020, D-040)', () => {
   test('a marca de fichinha desativada (D-050) é campo sem índice: entra na v2 publicada sem versão nova, e sai com o `put` que a tira', async () => {
     // O esquema declara só as chaves (D-040); um campo a mais na linha não é migração. A prova
     // é contra o fake, não o WebKit (D-033) — o que ela garante é que `banco.ts` não mudou de versão.
-    const banco = abrir()
+    const banco = new Dexie('marca-v2', { indexedDB: new IDBFactory(), IDBKeyRange })
+    banco.version(2).stores(ESQUEMA_V2)
+    const clientes = banco.table('clientes')
     await banco.open()
     expect(banco.verno).toBe(2)
     expect(ESQUEMAS_PUBLICADOS[2]).toEqual(ESQUEMA_V2)
 
-    await banco.clientes.put({ id: 'c1', nome: 'Vera', desativadoEm: '2026-09-18', atualizadoEm: '2026-09-18T10:00:00.000Z' })
-    expect((await banco.clientes.get('c1'))?.desativadoEm).toBe('2026-09-18')
+    await clientes.put({ id: 'c1', nome: 'Vera', desativadoEm: '2026-09-18', atualizadoEm: '2026-09-18T10:00:00.000Z' })
+    expect((await clientes.get('c1'))?.desativadoEm).toBe('2026-09-18')
 
     // Reativar é regravar sem a marca: `put` substitui a linha inteira, nada sobra do campo.
-    await banco.clientes.put({ id: 'c1', nome: 'Vera', atualizadoEm: '2026-09-18T10:01:00.000Z' })
-    expect(await banco.clientes.get('c1')).toEqual({ id: 'c1', nome: 'Vera', atualizadoEm: '2026-09-18T10:01:00.000Z' })
+    await clientes.put({ id: 'c1', nome: 'Vera', atualizadoEm: '2026-09-18T10:01:00.000Z' })
+    expect(await clientes.get('c1')).toEqual({ id: 'c1', nome: 'Vera', atualizadoEm: '2026-09-18T10:01:00.000Z' })
     banco.close()
   })
 })

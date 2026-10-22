@@ -2,7 +2,7 @@
  * O runner de migrations da nuvem (E-06, D-041 item 3): aplica o que falta, ou reverte a última.
  *
  *   bun run migrar            aplica, em ordem, toda migration ainda não registrada
- *   bun run migrar:reverter   roda o `.reverter.sql` da última aplicada e apaga o registro
+ *   bun run migrar:reverter   seleciona local e reverte a última, apagando seu registro (D-050)
  *
  * É código próprio, não a CLI do Supabase, por uma razão que cabe numa frase: um mecanismo só
  * para ir e voltar, sem binário e sem dependência, legível inteiro por quem mantém sozinho.
@@ -13,15 +13,16 @@
  * Toda migration tem reverter — `lerMigracoes` recusa uma sem par. Nunca se edita uma migration
  * já aplicada; acrescenta-se a próxima (`nuvem/LEIA-ME.md`).
  *
- * A conexão vem de `SUPABASE_DB_URL` em `.env.local` (session pooler, porta 5432 — o modo
- * transação não aceita `set local`, e a suíte de integração precisa dele). O valor é segredo:
- * nunca é impresso, e este arquivo é o único, junto com a suíte, que o lê. `Bun.sql` é o cliente
- * Postgres embutido no Bun — nada a instalar.
+ * A conexão vem de `SUPABASE_DB_URL` no processo: produção usa `.env.local`; testes passam
+ * configuração local ou de homologação já validada (D-050). Na nuvem é session pooler, porta
+ * 5432, com TLS; o modo transação não atende a suíte. Só o loopback local validado dispensa TLS.
+ * O segredo nunca é impresso. `Bun.sql` é o cliente Postgres embutido no Bun.
  */
 
 import { SQL } from 'bun'
 import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
+import { exigirDestinoDeTeste } from './ambiente-de-teste.ts'
 
 /** Uma migration: o nome que vai para o registro e os dois SQL, o de ir e o de voltar. */
 export type Migracao = {
@@ -107,7 +108,8 @@ export function conectar(): SQL {
   if (url === undefined || url === '') {
     throw new Error('Defina SUPABASE_DB_URL em .env.local (Supabase → Connect → Session pooler, porta 5432).')
   }
-  return new SQL(url, { max: 1, tls: 'require' })
+  const ambiente = process.env.AMBIENTE_DE_TESTE === undefined ? undefined : exigirDestinoDeTeste()
+  return new SQL(url, { max: 1, tls: ambiente === 'local' ? false : 'require' })
 }
 
 if (import.meta.main) {
@@ -118,6 +120,8 @@ if (import.meta.main) {
   }
   let sql: SQL | null = null
   try {
+    // D-050: reverter destrói dados; o atalho histórico não pode atingir produção em uso.
+    if (modo === 'reverter' || process.env.INTEGRACAO === '1') exigirDestinoDeTeste()
     sql = conectar()
     const migracoes = await lerMigracoes()
     await garantirRegistro(sql)

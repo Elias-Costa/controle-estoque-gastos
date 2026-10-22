@@ -31,6 +31,8 @@
 
 import { createClient, type PostgrestError, type SupabaseClient } from '@supabase/supabase-js'
 import type { ClienteNaNuvem, LancamentoNaNuvem } from './borda.ts'
+import { COLUNAS_CATEGORIA, COLUNAS_PRODUTO, type DocumentoEstoque } from './borda-estoque.ts'
+import { criarNuvemFotos, type NuvemFotos } from './nuvem-fotos.ts'
 
 /** Por que uma ida à nuvem não deu certo. */
 export type Falha =
@@ -49,6 +51,7 @@ export type LinhaRecebida = Readonly<Record<string, unknown>>
  * o download devolve as linhas com o carimbo do servidor (`recebido_em` / `criado_em`) dentro.
  */
 export type Nuvem = {
+  readonly fotos?: NuvemFotos
   readonly temSessao: () => Promise<boolean>
   /** Avisa quando a sessão muda (entrou, saiu, renovou). Devolve a função que cancela. */
   readonly aoMudarSessao: (ouvinte: () => void) => () => void
@@ -56,6 +59,13 @@ export type Nuvem = {
   readonly enviarLancamento: (linha: LancamentoNaNuvem) => Promise<Resposta<void>>
   readonly buscarClientes: (desde: string | null) => Promise<Resposta<readonly LinhaRecebida[]>>
   readonly buscarLancamentos: (desde: string | null) => Promise<Resposta<readonly LinhaRecebida[]>>
+  readonly enviarCategoria: (cadastro: DocumentoEstoque) => Promise<Resposta<void>>
+  readonly enviarProduto: (cadastro: DocumentoEstoque) => Promise<Resposta<void>>
+  readonly enviarGrupo: (grupo: DocumentoEstoque, evidencias: readonly DocumentoEstoque[], encerramentoId: string | null) => Promise<Resposta<void>>
+  readonly enviarEncerramento: (encerramento: DocumentoEstoque) => Promise<Resposta<string>>
+  readonly buscarCategorias: (desde: string | null) => Promise<Resposta<readonly LinhaRecebida[]>>
+  readonly buscarProdutos: (desde: string | null) => Promise<Resposta<readonly LinhaRecebida[]>>
+  readonly buscarEstoque: (apos: string, limite: number) => Promise<Resposta<readonly LinhaRecebida[]>>
 }
 
 /**
@@ -73,7 +83,7 @@ export const LINHAS_POR_PAGINA = 500
  */
 export const COLUNAS_CLIENTE = 'id, nome, telefone, apelido, observacao, desativado_em, atualizado_em, recebido_em'
 export const COLUNAS_LANCAMENTO =
-  'id, cliente_id, data, tipo, pagamento, forma, itens, desconto::text, parcelas, valor::text, observacao, estorna_id, motivo, criado_em'
+  'id, cliente_id, data, tipo, pagamento, forma, itens, desconto::text, parcelas, valor::text, observacao, estorna_id, motivo, criado_em, operacao_estoque_id, revisao_estoque'
 
 const CONSTRAINT = /constraint "([a-z0-9_]+)"/i
 
@@ -111,7 +121,7 @@ export function criarNuvemSupabase(supabase: SupabaseClient): Nuvem {
   }
 
   /** Página a página, em ordem estável (carimbo, id), até uma página vir curta. */
-  async function buscar(tabela: 'clientes' | 'lancamentos', colunas: string, carimbo: string, desde: string | null): Promise<Resposta<readonly LinhaRecebida[]>> {
+  async function buscar(tabela: 'clientes' | 'lancamentos' | 'categorias' | 'produtos', colunas: string, carimbo: string, desde: string | null): Promise<Resposta<readonly LinhaRecebida[]>> {
     const todas: LinhaRecebida[] = []
     for (let inicio = 0; ; inicio += LINHAS_POR_PAGINA) {
       let consulta = supabase.from(tabela).select(colunas).order(carimbo, { ascending: true }).order('id', { ascending: true })
@@ -124,7 +134,17 @@ export function criarNuvemSupabase(supabase: SupabaseClient): Nuvem {
     }
   }
 
+  async function rpc(nome: string, argumentos: DocumentoEstoque): Promise<Resposta<unknown>> {
+    const { data, error } = await supabase.rpc(nome, argumentos)
+    return error ? { ok: false, falha: classificar(error) } : { ok: true, valor: data }
+  }
+  async function gravar(nome: string, argumentos: DocumentoEstoque): Promise<Resposta<void>> {
+    const resposta = await rpc(nome, argumentos)
+    return resposta.ok ? { ok: true, valor: undefined } : resposta
+  }
+
   return {
+    fotos: criarNuvemFotos(supabase),
     temSessao: async () => {
       const { data } = await supabase.auth.getSession()
       return data.session !== null
@@ -137,5 +157,24 @@ export function criarNuvemSupabase(supabase: SupabaseClient): Nuvem {
     enviarLancamento: (linha) => enviar('lancamentos', { ...linha }),
     buscarClientes: (desde) => buscar('clientes', COLUNAS_CLIENTE, 'recebido_em', desde),
     buscarLancamentos: (desde) => buscar('lancamentos', COLUNAS_LANCAMENTO, 'criado_em', desde),
+    enviarCategoria: (cadastro) => gravar('gravar_categoria_estoque', { cadastro }),
+    enviarProduto: (cadastro) => gravar('gravar_produto_estoque', { cadastro }),
+    enviarGrupo: (grupo, evidencias, encerramentoId) => gravar('aceitar_grupo_estoque', { grupo, evidencias, encerramento_id: encerramentoId }),
+    enviarEncerramento: async (encerramento) => {
+      const resposta = await rpc('gravar_encerramento_estoque', { encerramento })
+      if (!resposta.ok) return resposta
+      const linha = comoLinha(resposta.valor)
+      if (typeof linha['id'] !== 'string') throw new Error('Encerramento remoto sem identidade')
+      return { ok: true, valor: linha['id'] }
+    },
+    // Categoria é imutável e a 0004 não tem carimbo de chegada. Lista completa em ordem estável.
+    buscarCategorias: () => buscar('categorias', COLUNAS_CATEGORIA, 'id', null),
+    buscarProdutos: (desde) => buscar('produtos', COLUNAS_PRODUTO, 'recebido_em', desde),
+    buscarEstoque: async (apos, limite) => {
+      const resposta = await rpc('baixar_estoque', { apos, limite })
+      if (!resposta.ok) return resposta
+      if (!Array.isArray(resposta.valor)) throw new Error('Download de estoque sem página')
+      return { ok: true, valor: resposta.valor.map(comoLinha) }
+    },
   }
 }

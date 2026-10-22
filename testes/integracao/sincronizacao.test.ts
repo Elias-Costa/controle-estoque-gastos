@@ -5,9 +5,10 @@ import type { ClienteLocal } from '../../src/dados/banco.ts'
 import type { Lancamento } from '../../src/dominio/ficha.ts'
 import { clienteDaNuvem, clienteParaNuvem, lancamentoDaNuvem, lancamentoParaNuvem } from '../../src/sincronizacao/borda.ts'
 import { criarNuvemSupabase, type Falha, type Nuvem, type Resposta } from '../../src/sincronizacao/nuvem.ts'
+import { exigirDestinoDeTeste } from '../../nuvem/ambiente-de-teste.ts'
 
 /**
- * O transporte real (E-07, D-042 item 4): `supabase-js` → PostgREST → o banco dela, com um
+ * O transporte real (E-07, D-042 item 4): `supabase-js` → PostgREST → local ou homologação, com um
  * usuário de teste. O que só se prova aqui, e não com a nuvem de mentira nem por conexão direta
  * ao Postgres: que a borda atravessa o PostgREST inteira (`bigint` como texto com o cast
  * `::text`, `jsonb`, `date`, carimbos), **a forma do erro** que o PostgREST devolve para cada
@@ -15,15 +16,16 @@ import { criarNuvemSupabase, type Falha, type Nuvem, type Resposta } from '../..
  * visto pelo app, e a classificação de sessão e de rede com falhas de verdade.
  *
  * **As linhas que este arquivo cria ficam no banco.** Lançamento é imutável e ninguém apaga (RI-03);
- * elas nascem sob o `dono` do usuário de teste e a RLS as esconde da conta dela. A limpeza é
- * `migrar:reverter` + `migrar` antes de E-15 (`nuvem/LEIA-ME.md`). Cada rodada usa ids novos.
+ * elas nascem sob o `dono` do usuário fictício, em ambiente separado (D-050).
+ * Produção nunca recebe esta suíte. Cada rodada usa ids novos, sem limpeza automática.
  *
- * Precisa, em `.env.local`: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `SUPABASE_TESTE_EMAIL`,
- * `SUPABASE_TESTE_SENHA` (usuário criado no painel: Authentication → Users → Add user, auto-confirm).
- * Sem eles, a suíte pula e diz por quê — não "passa".
+ * O comando passa URL, chave e credenciais: no local prepara a conta fictícia; em homologação
+ * usa a conta criada pelo mantenedor e sua configuração própria. Sem credenciais a suíte pula
+ * e diz por quê; os comandos de ambiente recusam configuração incompleta antes da execução.
  */
 
 const LIGADA = process.env.INTEGRACAO === '1'
+if (LIGADA) exigirDestinoDeTeste()
 const URL = process.env.VITE_SUPABASE_URL ?? ''
 const CHAVE = process.env.VITE_SUPABASE_ANON_KEY ?? ''
 const EMAIL = process.env.SUPABASE_TESTE_EMAIL ?? ''
@@ -31,7 +33,7 @@ const SENHA = process.env.SUPABASE_TESTE_SENHA ?? ''
 const COM_USUARIO = LIGADA && URL !== '' && CHAVE !== '' && EMAIL !== '' && SENHA !== ''
 
 if (LIGADA && !COM_USUARIO) {
-  console.warn('testes/integracao/sincronizacao.test.ts pulada: faltam VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, SUPABASE_TESTE_EMAIL ou SUPABASE_TESTE_SENHA em .env.local')
+  console.warn('testes/integracao/sincronizacao.test.ts pulada: faltam URL, chave ou credenciais na configuração do ambiente de teste')
 }
 
 const GRANDE = 9007199254740993n // 2^53 + 1
@@ -66,7 +68,7 @@ function haPouco(): string {
   return new Date(Date.now() - 5 * 60_000).toISOString()
 }
 
-describe.skipIf(!COM_USUARIO)('o transporte real: supabase-js → PostgREST → o banco dela (E-07, D-042)', () => {
+describe.skipIf(!COM_USUARIO)('o transporte real: supabase-js → PostgREST → banco de teste (E-07, D-042)', () => {
   const clienteId = uuidv7()
   const cliente: ClienteLocal = { id: clienteId, nome: 'Vera (teste E-07)', telefone: '(11) 9 8765-4321', atualizadoEm: '2026-09-12T10:05:00.000Z' }
   const venda: Lancamento = {
@@ -123,17 +125,19 @@ describe.skipIf(!COM_USUARIO)('o transporte real: supabase-js → PostgREST → 
   })
 
   test('a marca de fichinha desativada (0003, D-050) sobe como `date`, desce como `Dia`, e sai quando reativa', async () => {
-    // Escrito em E-16 sem rodar contra o projeto dela (há dado real; ARCHITECTURE §11): roda no segundo projeto.
-    const desativado: ClienteLocal = { ...cliente, desativadoEm: '2026-09-18', atualizadoEm: '2026-09-12T10:06:00.000Z' }
+    // D-050: cadastro próprio evita alterar o carimbo que a prova de último-que-escreve usa.
+    const clienteDaMarca: ClienteLocal = { ...cliente, id: uuidv7() }
+    esperarOk(await nuvem.enviarCliente(clienteParaNuvem(clienteDaMarca)))
+    const desativado: ClienteLocal = { ...clienteDaMarca, desativadoEm: '2026-09-18', atualizadoEm: '2026-09-12T10:06:00.000Z' }
     esperarOk(await nuvem.enviarCliente(clienteParaNuvem(desativado)))
-    let linha = esperarOk(await nuvem.buscarClientes(haPouco())).find((l) => l['id'] === clienteId)
+    let linha = esperarOk(await nuvem.buscarClientes(haPouco())).find((l) => l['id'] === clienteDaMarca.id)
     if (linha === undefined) throw new Error('o cliente desativado não desceu')
     expect(linha['desativado_em']).toBe('2026-09-18')
     expect(clienteDaNuvem(linha).desativadoEm).toBe('2026-09-18')
 
-    const reativado: ClienteLocal = { ...cliente, atualizadoEm: '2026-09-12T10:07:00.000Z' }
+    const reativado: ClienteLocal = { ...clienteDaMarca, atualizadoEm: '2026-09-12T10:07:00.000Z' }
     esperarOk(await nuvem.enviarCliente(clienteParaNuvem(reativado)))
-    linha = esperarOk(await nuvem.buscarClientes(haPouco())).find((l) => l['id'] === clienteId)
+    linha = esperarOk(await nuvem.buscarClientes(haPouco())).find((l) => l['id'] === clienteDaMarca.id)
     if (linha === undefined) throw new Error('o cliente reativado não desceu')
     expect(linha['desativado_em']).toBeNull()
     expect(clienteDaNuvem(linha)).toEqual(reativado)

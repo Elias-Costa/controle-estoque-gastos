@@ -1,3 +1,4 @@
+import { RodapeDeAcoes } from './rodape-de-acoes.tsx'
 import type { Id } from '../dominio/ficha.ts'
 import { CARIMBO_DE_BUILD } from '../plataforma/versao.ts'
 import { Botao } from './Botao.tsx'
@@ -8,6 +9,8 @@ import { PALAVRAS_DA_COBRANCA } from './palavras-da-cobranca.ts'
 import { PALAVRAS } from './palavras-da-ficha.ts'
 import { PALAVRAS_DA_VENDA } from './palavras-da-venda.ts'
 import { BotaoEntrar } from './TelaEntrar.tsx'
+import { PALAVRAS_DOS_PRODUTOS } from './palavras-dos-produtos.ts'
+import { AvisoConferencias } from './tela-conferencias.tsx'
 
 /**
  * A tela inicial (E-09): a lista de fichinhas com busca — quem deve e quanto (RF-01, RF-10 em
@@ -31,6 +34,8 @@ export function TelaInicial({
   aoVender,
   aoVerDevedoras,
   aoEntrar,
+  aoVerProdutos,
+  aoConferir,
 }: {
   busca: string
   aoBuscar: (texto: string) => void
@@ -39,19 +44,25 @@ export function TelaInicial({
   aoVender: () => void
   aoVerDevedoras: () => void
   aoEntrar: () => void
+  aoVerProdutos: () => void
+  aoConferir: () => void
 }) {
   return (
     <main className="tela">
       <header className="mb-3">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="m-0 text-2xl leading-tight">{PALAVRAS.titulo}</h1>
           {/* A lista de devedores (RF-10, E-12) mora numa tela própria, aberta daqui: zero altura, o caminho cronometrado não muda (D-047). */}
-          <button type="button" className="min-h-11 flex-none border-0 bg-transparent px-1 py-0 text-[1rem] font-semibold text-acento" onClick={aoVerDevedoras}>
+          <button type="button" className="min-h-11 max-w-full border-0 bg-transparent px-1 py-0 text-left text-[1rem] font-semibold text-acento" onClick={aoVerDevedoras}>
             {PALAVRAS_DA_COBRANCA.quemEstaDevendo} <span aria-hidden="true">&rsaquo;</span>
           </button>
         </div>
         <IndicadorDeEnvio />
+        <AvisoConferencias aoAbrir={aoConferir} />
         <BotaoEntrar aoTocar={aoEntrar} />
+        <button type="button" className="min-h-11 border-0 bg-transparent px-1 text-acento" onClick={aoVerProdutos}>
+          {PALAVRAS_DOS_PRODUTOS.titulo} <span aria-hidden="true">&rsaquo;</span>
+        </button>
       </header>
 
       <ListaDeFichas busca={busca} aoBuscar={aoBuscar} aoAbrir={aoAbrirFicha} chave="inicio" comDesativadas />
@@ -61,14 +72,14 @@ export function TelaInicial({
       {/* Discreto de propósito: serve ao mantenedor durante o teste, não a ela (RF-23, D-032). */}
       <p className="mt-6 text-[0.8rem] text-suave">versão {CARIMBO_DE_BUILD}</p>
 
-      <div className="rodape-acao">
+      <RodapeDeAcoes>
         <Botao tipo="principal" aoTocar={aoVender}>
           {PALAVRAS_DA_VENDA.novaVenda}
         </Botao>
         <Botao tipo="secundario" aoTocar={() => aoCadastrar(busca.trim())}>
           {PALAVRAS.clienteNova}
         </Botao>
-      </div>
+      </RodapeDeAcoes>
     </main>
   )
 }

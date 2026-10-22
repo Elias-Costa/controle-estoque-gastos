@@ -30,9 +30,15 @@
  * forma síncrona e ler as esperas pedidas em vez de esperá-las.
  */
 
-import type { BancoLocal, ItemDaFila, TabelaSincronizada } from '../dados/banco.ts'
+import type { BancoLocal, CursorDeDownload, ItemDaFila, Problema } from '../dados/banco.ts'
+import { itemDaFilaDoRegistro } from '../dados/fila.ts'
+import { criarRepositorioEstoque } from '../dados/repositorio-estoque.ts'
+import { conteudoDoEfeito } from '../dominio/regras-estoque.ts'
 import { clienteDaNuvem, clienteParaNuvem, lancamentoDaNuvem, lancamentoParaNuvem, normalizarCarimbo } from './borda.ts'
-import type { LinhaRecebida, Nuvem, Resposta } from './nuvem.ts'
+import { categoriaDaNuvem, documentoEstoque, produtoDaNuvem, recepcaoDaNuvem } from './borda-estoque.ts'
+import { LINHAS_POR_PAGINA, type Falha, type LinhaRecebida, type Nuvem, type Resposta } from './nuvem.ts'
+import { aplicarRecepcaoEstoque } from './recepcao-estoque.ts'
+import { criarSincronizacaoFotos } from './fotos.ts'
 
 /** O que o indicador mostra (RF-25) e o que o mantenedor lê no console. */
 export type EstadoDaSincronizacao = {
@@ -114,6 +120,8 @@ const agendarPadrao: Agendar = (fn, ms) => {
 /** Cria e liga o motor. Não roda nada até o primeiro `acordar()`/`sincronizar()`. */
 export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao {
   const { banco, nuvem } = dependencias
+  const estoque = criarRepositorioEstoque(banco)
+  const fotos = nuvem?.fotos ? criarSincronizacaoFotos(banco, nuvem, nuvem.fotos) : null
   const agora = dependencias.agora ?? (() => new Date())
   const agendar = dependencias.agendar ?? agendarPadrao
   const janela = dependencias.janela === undefined ? (typeof window === 'undefined' ? null : window) : dependencias.janela
@@ -181,6 +189,29 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
       // carimbo do aparelho que existe para ela.
       return nuvemLigada.enviarCliente(clienteParaNuvem({ ...cliente, atualizadoEm: cliente.atualizadoEm ?? item.criadoEm }))
     }
+    if (item.tabela === 'categorias') {
+      const categoria = await banco.categorias.get(item.registroId)
+      if (!categoria) throw new Error('Fila sem categoria')
+      return nuvemLigada.enviarCategoria(documentoEstoque(categoria))
+    }
+    if (item.tabela === 'produtos') {
+      const produto = await banco.produtos.get(item.registroId)
+      if (!produto) throw new Error('Fila sem produto')
+      return fotos ? fotos.enviarProduto(produto) : nuvemLigada.enviarProduto(documentoEstoque(produto))
+    }
+    if (item.tabela === 'encerramentos') {
+      const encerramento = await banco.encerramentos.get(item.registroId)
+      if (!encerramento) throw new Error('Fila sem encerramento')
+      const { remotoId: _remotoId, ...documento } = encerramento
+      const resposta = await nuvemLigada.enviarEncerramento(documentoEstoque(documento))
+      if (!resposta.ok) return resposta
+      if (resposta.valor !== encerramento.id) {
+        // Q47A: sucesso pode designar resolução anterior diferente. O download confirma qual foi.
+        await banco.encerramentos.put({ ...encerramento, remotoId: resposta.valor })
+        return { ok: false, falha: { tipo: 'recusa', codigo: CHAVE_ESTRANGEIRA, mensagem: 'Aguardando resolução já aceita' } }
+      }
+      return { ok: true, valor: undefined }
+    }
     const lancamento = await banco.lancamentos.get(item.registroId)
     if (lancamento === undefined) return { ok: true, valor: undefined }
     return nuvemLigada.enviarLancamento(lancamentoParaNuvem(lancamento))
@@ -198,7 +229,21 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
   async function enviar(nuvemLigada: Nuvem): Promise<Desfecho> {
     const itens = await banco.fila.orderBy('ordem').toArray()
     for (const item of itens) {
+      // E-22: o ciclo de binários vem depois das operações; foto nunca segue pela rota financeira.
+      if (item.tabela === 'fotos') continue
       if (item.problema !== undefined) continue
+      if (item.tabela === 'operacoes') {
+        const envio = await estoque.capturarEnvio(item.registroId)
+        if (!envio) continue
+        const encerramento = (await banco.encerramentos.toArray()).find((e) => e.novaOperacao?.operacao.id === item.registroId)
+        if (encerramento && await banco.fila.where('registroId').equals(encerramento.id).count()) continue
+        const resposta = await nuvemLigada.enviarGrupo(documentoEstoque(envio.versao.grupo), envio.evidencias.map(documentoEstoque),
+          encerramento?.remotoId ?? encerramento?.id ?? null)
+        if (resposta.ok) await estoque.responderEnvio(envio)
+        else if (resposta.falha.tipo !== 'recusa') return resposta.falha.tipo
+        else if (resposta.falha.codigo !== CHAVE_ESTRANGEIRA) await estoque.responderEnvio(envio, problemaDaFalha(resposta.falha))
+        continue
+      }
       const resposta = await enviarItem(nuvemLigada, item)
       if (resposta.ok) {
         await concluirItem(item)
@@ -208,17 +253,18 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
       if (falha.tipo === 'rede' || falha.tipo === 'sessao') return falha.tipo
       if (falha.codigo === CHAVE_ESTRANGEIRA) continue
       // Recusa definitiva (D-042, item 2): fica parado, com o diagnóstico, até a linha ser regravada.
-      await banco.fila.update(item.ordem, {
-        problema: {
-          codigo: falha.codigo,
-          ...(falha.constraint === undefined ? {} : { constraint: falha.constraint }),
-          mensagem: falha.mensagem,
-          em: agora().toISOString(),
-        },
+      await banco.transaction('rw', banco.fila, async () => {
+        const atual = await banco.fila.get(item.ordem)
+        if (atual && (atual.versao ?? 0) === (item.versao ?? 0)) await banco.fila.put({ ...atual, problema: problemaDaFalha(falha) })
       })
       console.warn(`sincronização: a nuvem recusou ${item.tabela}/${item.registroId} em definitivo (${falha.codigo}${falha.constraint ? ` ${falha.constraint}` : ''}): ${falha.mensagem}`)
     }
     return 'ok'
+  }
+
+  function problemaDaFalha(falha: Extract<Falha, { tipo: 'recusa' }>): Problema {
+    return { codigo: falha.codigo, ...(falha.constraint ? { constraint: falha.constraint } : {}),
+      mensagem: falha.mensagem, em: agora().toISOString() }
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -238,10 +284,11 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
 
   /** Lançamento é união (D-010): entra se não estiver na fila — a linha pendente é o envio quem decide. */
   async function aplicarLancamento(linha: LinhaRecebida): Promise<void> {
+    // O cursor próprio de F2 é quem aplica financeiro e estoque juntos, inclusive após restauração.
+    if (linha['operacao_estoque_id'] !== undefined && linha['operacao_estoque_id'] !== null) return
     const lancamento = lancamentoDaNuvem(linha)
-    await banco.transaction('rw', banco.lancamentos, banco.fila, async () => {
-      const pendente = await banco.fila.where('registroId').equals(lancamento.id).count()
-      if (pendente > 0) return
+    await banco.transaction('rw', banco.lancamentos, banco.fila, banco.operacoes, async () => {
+      if (await itemDaFilaDoRegistro(banco, lancamento.id)) return
       await banco.lancamentos.put(lancamento)
     })
   }
@@ -251,7 +298,7 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
   }
 
   async function baixarTabela(
-    tabela: TabelaSincronizada,
+    tabela: Exclude<CursorDeDownload['chave'], 'estoque'>,
     buscar: (desde: string | null) => Promise<Resposta<readonly LinhaRecebida[]>>,
     carimbo: 'recebido_em' | 'criado_em',
     aplicar: (linha: LinhaRecebida) => Promise<void>,
@@ -277,7 +324,41 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
   async function baixar(nuvemLigada: Nuvem): Promise<Desfecho> {
     const clientes = await baixarTabela('clientes', (desde) => nuvemLigada.buscarClientes(desde), 'recebido_em', aplicarCliente)
     if (clientes !== 'ok') return clientes
-    return baixarTabela('lancamentos', (desde) => nuvemLigada.buscarLancamentos(desde), 'criado_em', aplicarLancamento)
+    const lancamentos = await baixarTabela('lancamentos', (desde) => nuvemLigada.buscarLancamentos(desde), 'criado_em', aplicarLancamento)
+    if (lancamentos !== 'ok') return lancamentos
+    const categorias = await nuvemLigada.buscarCategorias(null)
+    if (!categorias.ok) return categorias.falha.tipo === 'sessao' ? 'sessao' : 'rede'
+    for (const linha of categorias.valor) {
+      const categoria = categoriaDaNuvem(linha)
+      await banco.transaction('rw', banco.categorias, async () => {
+        const local = await banco.categorias.get(categoria.id)
+        if (local && conteudoDoEfeito(local) !== conteudoDoEfeito(categoria)) throw new Error('Categoria remota divergente')
+        await banco.categorias.put(categoria)
+      })
+    }
+    const produtos = await baixarTabela('produtos', (desde) => fotos ? fotos.buscarProdutos(desde) : nuvemLigada.buscarProdutos(desde), 'recebido_em', async (linha) => {
+      if (fotos) return fotos.receberProduto(linha)
+      const produto = produtoDaNuvem(linha)
+      await banco.transaction('rw', banco.produtos, banco.categorias, async () => {
+        if (!await banco.categorias.get(produto.categoriaId)) throw new Error('Produto remoto sem categoria')
+        const local = await banco.produtos.get(produto.id)
+        if (!local || local.atualizadoEm < produto.atualizadoEm) await banco.produtos.put(produto)
+      })
+    })
+    if (produtos !== 'ok') return produtos
+    for (;;) {
+      const cursor = (await banco.sincronizacao.get('estoque'))?.valor ?? '0'
+      const resposta = await nuvemLigada.buscarEstoque(cursor, LINHAS_POR_PAGINA)
+      if (!resposta.ok) return resposta.falha.tipo === 'sessao' ? 'sessao' : 'rede'
+      let anterior = BigInt(cursor)
+      for (const linha of resposta.valor) {
+        const recebido = recepcaoDaNuvem(linha)
+        if (BigInt(recebido.recepcao) !== anterior + 1n) throw new Error('Recepções fora de ordem ou posição ausente')
+        await aplicarRecepcaoEstoque(banco, recebido)
+        anterior = BigInt(recebido.recepcao)
+      }
+      if (resposta.valor.length < LINHAS_POR_PAGINA) return 'ok'
+    }
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -301,6 +382,10 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
     try {
       desfecho = await enviar(nuvem)
       if (desfecho === 'ok') desfecho = await baixar(nuvem)
+      if (desfecho === 'ok' && fotos) {
+        const resposta = await fotos.ciclo()
+        if (!resposta.ok) desfecho = resposta.falha.tipo === 'sessao' ? 'sessao' : 'rede'
+      }
     } catch (erro) {
       // Erro de programador (linha malformada, base fechada). Não pode virar tela (EL-06) nem
       // sumir: fica no console e o motor tenta de novo com espera crescente.

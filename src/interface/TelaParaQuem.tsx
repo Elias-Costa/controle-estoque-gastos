@@ -1,3 +1,4 @@
+import { RodapeDeAcoes } from './rodape-de-acoes.tsx'
 import { useState } from 'react'
 import type { Id } from '../dominio/ficha.ts'
 import { Botao } from './Botao.tsx'
@@ -30,11 +31,11 @@ export function TelaParaQuem({
     <main className="tela">
       <Topo titulo={PALAVRAS_DA_VENDA.paraQuem} aoVoltar={aoVoltar} />
       <ListaDeFichas busca={busca} aoBuscar={setBusca} aoAbrir={aoEscolher} chave="para-quem" />
-      <div className="rodape-acao">
+      <RodapeDeAcoes>
         <Botao tipo="secundario" aoTocar={() => aoCadastrar(busca.trim())}>
           {PALAVRAS.clienteNova}
         </Botao>
-      </div>
+      </RodapeDeAcoes>
     </main>
   )
 }

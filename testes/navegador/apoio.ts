@@ -5,6 +5,7 @@ import type { Cliente, Lancamento } from '../../src/dominio/ficha.ts'
 import { clienteDaNuvem, lancamentoDaNuvem } from '../../src/sincronizacao/borda.ts'
 import { criarNuvemSupabase, type Nuvem, type Resposta } from '../../src/sincronizacao/nuvem.ts'
 import type { EstadoDaSincronizacao } from '../../src/sincronizacao/sincronizacao.ts'
+import { exigirDestinoDeTeste } from '../../nuvem/ambiente-de-teste.ts'
 
 // O tipo de `window.laboratorio` vem do módulo que o declara (`declare global`); reexportá-lo é o
 // que põe esse módulo na compilação dos testes e dá tipo aos `evaluate` abaixo.
@@ -19,16 +20,18 @@ export type { Laboratorio } from '../../src/plataforma/laboratorio.ts'
  * `BigInt('10000')` lá e traz `String(saldo)` de volta — nada de mapeamento no app. **Cada
  * callback de `evaluate` é autossuficiente**: o Playwright serializa a função e a roda na página,
  * então nada do escopo de fora existe lá — por isso a guarda do laboratório se repete em cada um.
- * E **o teste nunca "passa" sem sessão**: sem o usuário de teste em `.env.local`,
+ * E **o teste nunca "passa" sem sessão**: sem o usuário fictício na configuração de teste,
  * `pularSemUsuario()` pula a suíte dizendo por quê, como `testes/integracao/sincronizacao.test.ts`.
  */
+
+exigirDestinoDeTeste()
 
 const URL = process.env.VITE_SUPABASE_URL ?? ''
 const CHAVE = process.env.VITE_SUPABASE_ANON_KEY ?? ''
 const EMAIL = process.env.SUPABASE_TESTE_EMAIL ?? ''
 const SENHA = process.env.SUPABASE_TESTE_SENHA ?? ''
 
-/** Há tudo o que a prova precisa em `.env.local`. */
+/** Há tudo o que a prova precisa no ambiente de teste selecionado. */
 export const COM_USUARIO = URL !== '' && CHAVE !== '' && EMAIL !== '' && SENHA !== ''
 
 /** O usuário de teste, para a prova de RF-27 digitar na tela de login (E-13). Só o processo do Playwright os vê. */
@@ -38,7 +41,7 @@ export const USUARIO_DE_TESTE = { email: EMAIL, senha: SENHA } as const
 export function pularSemUsuario(): void {
   test.skip(
     !COM_USUARIO,
-    'faltam VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, SUPABASE_TESTE_EMAIL ou SUPABASE_TESTE_SENHA em .env.local',
+    'faltam URL, chave ou credenciais no ambiente de teste selecionado',
   )
 }
 
@@ -211,6 +214,9 @@ export async function sincronizar(page: Page): Promise<EstadoDaSincronizacao> {
     if (!lab) throw new Error('sem window.laboratorio: não é o build de laboratório')
     let estado = lab.sincronizacao.estado()
     for (let tentativa = 1; tentativa <= 5; tentativa += 1) {
+      // A restauração F2 pode manter o ciclo de abertura em andamento. Pedir outro garante
+      // uma consulta posterior à escrita do outro aparelho, não só aguardar a consulta antiga.
+      lab.sincronizacao.acordar()
       await lab.sincronizacao.sincronizar()
       estado = lab.sincronizacao.estado()
       if (estado.ultimaFalha === null) return estado

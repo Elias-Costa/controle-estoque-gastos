@@ -3,6 +3,8 @@ import { IDBFactory, IDBKeyRange } from 'fake-indexeddb'
 import { BancoLocal } from '../src/dados/banco.ts'
 import { cadastrarCliente, estornarLancamento, lancarVendaFiado, receber } from '../src/dados/operacoes.ts'
 import { criarRepositorioLocal, type Repositorio } from '../src/dados/repositorio.ts'
+import { criarRepositorioEstoque } from '../src/dados/repositorio-estoque.ts'
+import { criarOperacoesEstoque } from '../src/dados/operacoes-estoque.ts'
 import { saldo, type Cliente, type Resultado } from '../src/dominio/ficha.ts'
 import { lancamentoParaNuvem, type ClienteNaNuvem, type LancamentoNaNuvem } from '../src/sincronizacao/borda.ts'
 import type { Falha, LinhaRecebida, Nuvem, Resposta } from '../src/sincronizacao/nuvem.ts'
@@ -47,6 +49,13 @@ function conteudo(linha: LancamentoNaNuvem | LancamentoGuardado): string {
  * `recebido_em`/`criado_em` com um relógio próprio do "servidor", e recusa o que o banco recusa.
  */
 class NuvemDeMentira implements Nuvem {
+  enviarCategoria = async (): Promise<Resposta<void>> => ({ ok: true, valor: undefined })
+  enviarProduto = async (): Promise<Resposta<void>> => ({ ok: true, valor: undefined })
+  enviarGrupo = async (): Promise<Resposta<void>> => ({ ok: false, falha: { tipo: 'recusa', codigo: '23503', mensagem: 'dependência ausente' } })
+  enviarEncerramento = async (): Promise<Resposta<string>> => ({ ok: false, falha: { tipo: 'recusa', codigo: '23503', mensagem: 'dependência ausente' } })
+  buscarCategorias = async (): Promise<Resposta<readonly LinhaRecebida[]>> => ({ ok: true, valor: [] })
+  buscarProdutos = async (): Promise<Resposta<readonly LinhaRecebida[]>> => ({ ok: true, valor: [] })
+  buscarEstoque = async (): Promise<Resposta<readonly LinhaRecebida[]>> => ({ ok: true, valor: [] })
   readonly clientes = new Map<string, ClienteGuardado>()
   readonly lancamentos = new Map<string, LancamentoGuardado>()
   sessao = true
@@ -603,5 +612,39 @@ describe('parar() e sincronizar() concorrente', () => {
     const antes = esperas.length
     await sinc.sincronizar()
     expect(esperas.length).toBe(antes)
+  })
+
+  test('download legado não sobrescreve o financeiro de uma operação F2 pendente', async () => {
+    const { banco, repositorio, nuvem, sinc } = preparar()
+    const cliente = await vera(repositorio)
+    const estoque = criarOperacoesEstoque(criarRepositorioEstoque(banco))
+    const resultado = await estoque.lancarVenda({ pagamento: 'avista', forma: 'pix', clienteId: cliente.id,
+      data: '2026-10-18', desconto: 0n, itens: [{ descricao: 'Avulso F2', quantidade: 1, precoUnitario: 5000n, entregue: 0 }] })
+    if (!resultado.ok) throw new Error(resultado.motivo)
+    const venda = resultado.valor.lancamentos[0]
+    if (!venda) throw new Error('sem venda')
+    nuvem.lancamentos.set(venda.id, { ...lancamentoParaNuvem(venda), criado_em: '2026-10-18T10:00:00.000Z' })
+    await sinc.sincronizar()
+    // O ponteiro do grupo preserva a versão local inteira até o envio conjunto ser confirmado.
+    expect(await banco.lancamentos.get(venda.id)).toEqual(venda)
+    expect(await banco.fila.where('registroId').equals(resultado.valor.operacao.id).count()).toBe(1)
+    sinc.parar(); banco.close()
+  })
+
+  test('dependência F2 ausente mantém o grupo pendente e permite F1 independente', async () => {
+    const { banco, repositorio, nuvem, sinc } = preparar()
+    const cliente = await vera(repositorio)
+    const estoque = criarOperacoesEstoque(criarRepositorioEstoque(banco))
+    const grupo = await estoque.lancarVenda({ pagamento: 'avista', forma: 'pix', clienteId: cliente.id, data: '2026-10-18',
+      desconto: 0n, itens: [{ descricao: 'Avulso F2', quantidade: 1, precoUnitario: 5000n, entregue: 0 }] })
+    if (!grupo.ok) throw new Error(grupo.motivo)
+    const venda = await vendaPequena(repositorio, cliente.id)
+    await sinc.sincronizar()
+    expect(nuvem.lancamentos.has(venda.id)).toBe(true)
+    expect((await banco.fila.toArray()).map((item) => item.tabela)).toEqual(['operacoes'])
+    expect(sinc.estado().pendentes).toBe(1)
+    expect(nuvem.requisicoes.some((item) => item.includes(grupo.valor.lancamentos[0]?.id ?? 'sem-id'))).toBe(false)
+    sinc.parar()
+    banco.close()
   })
 })

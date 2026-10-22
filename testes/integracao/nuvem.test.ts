@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { SQL, type TransactionSQL } from 'bun'
 import { conectar, lerMigracoes, type Migracao } from '../../nuvem/migrar.ts'
 import { uuidv7 } from '../../src/dados/identidade.ts'
+import { exigirDestinoDeTeste } from '../../nuvem/ambiente-de-teste.ts'
 
 /**
  * A nuvem recusa o que o app não pode gravar (E-06, RI-09, D-041).
@@ -13,18 +14,19 @@ import { uuidv7 } from '../../src/dados/identidade.ts'
  * Como não deixa rastro: cada teste roda dentro de `sql.begin` e termina lançando `Revertida`,
  * então a transação é desfeita; cada tentativa de violação vai num `savepoint`, para a
  * transação seguir viva depois do erro. Importa porque a imutabilidade impede o próprio teste
- * de apagar o que criou — e porque este é o banco **dela**, não um de laboratório.
+ * de apagar o que criou. Só usa local ou homologação; produção em uso é vedada (D-050).
  *
  * Contas: `auth.uid()` do Supabase lê `request.jwt.claims` e não consulta `auth.users`, então
  * duas contas de mentira bastam — dois `sub` diferentes com `set local role authenticated`.
  * O papel `postgres` (o da conexão) ignora RLS por atributo próprio; é usado aqui só para provar
  * que os gatilhos valem para **qualquer** papel.
  *
- * Só roda com `INTEGRACAO=1` (`bun run test:integracao`): precisa de rede e de
- * `SUPABASE_DB_URL` em `.env.local`. No `check` aparece como pulada, de propósito.
+ * Só roda com `INTEGRACAO=1` e destino de teste validado: `bun run test:integracao` usa local;
+ * a variante `:homologacao` usa o projeto confirmado. No `check` aparece pulada, de propósito.
  */
 
 const LIGADA = process.env.INTEGRACAO === '1'
+if (LIGADA) exigirDestinoDeTeste()
 
 /**
  * Verificação por mutação, sem tocar o banco de verdade: um DDL que tira uma garantia (ex.:
@@ -85,6 +87,18 @@ async function recusa(tx: TransactionSQL, fn: (sp: SQL) => Promise<unknown>): Pr
     throw erro
   }
   throw new Error('o banco aceitou o que deveria recusar')
+}
+
+/** Com trocas gravadas a 0006 recusa downgrade; provar preservação em vez de apagar o ensaio acumulado. */
+async function provarGuardaDeTrocas(tx: TransactionSQL): Promise<boolean> {
+  const [antes] = await tx<{ quantidade: string }[]>`select count(*)::text quantidade from public.operacoes_estoque where tipo='troca'`
+  if (!antes || antes.quantidade === '0') return false
+  const migracao = migracoes.find((m) => m.nome === '0006_trocas')
+  if (!migracao) throw new Error('sem migration de trocas')
+  const erro = await recusa(tx, (sp) => sp.unsafe(migracao.reverter))
+  expect(erro.code).toBe('P0001')
+  expect(await tx<{ quantidade: string }[]>`select count(*)::text quantidade from public.operacoes_estoque where tipo='troca'`).toEqual([antes])
+  return true
 }
 
 /** Passa a agir como uma conta do app, até o fim da transação (ou do savepoint). */
@@ -593,7 +607,7 @@ describe.skipIf(!LIGADA)('a nuvem recusa o que o app não pode gravar (E-06, RI-
   })
 
   describe('reversibilidade (E-06): o reverter desfaz, a migration refaz', () => {
-    test('reverter todas, da última à primeira → tabelas somem → aplicar todas → voltam, numa transação desfeita no fim', async () => {
+    test('sem trocas, reverte/refaz todas; com histórico de trocas, recusa downgrade e preserva dados', async () => {
       if (migracoes.length === 0) throw new Error('sem migration')
       const existe = async (tx: SQL, tabela: string): Promise<boolean> => {
         const [linha] = await tx<{ existe: boolean }[]>`select to_regclass(${`public.${tabela}`}) is not null as existe`
@@ -606,6 +620,7 @@ describe.skipIf(!LIGADA)('a nuvem recusa o que o app não pode gravar (E-06, RI-
         return linha?.existe === true
       }
       await numaTransacao(async (tx) => {
+        if (await provarGuardaDeTrocas(tx)) return
         expect(await existe(tx, 'lancamentos')).toBe(true)
         expect(await coluna(tx, 'clientes', 'atualizado_em')).toBe(true)
         // Cada reverter desfaz só a sua migration: depois da 0002, a 0001 ainda está lá.
@@ -621,10 +636,13 @@ describe.skipIf(!LIGADA)('a nuvem recusa o que o app não pode gravar (E-06, RI-
       })
     })
 
-    test('a 0002 sozinha: reverter tira as colunas e o gatilho e deixa a 0001 de pé; aplicar devolve', async () => {
+    test('a 0002 só reverte após dependências; histórico de trocas impede downgrade sem perda', async () => {
       const segunda = migracoes.find((migracao) => migracao.nome.startsWith('0002_'))
       if (segunda === undefined) throw new Error('sem 0002')
       await numaTransacao(async (tx) => {
+        if (await provarGuardaDeTrocas(tx)) return
+        // D-041: desfazer dependências em ordem inversa, como o runner. F2 também usa o LWW.
+        for (const posterior of migracoes.filter((m) => m.nome > segunda.nome).reverse()) await tx.unsafe(posterior.reverter)
         await tx.unsafe(segunda.reverter)
         const [colunas] = await tx<{ n: number }[]>`select count(*)::int as n from information_schema.columns
           where table_schema = 'public' and table_name = 'clientes' and column_name in ('atualizado_em', 'recebido_em')`

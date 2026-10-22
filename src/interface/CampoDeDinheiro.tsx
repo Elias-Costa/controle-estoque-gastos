@@ -20,25 +20,29 @@ export function CampoDeDinheiro({
   texto,
   aoMudar,
   selecionarAoFocar = false,
+  permitirZero = false,
 }: {
   rotulo: string
   texto: string
   aoMudar: (texto: string) => void
   /** Para o campo que já vem preenchido (o recebimento, D-006): tocar e digitar substitui, sem apagar antes. */
   selecionarAoFocar?: boolean
+  /** Cadastro de produto aceita zero conhecido/gratuito, diferente do campo vazio (D-055). */
+  permitirZero?: boolean
 }) {
   const id = useId()
   return (
     <>
       <Rotulo para={id}>{rotulo}</Rotulo>
-      <div className="flex items-center gap-2 rounded-xl border border-borda bg-papel px-3.5 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-acento">
+      <div className="flex items-center gap-2 rounded-xl border border-contorno bg-papel px-3.5 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-acento">
         <span className="text-2xl text-suave">R$</span>
         <EntradaDeDinheiro
           id={id}
-          className="min-h-16 w-full border-0 bg-transparent text-[2.25rem] leading-none font-bold text-tinta tabular-nums outline-none"
+          className="min-h-16 min-w-0 w-full border-0 bg-transparent text-[2.25rem] leading-none font-bold text-tinta tabular-nums outline-none"
           texto={texto}
           aoMudar={aoMudar}
           selecionarAoFocar={selecionarAoFocar}
+          permitirZero={permitirZero}
         />
       </div>
     </>
@@ -60,6 +64,7 @@ export function EntradaDeDinheiro({
   exemplo = EXEMPLO,
   rotuloAcessivel,
   selecionarAoFocar = false,
+  permitirZero = false,
 }: {
   texto: string
   aoMudar: (texto: string) => void
@@ -68,6 +73,7 @@ export function EntradaDeDinheiro({
   exemplo?: string
   rotuloAcessivel?: string
   selecionarAoFocar?: boolean
+  permitirZero?: boolean
 }) {
   function caretNoFim(evento: MouseEvent<HTMLInputElement>): void {
     const campo = evento.currentTarget
@@ -84,7 +90,12 @@ export function EntradaDeDinheiro({
       placeholder={exemplo}
       aria-label={rotuloAcessivel}
       value={texto}
-      onChange={(evento) => aoMudar(aplicarMascara(evento.target.value))}
+      onChange={(evento) => {
+        const tipoEntrada = 'inputType' in evento.nativeEvent ? evento.nativeEvent.inputType : ''
+        const apagando = typeof tipoEntrada === 'string' && tipoEntrada.startsWith('delete')
+        // Não aprisionar o campo em 0,00: apagar um zero explícito volta a não informado.
+        aoMudar(permitirZero && apagando && texto === '0,00' ? '' : aplicarMascara(evento.target.value, permitirZero))
+      }}
       onClick={caretNoFim}
       onFocus={selecionarAoFocar ? (evento) => evento.target.select() : undefined}
     />
