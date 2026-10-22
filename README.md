@@ -42,6 +42,12 @@ Com Bun e Docker disponíveis, `bun run local:iniciar` prepara o Supabase local.
 `bun run local:parar` conserva os dados fictícios. O Storage local faz parte dos testes de foto.
 Cada rodada de integração/navegador usa uma conta fictícia nova e preserva as anteriores.
 
+`bun run test:interface` constrói o app sem nuvem e verifica contraste dos campos, alvos,
+foco, texto ampliado e ações fixas no Chromium, com dados fictícios em contextos isolados.
+Não precisa de Docker nem de credenciais. Usa a porta 4176 e não substitui as suítes de
+integração/sincronização ou a validação em aparelho real. Requer o Chromium do Playwright
+(`bunx playwright install chromium`, uma vez).
+
 Homologação usa os comandos `test:integracao:homologacao` e `test:navegador:homologacao`,
 com o projeto confirmado em `nuvem/destinos-de-teste.ts`. O mantenedor configura
 `.env.homologacao.local` com `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `SUPABASE_DB_URL`

@@ -29,6 +29,7 @@
     "test:navegador": "bun run test:navegador:local",
     "test:navegador:local": "bun --no-env-file run ferramentas/testar-ambiente.ts local navegador",
     "test:navegador:homologacao": "bun --no-env-file run ferramentas/testar-ambiente.ts homologacao navegador",
+    "test:interface": "bun run build:local && playwright test --config playwright-interface.config.ts",
     "migrar:homologacao": "bun --no-env-file run ferramentas/testar-ambiente.ts homologacao migrar",
     "migrar": "bun run nuvem/migrar.ts",
     "migrar:reverter": "bun --no-env-file run ferramentas/testar-ambiente.ts local reverter",
