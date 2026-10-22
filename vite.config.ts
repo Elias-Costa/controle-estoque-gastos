@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import tailwindcss from '@tailwindcss/vite'
 import basicSsl from '@vitejs/plugin-basic-ssl'
 import react from '@vitejs/plugin-react'
@@ -7,11 +8,22 @@ import { VitePWA } from 'vite-plugin-pwa'
 /**
  * Configuração de build do aplicativo.
  *
- * `LAN=1` liga HTTPS auto-assinado e expõe o servidor na rede local, que é o que
- * permite abrir o app no iPhone. Service worker, câmera e instalação na tela de início
- * exigem contexto seguro, e `localhost` só é exceção no próprio aparelho — pela rede,
- * sem HTTPS, nenhum teste em dispositivo real roda.
+ * `LAN=1` expõe HTTPS na rede local. D-062 permite certificado/chave explícitos para
+ * o Android confiar na autoridade de teste. Sem o par, conserva o certificado
+ * autoassinado anterior, que sozinho não comprova instalação ou service worker.
+ * Sem LAN, os arquivos locais não são lidos nem entram no build de publicação.
  */
+function httpsDaRedeLocal() {
+  if (!process.env.LAN) return undefined
+  const certificado = process.env.CERTIFICADO_HTTPS_LOCAL
+  const chave = process.env.CHAVE_HTTPS_LOCAL
+  if (!certificado && !chave) return undefined
+  if (!certificado || !chave) throw new Error('Informe CERTIFICADO_HTTPS_LOCAL e CHAVE_HTTPS_LOCAL juntos para usar HTTPS local confiável.')
+  return { cert: readFileSync(certificado), key: readFileSync(chave) }
+}
+
+const httpsLocal = httpsDaRedeLocal()
+
 export default defineConfig(() => ({
   /**
    * Carimbo do build, exibido discretamente na tela (RF-23, D-032).
@@ -75,7 +87,8 @@ export default defineConfig(() => ({
       // que é o que o app carrega em toda instalação e a cada versão nova.
       workbox: { globIgnores: ['abertura/**'] },
     }),
-    ...(process.env.LAN ? [basicSsl()] : []),
+    ...(process.env.LAN && !httpsLocal ? [basicSsl()] : []),
   ],
-  server: { host: true, port: 5173 },
+  server: { host: true, port: 5173, https: httpsLocal },
+  preview: { https: httpsLocal },
 }))

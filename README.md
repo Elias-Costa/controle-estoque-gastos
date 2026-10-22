@@ -52,3 +52,25 @@ removê-lo para executar o portão completo. Antes da publicação de estoque, o
 até `0007_conferencia-por-identidade`, preservando os dados de F1. Só depois promove para
 `main`, que publica pelo deploy existente. Não reverter migrations nem limpar dados para
 atualizar o app; conferir carimbo, fichas e envios pendentes na abertura seguinte.
+
+## Android pelo Wi-Fi nos testes
+
+O preview LAN pode usar um certificado local cuja autoridade foi instalada manualmente no
+Android. Defina `CERTIFICADO_HTTPS_LOCAL` e `CHAVE_HTTPS_LOCAL` com caminhos absolutos para
+o certificado de servidor e sua chave; `preview:laboratorio:lan` e `preview:local:lan` usam
+o par em HTTPS. Os arquivos devem ficar fora do repositório e da pasta `public`.
+Sem o par, LAN conserva o certificado autoassinado anterior, sem comprovação de confiança
+no aparelho. As variáveis locais não são consumidas quando `LAN` está desligado.
+
+Para enviar somente o certificado público da autoridade ao telefone:
+
+```powershell
+bun --no-env-file run ferramentas/servir-certificado-local.ts '<caminho-absoluto-do-rootCA.pem>' '<IPv4-do-PC>'
+```
+
+O comando informa uma URL HTTP na porta 4176 e o SHA-256 público; a única rota de download
+é `/fichinhas-teste.crt`. No Android, instalar como certificado de CA, depois abrir o app
+em `https://<IPv4-do-PC>:4174`, usando build e conta de homologação. A 4175 é reservada ao
+build sem nuvem. PC e Android devem estar no mesmo Wi-Fi, com as portas liberadas apenas
+na rede local. Encerrar o servidor de certificado após o download. Não compartilhar chaves
+privadas; não trocar IP, HTTPS ou porta durante uma prova de retenção local.
