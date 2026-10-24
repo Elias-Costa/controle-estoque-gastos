@@ -48,10 +48,10 @@ export const operacoesEstoque = criarOperacoesEstoque(repositorioEstoque)
 /** Miniaturas e retenção local usadas no cadastro; não depende da sessão nem da rede. */
 export const repositorioFotos = criarRepositorioFotos(banco)
 
-/** Fatos próprios de caixa; o transporte conjunto será ligado na E-33. */
+/** Fatos próprios de caixa, lidos pelas telas e transportados em grupos completos. */
 export const repositorioCaixa = criarRepositorioCaixa(banco, undefined, () => {
   for (const ouvinte of ouvintes) ouvinte()
 })
 
-/** Portas locais de gastos/receitas, ligadas às telas somente na E-34. */
+/** Portas locais de gastos/receitas usadas nas telas da E-34. */
 export const operacoesCaixa = criarOperacoesCaixa(repositorioCaixa)

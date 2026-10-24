@@ -22,6 +22,11 @@ import { TelaEntrada } from './tela-entrada.tsx'
 import { TelaAjuste } from './tela-ajuste.tsx'
 import { TelaConferencias } from './tela-conferencias.tsx'
 import { TelaProdutosNoMinimo } from './tela-produtos-no-minimo.tsx'
+import { TelaCaixa } from './tela-caixa.tsx'
+import { TelaMovimentoCaixa } from './tela-movimento-caixa.tsx'
+import { hoje } from './datas.ts'
+import type { CorteCaixa } from './leitura-do-caixa.ts'
+import type { ReferenciaFatoCaixa } from '../dominio/gastos.ts'
 
 /**
  * Onde ela está. Sem roteador e sem URL: uma mão, o "‹" do topo (como o protótipo). A venda
@@ -38,6 +43,8 @@ import { TelaProdutosNoMinimo } from './tela-produtos-no-minimo.tsx'
  */
 type Rota =
   | { readonly tela: 'inicio' }
+  | { readonly tela: 'caixa' }
+  | { readonly tela: 'movimento-caixa'; readonly tipo: 'despesa' | 'receita-avulsa'; readonly alvo?: ReferenciaFatoCaixa }
   | { readonly tela: 'conferencias' }
   | { readonly tela: 'produtos' }
   | { readonly tela: 'minimo' }
@@ -73,6 +80,8 @@ type Rota =
 export function Aplicativo() {
   const [rota, setRota] = useState<Rota>({ tela: 'inicio' })
   const [busca, setBusca] = useState('')
+  const [mesCaixa, setMesCaixa] = useState(() => hoje().slice(0, 7))
+  const [corteCaixa, setCorteCaixa] = useState<CorteCaixa>('tudo')
   // Conserva a lista de origem durante entrada, ajuste, edição ou entrega pelo estoque.
   const [origemEstoque, setOrigemEstoque] = useState<'produtos' | 'minimo'>('produtos')
   const [outroDiaLembrado, setOutroDiaLembrado] = useState<Dia>('')
@@ -93,8 +102,16 @@ export function Aplicativo() {
           aoEntrar={() => setRota({ tela: 'entrar' })}
           aoVerProdutos={() => setRota({ tela: 'produtos' })}
           aoConferir={() => setRota({ tela: 'conferencias' })}
+          aoVerCaixa={() => setRota({ tela: 'caixa' })}
         />
       )
+    case 'caixa':
+      return <TelaCaixa mes={mesCaixa} corte={corteCaixa} aoMes={setMesCaixa} aoCorte={setCorteCaixa} aoVoltar={irParaInicio}
+        aoAnotar={(tipo) => setRota({ tela: 'movimento-caixa', tipo })}
+        aoCorrigir={(fato) => setRota({ tela: 'movimento-caixa', tipo: fato.tipo, alvo: { id: fato.id, revisao: fato.revisao } })} />
+    case 'movimento-caixa':
+      return <TelaMovimentoCaixa key={rota.alvo?.id ?? rota.tipo} tipo={rota.tipo} alvo={rota.alvo} aoVoltar={() => setRota({ tela: 'caixa' })}
+        aoSalvar={(mes) => { setMesCaixa(mes); setCorteCaixa('tudo'); setRota({ tela: 'caixa' }) }} />
     case 'conferencias': return <TelaConferencias aoVoltar={irParaInicio} />
     case 'produtos':
       return <TelaProdutos aoVoltar={irParaInicio} aoNovo={() => setRota({ tela: 'produto' })}

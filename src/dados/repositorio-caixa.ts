@@ -1,4 +1,4 @@
-import type { Dia, Id } from '../dominio/ficha.ts'
+import type { Cliente, Dia, Id, Lancamento } from '../dominio/ficha.ts'
 import { corrigirFatoCaixa, estornarFatoCaixa, prepararCorrecaoCaixa, registrarMovimentoCaixa, validarFatosCaixa,
   type EntradaMovimentoCaixa, type FatoCaixa, type ReferenciaFatoCaixa, type ResultadoCaixa } from '../dominio/gastos.ts'
 import { conteudoDoEfeito } from '../dominio/regras-estoque.ts'
@@ -7,12 +7,21 @@ import { uuidv7 } from './identidade.ts'
 import { recomporProjecaoCaixa } from './projecao-caixa.ts'
 import type { EnvioCaixa, GrupoCaixa, OperacaoCaixaLocal, VersaoCaixa } from './tipos-caixa.ts'
 
+/** Retrato consistente das fontes do caixa e da evidência, inclusive fichas desativadas. */
+export type EstadoLocalCaixa = {
+  readonly fatos: readonly FatoCaixa[]
+  readonly lancamentos: readonly Lancamento[]
+  readonly clientes: readonly Cliente[]
+  readonly versoes: readonly VersaoCaixa[]
+}
+
 /** Porta local do caixa: janela e validação são conferidas na transação de gravação. */
 export interface RepositorioCaixa {
   registrar(entrada: EntradaMovimentoCaixa): Promise<ResultadoCaixa<GrupoCaixa>>
   corrigir(alvo: ReferenciaFatoCaixa, entrada: EntradaMovimentoCaixa, dataCorrecao: Dia): Promise<ResultadoCaixa<GrupoCaixa>>
   estornar(alvo: ReferenciaFatoCaixa, data: Dia): Promise<ResultadoCaixa<GrupoCaixa>>
   listarFatos(): Promise<readonly FatoCaixa[]>
+  lerEstado(): Promise<EstadoLocalCaixa>
   lerHistorico(id: Id): Promise<readonly VersaoCaixa[]>
   sincronizado(id: Id): Promise<boolean>
   comProblema(id: Id): Promise<boolean>
@@ -167,6 +176,10 @@ export function criarRepositorioCaixa(banco: BancoLocal, agora: () => string = (
   }
 
   return { registrar, corrigir, estornar, capturarEnvio, responderEnvio,
+    lerEstado: () => banco.transaction('r', [...tabelas, banco.lancamentos, banco.clientes], async () => ({
+      fatos: await banco.fatosCaixa.toArray(), lancamentos: await banco.lancamentos.toArray(),
+      clientes: await banco.clientes.toArray(), versoes: await banco.versoesCaixa.toArray(),
+    })),
     listarFatos: () => banco.fatosCaixa.toArray(),
     lerHistorico: (id) => banco.versoesCaixa.filter((versao) => versao.grupo.operacao.alvo?.id === id ||
       versao.grupo.fatos.some((fato) => fato.id === id)).toArray(),
