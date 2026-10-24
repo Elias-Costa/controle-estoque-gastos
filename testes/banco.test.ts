@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import Dexie, { type DexieOptions } from 'dexie'
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb'
-import { BancoLocal, ESQUEMA_V1, ESQUEMA_V2, ESQUEMA_V3, ESQUEMA_V4, NOME_DO_BANCO } from '../src/dados/banco.ts'
+import { BancoLocal, ESQUEMA_V1, ESQUEMA_V2, ESQUEMA_V3, ESQUEMA_V4, ESQUEMA_V5, NOME_DO_BANCO } from '../src/dados/banco.ts'
 import type { Cliente, VendaFiado } from '../src/dominio/ficha.ts'
 
 /**
@@ -31,6 +31,11 @@ const ESQUEMAS_PUBLICADOS: Readonly<Record<number, Readonly<Record<string, strin
     categorias: 'id', produtos: 'id, categoriaId', operacoes: 'id', movimentos: '[id+revisao], produtoId, operacaoId',
     versoesEstoque: 'id, operacaoId', encerramentos: 'id', relogioEstoque: 'chave', fotos: 'id, produtoId',
     protecoesFotos: 'id, fotoId, copiaId', enviosProdutoFoto: 'id, produtoId', usosFotos: 'id, fotoId', estadoFotos: 'chave' },
+  5: { clientes: 'id', lancamentos: 'id, clienteId', fila: '++ordem, registroId', sincronizacao: 'chave',
+    categorias: 'id', produtos: 'id, categoriaId', operacoes: 'id', movimentos: '[id+revisao], produtoId, operacaoId',
+    versoesEstoque: 'id, operacaoId', encerramentos: 'id', relogioEstoque: 'chave', fotos: 'id, produtoId',
+    protecoesFotos: 'id, fotoId, copiaId', enviosProdutoFoto: 'id, produtoId', usosFotos: 'id, fotoId', estadoFotos: 'chave',
+    fatosCaixa: 'id', operacoesCaixa: 'id', versoesCaixa: 'id, operacaoId' },
 }
 
 /**
@@ -79,6 +84,7 @@ describe('esquema local (D-020, D-040)', () => {
     expect(v2).toEqual({ ...ESQUEMA_V2 })
     expect(ESQUEMAS_PUBLICADOS[3]).toEqual({ ...ESQUEMA_V3 })
     expect(ESQUEMAS_PUBLICADOS[4]).toEqual({ ...ESQUEMA_V4 })
+    expect(ESQUEMAS_PUBLICADOS[5]).toEqual({ ...ESQUEMA_V5 })
   })
 
   test('todo índice está na lista de permissão — nenhum campo de dinheiro é chave (D-022)', async () => {
@@ -125,7 +131,7 @@ describe('esquema local (D-020, D-040)', () => {
     // `versao`, e o código lê as duas formas.
     const atual = abrir(nome, indexedDB)
     await atual.open()
-    expect(atual.verno).toBe(4)
+    expect(atual.verno).toBe(5)
     const cliente: Cliente | undefined = await atual.clientes.get('c1')
     expect(cliente).toEqual(vera)
     const lida = await atual.lancamentos.get('v1')

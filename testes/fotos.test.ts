@@ -143,7 +143,7 @@ describe('fotos locais — D-025/Q34/41, E-22', () => {
     await expect(a.estoque.salvarProduto(a.produto)).rejects.toThrow('releia')
   })
 
-  test('v3 abre em v4 sem reinterpretar financeiro, produto, fila ou cursor', async () => {
+  test('v3 abre na versão atual sem reinterpretar financeiro, produto, fila ou cursor', async () => {
     const indexedDB = new IDBFactory(), nome = uuidv7()
     const anterior = new Dexie(nome, { indexedDB, IDBKeyRange })
     anterior.version(3).stores(ESQUEMA_V3)
@@ -154,7 +154,7 @@ describe('fotos locais — D-025/Q34/41, E-22', () => {
     anterior.close()
     const atual = abrir(indexedDB, nome)
     await atual.open()
-    expect(atual.verno).toBe(4)
+    expect(atual.verno).toBe(5)
     expect(await atual.produtos.get(produto.id)).toEqual(produto)
     expect(await atual.fila.count()).toBe(1)
     expect((await atual.sincronizacao.get('estoque'))?.valor).toBe('567')

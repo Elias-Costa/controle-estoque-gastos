@@ -231,6 +231,8 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
     for (const item of itens) {
       // E-22: o ciclo de binários vem depois das operações; foto nunca segue pela rota financeira.
       if (item.tabela === 'fotos') continue
+      // E-31: conservar a fila nova até E-33, sem enviá-la como financeiro F1 ou bloquear F1/F2.
+      if (item.tabela === 'operacoesCaixa') continue
       if (item.problema !== undefined) continue
       if (item.tabela === 'operacoes') {
         const envio = await estoque.capturarEnvio(item.registroId)

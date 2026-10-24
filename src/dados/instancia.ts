@@ -17,6 +17,8 @@ import { criarRepositorioLocal } from './repositorio.ts'
 import { criarRepositorioEstoque } from './repositorio-estoque.ts'
 import { criarOperacoesEstoque } from './operacoes-estoque.ts'
 import { criarRepositorioFotos } from './fotos.ts'
+import { criarRepositorioCaixa } from './repositorio-caixa.ts'
+import { criarOperacoesCaixa } from './operacoes-caixa.ts'
 
 export const banco = new BancoLocal()
 
@@ -45,3 +47,11 @@ export const operacoesEstoque = criarOperacoesEstoque(repositorioEstoque)
 
 /** Miniaturas e retenção local usadas no cadastro; não depende da sessão nem da rede. */
 export const repositorioFotos = criarRepositorioFotos(banco)
+
+/** Fatos próprios de caixa; o transporte conjunto será ligado na E-33. */
+export const repositorioCaixa = criarRepositorioCaixa(banco, undefined, () => {
+  for (const ouvinte of ouvintes) ouvinte()
+})
+
+/** Portas locais de gastos/receitas, ligadas às telas somente na E-34. */
+export const operacoesCaixa = criarOperacoesCaixa(repositorioCaixa)

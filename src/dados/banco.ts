@@ -41,6 +41,8 @@ import type { MovimentoEstoque } from '../dominio/estoque.ts'
 import type { Categoria, Produto } from '../dominio/produtos.ts'
 import type { EncerramentoTentativa } from '../dominio/recuperacao-estoque.ts'
 import type { GrupoEstoque, OperacaoEstoque } from '../dominio/vendas-estoque.ts'
+import type { FatoCaixa } from '../dominio/gastos.ts'
+import type { OperacaoCaixaLocal, VersaoCaixa } from './tipos-caixa.ts'
 import type { EnvioProdutoFoto, EstadoFotos, FotoLocal, ProtecaoFotoLocal, UsoFotoLocal } from './tipos-fotos.ts'
 
 /**
@@ -78,7 +80,7 @@ export const NOME_DO_BANCO = 'controle-fiado'
 export type TabelaSincronizada = 'clientes' | 'lancamentos'
 
 /** F2 usa a mesma FIFO; seu transporte conjunto entra em E-21, nunca pela rota financeira F1. */
-export type TabelaDaFila = TabelaSincronizada | 'categorias' | 'produtos' | 'operacoes' | 'encerramentos' | 'fotos'
+export type TabelaDaFila = TabelaSincronizada | 'categorias' | 'produtos' | 'operacoes' | 'encerramentos' | 'fotos' | 'operacoesCaixa'
 
 /** Cadastro completo sujeito a LWW por registro, separado da referência derivada de compras. */
 export type ProdutoLocal = Produto & { readonly atualizadoEm: string }
@@ -183,6 +185,14 @@ export const ESQUEMA_V4 = {
   estadoFotos: 'chave',
 } as const
 
+/** E-31 acrescenta somente fatos/manifestos/evidências de caixa; nenhum backfill F2. */
+export const ESQUEMA_V5 = {
+  ...ESQUEMA_V4,
+  fatosCaixa: 'id',
+  operacoesCaixa: 'id',
+  versoesCaixa: 'id, operacaoId',
+} as const
+
 /**
  * A base local. `dependencias` existe para os testes injetarem um IndexedDB de mentira
  * isolado por teste (`fake-indexeddb`); em produção ninguém passa nada e o Dexie usa o do
@@ -206,6 +216,9 @@ export class BancoLocal extends Dexie {
   readonly enviosProdutoFoto: Table<EnvioProdutoFoto, Id, EnvioProdutoFoto>
   readonly usosFotos: Table<UsoFotoLocal, Id, UsoFotoLocal>
   readonly estadoFotos: Table<EstadoFotos, string, EstadoFotos>
+  readonly fatosCaixa: Table<FatoCaixa, Id, FatoCaixa>
+  readonly operacoesCaixa: Table<OperacaoCaixaLocal, Id, OperacaoCaixaLocal>
+  readonly versoesCaixa: Table<VersaoCaixa, Id, VersaoCaixa>
 
   constructor(nome: string = NOME_DO_BANCO, dependencias?: DexieOptions) {
     super(nome, dependencias)
@@ -213,6 +226,7 @@ export class BancoLocal extends Dexie {
     this.version(2).stores(ESQUEMA_V2)
     this.version(3).stores(ESQUEMA_V3)
     this.version(4).stores(ESQUEMA_V4)
+    this.version(5).stores(ESQUEMA_V5)
     this.clientes = this.table('clientes')
     this.lancamentos = this.table('lancamentos')
     this.fila = this.table('fila')
@@ -229,5 +243,8 @@ export class BancoLocal extends Dexie {
     this.enviosProdutoFoto = this.table('enviosProdutoFoto')
     this.usosFotos = this.table('usosFotos')
     this.estadoFotos = this.table('estadoFotos')
+    this.fatosCaixa = this.table('fatosCaixa')
+    this.operacoesCaixa = this.table('operacoesCaixa')
+    this.versoesCaixa = this.table('versoesCaixa')
   }
 }

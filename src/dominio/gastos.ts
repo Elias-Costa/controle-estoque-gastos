@@ -36,7 +36,7 @@ export type MotivoCaixa =
   | 'id-invalido' | 'id-repetido' | 'revisao-invalida' | 'data-invalida'
   | 'valor-invalido' | 'categoria-obrigatoria' | 'classificacao-invalida' | 'mercadoria-invalida'
   | 'tipo-invalido' | 'alvo-invalido' | 'ja-estornado' | 'ja-sincronizado' | 'tipo-diferente'
-  | 'mes-invalido'
+  | 'mes-invalido' | 'envio-com-problema'
 
 /** Resultado puro, sem gravação, fila ou confirmação de envio. */
 export type ResultadoCaixa<T> =
