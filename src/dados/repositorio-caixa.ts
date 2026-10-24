@@ -4,6 +4,7 @@ import { corrigirFatoCaixa, estornarFatoCaixa, prepararCorrecaoCaixa, registrarM
 import { conteudoDoEfeito } from '../dominio/regras-estoque.ts'
 import type { BancoLocal, ItemDaFila, Problema } from './banco.ts'
 import { uuidv7 } from './identidade.ts'
+import { recomporProjecaoCaixa } from './projecao-caixa.ts'
 import type { EnvioCaixa, GrupoCaixa, OperacaoCaixaLocal, VersaoCaixa } from './tipos-caixa.ts'
 
 /** Porta local do caixa: janela e validação são conferidas na transação de gravação. */
@@ -118,6 +119,9 @@ export function criarRepositorioCaixa(banco: BancoLocal, agora: () => string = (
     return banco.transaction('r', tabelas, async () => {
       const item = await itemDaOperacao(id)
       if (!item || item.problema) return undefined
+      // D-070: dependente permanece pendente em evidência, sem enviar alvo retirado.
+      if (await banco.versoesCaixa.where('operacaoId').equals(id).and((v) =>
+        v.grupo.operacao.revisao === item.versao && v.foraDaProjecao !== undefined).count()) return undefined
       const op = await banco.operacoesCaixa.get(id)
       if (!op || op.revisao !== item.versao) throw new Error('Fila de caixa sem operação correspondente')
       const versao = await lerGrupo(op)
@@ -139,16 +143,27 @@ export function criarRepositorioCaixa(banco: BancoLocal, agora: () => string = (
       await banco.versoesCaixa.put({ ...versao, ...(problema ? { problema } : { aceita: true, problema: undefined }) })
       const atual = await banco.fila.get(envio.item.ordem)
       const op = await banco.operacoesCaixa.get(versao.operacaoId)
-      if (!atual || atual.tabela !== 'operacoesCaixa' || atual.registroId !== envio.item.registroId ||
-        atual.versao !== envio.item.versao || op?.versaoId !== versao.id) return
-      if (problema) await banco.fila.put({ ...atual, problema })
-      else await banco.fila.delete(atual.ordem)
+      if (atual && atual.tabela === 'operacoesCaixa' && atual.registroId === envio.item.registroId &&
+        atual.versao === envio.item.versao && op?.versaoId === versao.id) {
+        if (problema) await banco.fila.put({ ...atual, problema })
+        else await banco.fila.delete(atual.ordem)
+      }
+      // O download pode ter conhecido o aceite antes desta resposta de recusa.
+      await recomporProjecaoCaixa(banco)
     })
   }
 
   async function filaDoFato(id: Id): Promise<ItemDaFila | undefined> {
     const op = await operacaoDoFato(id)
-    return op ? itemDaOperacao(op.id) : undefined
+    const direta = op ? await itemDaOperacao(op.id) : undefined
+    if (direta) return direta
+    for (const v of await banco.versoesCaixa.toArray()) {
+      if (v.grupo.fatos.some((f) => f.id === id)) {
+        const item = await itemDaOperacao(v.operacaoId)
+        if (item) return item
+      }
+    }
+    return undefined
   }
 
   return { registrar, corrigir, estornar, capturarEnvio, responderEnvio,

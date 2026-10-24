@@ -33,6 +33,7 @@ import { createClient, type PostgrestError, type SupabaseClient } from '@supabas
 import type { ClienteNaNuvem, LancamentoNaNuvem } from './borda.ts'
 import { COLUNAS_CATEGORIA, COLUNAS_PRODUTO, type DocumentoEstoque } from './borda-estoque.ts'
 import { criarNuvemFotos, type NuvemFotos } from './nuvem-fotos.ts'
+import type { DocumentoCaixa } from './borda-caixa.ts'
 
 /** Por que uma ida à nuvem não deu certo. */
 export type Falha =
@@ -66,6 +67,8 @@ export type Nuvem = {
   readonly buscarCategorias: (desde: string | null) => Promise<Resposta<readonly LinhaRecebida[]>>
   readonly buscarProdutos: (desde: string | null) => Promise<Resposta<readonly LinhaRecebida[]>>
   readonly buscarEstoque: (apos: string, limite: number) => Promise<Resposta<readonly LinhaRecebida[]>>
+  readonly enviarCaixa: (grupo: DocumentoCaixa) => Promise<Resposta<void>>
+  readonly buscarCaixa: (apos: string, limite: number) => Promise<Resposta<readonly LinhaRecebida[]>>
 }
 
 /**
@@ -174,6 +177,13 @@ export function criarNuvemSupabase(supabase: SupabaseClient): Nuvem {
       const resposta = await rpc('baixar_estoque', { apos, limite })
       if (!resposta.ok) return resposta
       if (!Array.isArray(resposta.valor)) throw new Error('Download de estoque sem página')
+      return { ok: true, valor: resposta.valor.map(comoLinha) }
+    },
+    enviarCaixa: (grupo) => gravar('aceitar_grupo_caixa', { grupo }),
+    buscarCaixa: async (apos, limite) => {
+      const resposta = await rpc('baixar_caixa', { apos, limite })
+      if (!resposta.ok) return resposta
+      if (!Array.isArray(resposta.valor)) throw new Error('Download de caixa sem página')
       return { ok: true, valor: resposta.valor.map(comoLinha) }
     },
   }

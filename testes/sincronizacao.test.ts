@@ -58,6 +58,8 @@ class NuvemDeMentira implements Nuvem {
   buscarCategorias = async (): Promise<Resposta<readonly LinhaRecebida[]>> => ({ ok: true, valor: [] })
   buscarProdutos = async (): Promise<Resposta<readonly LinhaRecebida[]>> => ({ ok: true, valor: [] })
   buscarEstoque = async (): Promise<Resposta<readonly LinhaRecebida[]>> => ({ ok: true, valor: [] })
+  buscarCaixa = async (): Promise<Resposta<readonly LinhaRecebida[]>> => ({ ok: true, valor: [] })
+  enviarCaixa = async (): Promise<Resposta<void>> => ({ ok: true, valor: undefined })
   readonly clientes = new Map<string, ClienteGuardado>()
   readonly lancamentos = new Map<string, LancamentoGuardado>()
   sessao = true
@@ -650,14 +652,12 @@ describe('parar() e sincronizar() concorrente', () => {
     banco.close()
   })
 
-  test('caixa aguarda E-33 com fila/evidência intactas e não impede envio F1/F2 independente', async () => {
+  test('caixa sobe pela porta própria e não impede envio F1/F2 independente', async () => {
     const { banco, repositorio, nuvem, sinc } = preparar()
     const caixa = criarOperacoesCaixa(criarRepositorioCaixa(banco))
     const despesa = await caixa.registrar({ tipo: 'despesa', data: '2026-10-24', valor: GRANDE,
       categoria: 'Compra', classificacao: 'negocio', mercadoria: true })
     if (!despesa.ok) throw new Error(despesa.motivo)
-    const fila = (await banco.fila.toArray())[0]
-    if (!fila) throw new Error('sem fila de caixa')
     const cliente = await vera(repositorio), venda = await vendaPequena(repositorio, cliente.id)
     const estoque = criarOperacoesEstoque(criarRepositorioEstoque(banco))
     const categoria = await estoque.cadastrarCategoria('Perfumes')
@@ -665,10 +665,11 @@ describe('parar() e sincronizar() concorrente', () => {
     await sinc.sincronizar()
     await sinc.sincronizar()
     expect(nuvem.lancamentos.has(venda.id)).toBe(true)
-    expect(await banco.fila.toArray()).toEqual([fila])
-    expect(sinc.estado().pendentes).toBe(1)
+    expect(await banco.fila.count()).toBe(0)
+    expect(sinc.estado().pendentes).toBe(0)
     expect(await banco.fatosCaixa.toArray()).toEqual([...despesa.valor.fatos])
     expect(await banco.versoesCaixa.count()).toBe(1)
+    expect((await banco.versoesCaixa.toArray())[0]?.aceita).toBe(true)
     expect(nuvem.requisicoes.some((item) => item.includes(despesa.valor.operacao.id))).toBe(false)
     sinc.parar(); banco.close()
   })

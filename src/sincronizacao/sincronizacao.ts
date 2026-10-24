@@ -33,11 +33,14 @@
 import type { BancoLocal, CursorDeDownload, ItemDaFila, Problema } from '../dados/banco.ts'
 import { itemDaFilaDoRegistro } from '../dados/fila.ts'
 import { criarRepositorioEstoque } from '../dados/repositorio-estoque.ts'
+import { criarRepositorioCaixa } from '../dados/repositorio-caixa.ts'
 import { conteudoDoEfeito } from '../dominio/regras-estoque.ts'
 import { clienteDaNuvem, clienteParaNuvem, lancamentoDaNuvem, lancamentoParaNuvem, normalizarCarimbo } from './borda.ts'
 import { categoriaDaNuvem, documentoEstoque, produtoDaNuvem, recepcaoDaNuvem } from './borda-estoque.ts'
 import { LINHAS_POR_PAGINA, type Falha, type LinhaRecebida, type Nuvem, type Resposta } from './nuvem.ts'
 import { aplicarRecepcaoEstoque } from './recepcao-estoque.ts'
+import { aplicarRecepcaoCaixa } from './recepcao-caixa.ts'
+import { grupoCaixaParaNuvem, recepcaoCaixaDaNuvem } from './borda-caixa.ts'
 import { criarSincronizacaoFotos } from './fotos.ts'
 
 /** O que o indicador mostra (RF-25) e o que o mantenedor lê no console. */
@@ -121,6 +124,7 @@ const agendarPadrao: Agendar = (fn, ms) => {
 export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao {
   const { banco, nuvem } = dependencias
   const estoque = criarRepositorioEstoque(banco)
+  const caixa = criarRepositorioCaixa(banco)
   const fotos = nuvem?.fotos ? criarSincronizacaoFotos(banco, nuvem, nuvem.fotos) : null
   const agora = dependencias.agora ?? (() => new Date())
   const agendar = dependencias.agendar ?? agendarPadrao
@@ -231,9 +235,16 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
     for (const item of itens) {
       // E-22: o ciclo de binários vem depois das operações; foto nunca segue pela rota financeira.
       if (item.tabela === 'fotos') continue
-      // E-31: conservar a fila nova até E-33, sem enviá-la como financeiro F1 ou bloquear F1/F2.
-      if (item.tabela === 'operacoesCaixa') continue
       if (item.problema !== undefined) continue
+      if (item.tabela === 'operacoesCaixa') {
+        const envio = await caixa.capturarEnvio(item.registroId)
+        if (!envio) continue
+        const resposta = await nuvemLigada.enviarCaixa(grupoCaixaParaNuvem(envio.versao.grupo))
+        if (resposta.ok) await caixa.responderEnvio(envio)
+        else if (resposta.falha.tipo !== 'recusa') return resposta.falha.tipo
+        else if (resposta.falha.codigo !== CHAVE_ESTRANGEIRA) await caixa.responderEnvio(envio, problemaDaFalha(resposta.falha))
+        continue
+      }
       if (item.tabela === 'operacoes') {
         const envio = await estoque.capturarEnvio(item.registroId)
         if (!envio) continue
@@ -300,7 +311,7 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
   }
 
   async function baixarTabela(
-    tabela: Exclude<CursorDeDownload['chave'], 'estoque'>,
+    tabela: Exclude<CursorDeDownload['chave'], 'estoque' | 'caixa'>,
     buscar: (desde: string | null) => Promise<Resposta<readonly LinhaRecebida[]>>,
     carimbo: 'recebido_em' | 'criado_em',
     aplicar: (linha: LinhaRecebida) => Promise<void>,
@@ -357,6 +368,19 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
         const recebido = recepcaoDaNuvem(linha)
         if (BigInt(recebido.recepcao) !== anterior + 1n) throw new Error('Recepções fora de ordem ou posição ausente')
         await aplicarRecepcaoEstoque(banco, recebido)
+        anterior = BigInt(recebido.recepcao)
+      }
+      if (resposta.valor.length < LINHAS_POR_PAGINA) break
+    }
+    for (;;) {
+      const cursor = (await banco.sincronizacao.get('caixa'))?.valor ?? '0'
+      const resposta = await nuvemLigada.buscarCaixa(cursor, LINHAS_POR_PAGINA)
+      if (!resposta.ok) return resposta.falha.tipo === 'sessao' ? 'sessao' : 'rede'
+      let anterior = BigInt(cursor)
+      for (const linha of resposta.valor) {
+        const recebido = recepcaoCaixaDaNuvem(linha)
+        if (BigInt(recebido.recepcao) !== anterior + 1n) throw new Error('Recepções de caixa fora de ordem ou posição ausente')
+        await aplicarRecepcaoCaixa(banco, recebido)
         anterior = BigInt(recebido.recepcao)
       }
       if (resposta.valor.length < LINHAS_POR_PAGINA) return 'ok'

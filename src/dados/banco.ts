@@ -136,8 +136,8 @@ export type NovoItemDaFila = Omit<ItemDaFila, 'ordem'>
 
 /** Uma linha da tabela `sincronizacao`: o cursor de download de cada tabela (D-042). */
 export type CursorDeDownload = {
-  readonly chave: TabelaSincronizada | 'categorias' | 'produtos' | 'estoque'
-  /** O maior carimbo do servidor já visto naquela tabela, ISO UTC; o download pede "desde aqui, com margem". */
+  readonly chave: TabelaSincronizada | 'categorias' | 'produtos' | 'estoque' | 'caixa'
+  /** Carimbo ISO com margem em F1/cadastros; estoque e caixa usam contador textual de commit. */
   readonly valor: string
 }
 

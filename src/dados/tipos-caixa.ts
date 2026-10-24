@@ -25,6 +25,8 @@ export type VersaoCaixa = {
   readonly grupo: GrupoCaixa
   readonly aceita?: boolean
   readonly problema?: Problema
+  /** D-070: evidência recusada/dependente preservada fora dos efeitos correntes. */
+  readonly foraDaProjecao?: { readonly causaId: Id }
 }
 
 /** Captura consistente, sem rede; o resultado vale apenas para esta versão da fila. */
