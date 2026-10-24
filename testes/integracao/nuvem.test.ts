@@ -89,8 +89,17 @@ async function recusa(tx: TransactionSQL, fn: (sp: SQL) => Promise<unknown>): Pr
   throw new Error('o banco aceitou o que deveria recusar')
 }
 
-/** Com trocas gravadas a 0006 recusa downgrade; provar preservação em vez de apagar o ensaio acumulado. */
+/** Histórico protegido recusa downgrade; comprovar preservação sem apagar ensaios acumulados. */
 async function provarGuardaDeTrocas(tx: TransactionSQL): Promise<boolean> {
+  const caixa = migracoes.find((m) => m.nome === '0008_caixa')
+  if (caixa) {
+    const antes = await tx<{ quantidade: string }[]>`select count(*)::text quantidade from public.operacoes_caixa`
+    if (antes[0]?.quantidade !== '0') {
+      expect((await recusa(tx, (sp) => sp.unsafe(caixa.reverter))).code).toBe('P0001')
+      expect(await tx<{ quantidade: string }[]>`select count(*)::text quantidade from public.operacoes_caixa`).toEqual(antes)
+      return true
+    }
+  }
   const [antes] = await tx<{ quantidade: string }[]>`select count(*)::text quantidade from public.operacoes_estoque where tipo='troca'`
   if (!antes || antes.quantidade === '0') return false
   const migracao = migracoes.find((m) => m.nome === '0006_trocas')
@@ -607,7 +616,7 @@ describe.skipIf(!LIGADA)('a nuvem recusa o que o app não pode gravar (E-06, RI-
   })
 
   describe('reversibilidade (E-06): o reverter desfaz, a migration refaz', () => {
-    test('sem trocas, reverte/refaz todas; com histórico de trocas, recusa downgrade e preserva dados', async () => {
+    test('sem histórico protegido, reverte/refaz todas; com histórico, recusa downgrade e preserva dados', async () => {
       if (migracoes.length === 0) throw new Error('sem migration')
       const existe = async (tx: SQL, tabela: string): Promise<boolean> => {
         const [linha] = await tx<{ existe: boolean }[]>`select to_regclass(${`public.${tabela}`}) is not null as existe`
@@ -636,7 +645,7 @@ describe.skipIf(!LIGADA)('a nuvem recusa o que o app não pode gravar (E-06, RI-
       })
     })
 
-    test('a 0002 só reverte após dependências; histórico de trocas impede downgrade sem perda', async () => {
+    test('a 0002 só reverte após dependências; histórico protegido impede downgrade sem perda', async () => {
       const segunda = migracoes.find((migracao) => migracao.nome.startsWith('0002_'))
       if (segunda === undefined) throw new Error('sem 0002')
       await numaTransacao(async (tx) => {
