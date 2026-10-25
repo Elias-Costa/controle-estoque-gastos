@@ -5,6 +5,7 @@ import type { MovimentoEstoque } from '../dominio/estoque.ts'
 import type { FatoCaixa } from '../dominio/gastos.ts'
 import type { OperacaoCaixaLocal, VersaoCaixa } from './tipos-caixa.ts'
 import type { EnvioProdutoFoto, EstadoFotos, FotoLocal, ProtecaoFotoLocal, UsoFotoLocal } from './tipos-fotos.ts'
+import type { PreferenciaModelos } from './modelos-whatsapp.ts'
 
 /** Dono e destino da base; nunca contém credenciais (D-071, RNF-07). */
 export type VinculoConta = { readonly contaId: string; readonly destino: string }
@@ -18,12 +19,15 @@ export type DadosCopia = {
   fotos: FotoLocal[]; protecoesFotos: ProtecaoFotoLocal[]; enviosProdutoFoto: EnvioProdutoFoto[]
   usosFotos: UsoFotoLocal[]; estadoFotos: EstadoFotos[]; fatosCaixa: FatoCaixa[]
   operacoesCaixa: OperacaoCaixaLocal[]; versoesCaixa: VersaoCaixa[]; evidenciasCopia: EvidenciaCopia[]
+  modelos: PreferenciaModelos[]
 }
 /** Lista explícita: nova tabela de uso exige formato e prova, nunca exportação automática de sessão. */
-export const TABELAS_COPIA = ['clientes', 'lancamentos', 'fila', 'sincronizacao', 'categorias', 'produtos',
+export const TABELAS_COPIA_V1 = ['clientes', 'lancamentos', 'fila', 'sincronizacao', 'categorias', 'produtos',
   'operacoes', 'movimentos', 'versoesEstoque', 'encerramentos', 'relogioEstoque', 'fotos', 'protecoesFotos',
   'enviosProdutoFoto', 'usosFotos', 'estadoFotos', 'fatosCaixa', 'operacoesCaixa', 'versoesCaixa', 'evidenciasCopia'] as const
-/** Nome de tabela permitido no pacote formato 1. */
+/** D-072: formato 2/esquema 7 acrescenta modelos; formato anterior tem lista fechada própria. */
+export const TABELAS_COPIA = [...TABELAS_COPIA_V1, 'modelos'] as const
+/** Nome de tabela permitido no pacote atual. */
 export type TabelaCopia = typeof TABELAS_COPIA[number]
 /** Controle durável da conta e da barreira de primeiro envio; ausência não apaga dados existentes. */
 export type ControleCopia = { readonly chave: 'conta'; readonly vinculo: VinculoConta } |

@@ -4,15 +4,15 @@ import { quitar } from '../dados/operacoes.ts'
 import type { Centavos } from '../dominio/dinheiro.ts'
 import { saldo, type Id } from '../dominio/ficha.ts'
 import { podeConsiderarPago } from '../dominio/lancamentos.ts'
-import { Botao, BotaoLink } from './Botao.tsx'
+import { Botao } from './Botao.tsx'
 import { Confirmacao } from './Confirmacao.tsx'
 import { hoje } from './datas.ts'
-import { mensagemDeRecibo, PALAVRAS_DA_COBRANCA } from './palavras-da-cobranca.ts'
+import { PALAVRAS_DA_COBRANCA } from './palavras-da-cobranca.ts'
 import { PALAVRAS } from './palavras-da-ficha.ts'
 import { fraseDaRecusa } from './palavras-da-venda.ts'
 import { fraseDoTroco, linhasDoRecebido, PALAVRAS_DO_RECEBIMENTO } from './palavras-do-recebimento.ts'
 import { useLeitura } from './useLeitura.ts'
-import { linkDoWhatsApp } from './whatsapp.ts'
+import { MensagemWhatsApp } from './mensagem-whatsapp.tsx'
 
 /**
  * A confirmação do recebimento (E-11), como no protótipo validado: "Anotado: R$ X da Rosa" e
@@ -92,9 +92,8 @@ export function TelaRecebido({
       aviso={erro}
       complemento={
         // O recibo (RF-09, D-047): o mesmo número que ela acabou de conferir, com o saldo relido — depois de "Considerar pago", muda junto.
-        <BotaoLink tipo="secundario" href={linkDoWhatsApp(telefone, mensagemDeRecibo({ nome, valor, saldo: saldoNovo }))}>
-          {PALAVRAS_DA_COBRANCA.mandarRecibo}
-        </BotaoLink>
+        <MensagemWhatsApp situacao={saldoNovo === 0n ? 'recibo-quitado' : 'recibo-com-saldo'} dados={{ nome, valor, saldo: saldoNovo }}
+          telefone={telefone} acao={PALAVRAS_DA_COBRANCA.mandarRecibo} />
       }
       acaoPropria={
         leitura.valor.podeQuitar ? (

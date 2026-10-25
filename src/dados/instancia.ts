@@ -19,6 +19,7 @@ import { criarOperacoesEstoque } from './operacoes-estoque.ts'
 import { criarRepositorioFotos } from './fotos.ts'
 import { criarRepositorioCaixa } from './repositorio-caixa.ts'
 import { criarOperacoesCaixa } from './operacoes-caixa.ts'
+import { criarRepositorioModelos } from './repositorio-modelos.ts'
 
 export const banco = new BancoLocal()
 
@@ -55,3 +56,8 @@ export const repositorioCaixa = criarRepositorioCaixa(banco, undefined, () => {
 
 /** Portas locais de gastos/receitas usadas nas telas da E-34. */
 export const operacoesCaixa = criarOperacoesCaixa(repositorioCaixa)
+
+/** Preferência offline dos quatro textos; a sincronização escuta a mesma fila. */
+export const repositorioModelos = criarRepositorioModelos(banco, undefined, () => {
+  for (const ouvinte of ouvintes) ouvinte()
+})

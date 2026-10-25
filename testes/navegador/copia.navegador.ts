@@ -35,7 +35,10 @@ test('E-35 arquivo real com fotos/pendências importa pela tela em outra base va
         itens: [{ produtoId: p.valor.id, descricao: p.valor.nome, quantidade: 2, entregue: 1, precoUnitario: 500n }], parcelas: [{ vencimento: '2026-10-24', valor: 1000n }] })
       const gasto = await l.operacoesCaixa.registrar({ tipo: 'despesa', data: '2026-10-03', valor: 1250n, categoria: 'Gasto da cópia offline', classificacao: 'pessoal', mercadoria: false })
       if (!compra.ok || !venda.ok || !gasto.ok) throw new Error('preparação inválida')
-      return { clienteId: c.valor.id, produtoId: p.valor.id, fotoId: p.valor.fotoId,
+      const modelos = { 'cobranca-vencida': '{nome}, parcela de {valor} em {vencimento}.', 'cobranca-a-vencer': '{nome}, vence em {vencimento}.',
+        'recibo-com-saldo': 'Recebi {valor}; falta {saldo}.', 'recibo-quitado': 'Recebi {valor}. Obrigada, {nome}!' }
+      if (!(await l.repositorioModelos.salvar(modelos, undefined)).ok) throw new Error('modelos não guardados')
+      return { clienteId: c.valor.id, produtoId: p.valor.id, fotoId: p.valor.fotoId, modelos,
         fila: (await l.banco.fila.toArray()).map((f) => f.registroId).sort(), foto: [...foto.miniatura] }
     }, bytes)
     await abrirCopia(page)
@@ -53,13 +56,13 @@ test('E-35 arquivo real com fotos/pendências importa pela tela em outra base va
         const l = window.laboratorio; if (!l) throw new Error('sem laboratório')
         const posicao = l.projetarEstoque(await l.banco.movimentos.toArray(), e.produtoId)
         return { saldo: String(l.saldo(await l.repositorio.lerFicha(e.clienteId))), fisico: posicao.ok ? posicao.valor.fisico : null,
-          foto: [...((await l.banco.fotos.get(e.fotoId ?? ''))?.miniatura ?? [])],
+          foto: [...((await l.banco.fotos.get(e.fotoId ?? ''))?.miniatura ?? [])], modelos: (await l.repositorioModelos.ler())?.modelos,
           fila: (await l.banco.fila.toArray()).map((f) => f.registroId).sort() }
       }, esperado)
     }
-    expect(await conferir()).toEqual({ saldo: '1000', fisico: 6, foto: esperado.foto, fila: esperado.fila })
+    expect(await conferir()).toEqual({ saldo: '1000', fisico: 6, foto: esperado.foto, fila: esperado.fila, modelos: esperado.modelos })
     await recarregar(b)
-    expect(await conferir()).toEqual({ saldo: '1000', fisico: 6, foto: esperado.foto, fila: esperado.fila })
+    expect(await conferir()).toEqual({ saldo: '1000', fisico: 6, foto: esperado.foto, fila: esperado.fila, modelos: esperado.modelos })
     await b.getByRole('button', { name: 'Ficha da cópia offline', exact: false }).click()
     await expect(b.getByText('R$ 10,00', { exact: true }).first()).toBeVisible()
     await b.screenshot({ path: info.outputPath('ficha-restaurada-offline.png'), fullPage: true })
@@ -67,6 +70,7 @@ test('E-35 arquivo real com fotos/pendências importa pela tela em outra base va
     await context.setOffline(false); await sincronizar(page); await sincronizar(b)
     const depois = await conferir()
     expect(depois.saldo).toBe('1000'); expect(depois.fisico).toBe(6); expect(depois.foto).toEqual(esperado.foto); expect(depois.fila).toEqual([])
+    expect(depois.modelos).toEqual(esperado.modelos)
     await recarregar(b); await abrirCopia(b)
     await b.getByRole('button', { name: 'Começar a usar uma cópia', exact: true }).click()
     await expect(b.getByText(/^Este aparelho já tem anotações/)).toBeVisible()

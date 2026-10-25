@@ -1,6 +1,7 @@
-import { emReais, type Centavos } from '../dominio/dinheiro.ts'
+import type { Centavos } from '../dominio/dinheiro.ts'
 import type { Dia } from '../dominio/ficha.ts'
-import { diaCurto } from './datas.ts'
+import { MODELOS_ORIGINAIS } from '../dados/modelos-whatsapp.ts'
+import { renderizarModelo } from './modelos-da-mensagem.ts'
 import type { FiltroDeDevedoras, OrdemDeDevedoras } from './leitura-da-ficha.ts'
 
 /**
@@ -8,8 +9,8 @@ import type { FiltroDeDevedoras, OrdemDeDevedoras } from './leitura-da-ficha.ts'
  * As da lista são **hipótese até a próxima observação** (D-047; impessoais desde D-050, item 2:
  * "Ninguém em atraso", "Maior atraso"). **O texto da cobrança é dela**, ditado na visita de
  * E-15 (D-050, item 7); o recibo continua sendo proposta do agente (D-047). O envio é manual
- * (D-007), então ela ajusta no próprio WhatsApp — e o que ela muda é o que define os modelos
- * de F3 (D-014). Trocar é uma linha, aqui.
+ * (D-007). E-36/D-069/072 oferece os quatro modelos editáveis; os padrões têm uma fonte
+ * em dados/modelos-whatsapp.ts, e a renderização única em modelos-da-mensagem.ts.
  */
 export const PALAVRAS_DA_COBRANCA = {
   quemEstaDevendo: 'Quem está devendo',
@@ -52,12 +53,7 @@ export function fraseDaListaVazia(filtro: FiltroDeDevedoras): string {
  * Como a mensagem chama a cliente: pelo primeiro nome ("Maria Silva" → "Maria"), como entre
  * vizinhas. "Dona Rosa" e "Seu João" são tratamento + nome, e o tratamento sozinho seria errado.
  */
-function comoChamar(nome: string): string {
-  const palavras = nome.trim().split(/\s+/)
-  const primeira = palavras[0] ?? nome
-  const tratamento = /^(dona|seu)\.?$/i.test(primeira)
-  return tratamento && palavras.length > 1 ? `${primeira} ${palavras[1]}` : primeira
-}
+// Tratamento e renderização únicos em modelos-da-mensagem.ts; padrões em dados/modelos-whatsapp.ts.
 
 /**
  * A cobrança (RF-09) é **o texto que ela ditou** na visita de E-15 (D-050, item 7), palavra por
@@ -67,12 +63,16 @@ function comoChamar(nome: string): string {
  * e só o trecho "que está atrasada" vira "que vence em dd/mm": é a única palavra do agente.
  */
 export function mensagemDeCobranca(dados: { readonly nome: string; readonly vencimento: Dia; readonly vencida: boolean }): string {
-  const qual = dados.vencida ? 'que está atrasada' : `que vence em ${diaCurto(dados.vencimento)}`
-  return `Oi, ${comoChamar(dados.nome)}, tudo bem? Passando para lembrar da parcela ${qual}. Quando puder, me mande, por favor. Obrigada!`
+  const situacao = dados.vencida ? 'cobranca-vencida' : 'cobranca-a-vencer'
+  const resultado = renderizarModelo(MODELOS_ORIGINAIS[situacao], situacao, dados)
+  if (!resultado.ok) throw new Error('Dados da cobrança inválidos')
+  return resultado.texto
 }
 
 /** O recibo (RF-09): o que entrou e o que ficou — o mesmo que a confirmação mostra, com o saldo relido (RN-01). */
 export function mensagemDeRecibo(dados: { readonly nome: string; readonly valor: Centavos; readonly saldo: Centavos }): string {
-  const resto = dados.saldo === 0n ? 'Sua fichinha está quitada!' : `Agora falta ${emReais(dados.saldo)} na sua fichinha.`
-  return `Oi, ${comoChamar(dados.nome)}! Recebi os ${emReais(dados.valor)}, obrigada! ${resto}`
+  const situacao = dados.saldo === 0n ? 'recibo-quitado' : 'recibo-com-saldo'
+  const resultado = renderizarModelo(MODELOS_ORIGINAIS[situacao], situacao, dados)
+  if (!resultado.ok) throw new Error('Dados do recibo inválidos')
+  return resultado.texto
 }

@@ -10,7 +10,7 @@
  */
 
 import type { BancoLocal } from '../dados/banco.ts'
-import { banco, repositorio, repositorioEstoque, operacoesEstoque, repositorioFotos, repositorioCaixa, operacoesCaixa } from '../dados/instancia.ts'
+import { banco, repositorio, repositorioEstoque, operacoesEstoque, repositorioFotos, repositorioCaixa, operacoesCaixa, repositorioModelos } from '../dados/instancia.ts'
 import { prepararFoto } from './fotos.ts'
 import { cadastrarCliente, lancarVendaFiado, receber } from '../dados/operacoes.ts'
 import type { Repositorio } from '../dados/repositorio.ts'
@@ -25,6 +25,7 @@ import type { Sincronizacao } from '../sincronizacao/sincronizacao.ts'
 
 /** O que o teste encontra em `window.laboratorio`. As operações já vêm presas ao repositório do app. */
 export type Laboratorio = {
+  readonly repositorioModelos: typeof repositorioModelos
   readonly copia: typeof copia
   readonly repositorioCopia: ReturnType<typeof criarRepositorioCopia>
   readonly prepararFoto: typeof prepararFoto
@@ -79,6 +80,7 @@ async function sair(): Promise<void> {
 }
 
 window.laboratorio = {
+  repositorioModelos,
   copia,
   repositorioCopia: criarRepositorioCopia(banco),
   prepararFoto,

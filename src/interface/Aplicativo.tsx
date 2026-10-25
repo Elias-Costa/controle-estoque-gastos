@@ -25,6 +25,7 @@ import { TelaProdutosNoMinimo } from './tela-produtos-no-minimo.tsx'
 import { TelaCaixa } from './tela-caixa.tsx'
 import { TelaMovimentoCaixa } from './tela-movimento-caixa.tsx'
 import { TelaCopia } from './tela-copia.tsx'
+import { TelaModelos } from './tela-modelos.tsx'
 import { hoje } from './datas.ts'
 import type { CorteCaixa } from './leitura-do-caixa.ts'
 import type { ReferenciaFatoCaixa } from '../dominio/gastos.ts'
@@ -45,6 +46,7 @@ import type { ReferenciaFatoCaixa } from '../dominio/gastos.ts'
 type Rota =
   | { readonly tela: 'inicio' }
   | { readonly tela: 'copia' }
+  | { readonly tela: 'modelos' }
   | { readonly tela: 'caixa' }
   | { readonly tela: 'movimento-caixa'; readonly tipo: 'despesa' | 'receita-avulsa'; readonly alvo?: ReferenciaFatoCaixa }
   | { readonly tela: 'conferencias' }
@@ -106,9 +108,11 @@ export function Aplicativo() {
           aoConferir={() => setRota({ tela: 'conferencias' })}
           aoVerCaixa={() => setRota({ tela: 'caixa' })}
           aoCopia={() => setRota({ tela: 'copia' })}
+          aoModelos={() => setRota({ tela: 'modelos' })}
         />
       )
     case 'copia': return <TelaCopia aoVoltar={irParaInicio} aoEntrar={() => setRota({ tela: 'entrar', origem: 'copia' })} />
+    case 'modelos': return <TelaModelos aoVoltar={irParaInicio} />
     case 'caixa':
       return <TelaCaixa mes={mesCaixa} corte={corteCaixa} aoMes={setMesCaixa} aoCorte={setCorteCaixa} aoVoltar={irParaInicio}
         aoAnotar={(tipo) => setRota({ tela: 'movimento-caixa', tipo })}

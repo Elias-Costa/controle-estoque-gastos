@@ -188,7 +188,7 @@ describe('E-35: arquivo e estágio, IndexedDB simulado; não prova aparelho', ()
     antiga.close()
     const b = aparelho(fabrica, nome); await b.open()
     expect(await b.clientes.get(c.id)).toEqual(c); expect(await b.fila.count()).toBe(1)
-    expect(await b.controleCopia.count()).toBe(0); expect(b.verno).toBe(6); b.close()
+    expect(await b.controleCopia.count()).toBe(0); expect(b.verno).toBe(7); b.close()
   })
   test('Q47A encerrada e recusa de caixa conservam evidência e fila sem reabrir efeitos provisórios', async () => {
     const a = aparelho(), ids = await povoar(a), repo = criarRepositorioEstoque(a), estoque = criarOperacoesEstoque(repo)
@@ -231,14 +231,17 @@ describe('E-35: arquivo e estágio, IndexedDB simulado; não prova aparelho', ()
       if (caso === 'foto' && nome.startsWith('fotos/')) return new Blob([new Uint8Array(blob.size)])
       if ((caso === 'numero' || caso === 'vinculo' || caso === 'segredo') && nome === 'dados/lancamentos/000000.json') {
         const v: unknown = JSON.parse(await blob.text()); exigirCopia(Array.isArray(v) && objetoCopia(v[0]))
-        if (caso === 'numero') { exigirCopia(Array.isArray(v[0]['itens']) && objetoCopia(v[0]['itens'][0])); v[0]['itens'][0]['preco'] = 1.25 }
+        if (caso === 'numero') {
+          const venda: unknown = v.find((linha: unknown) => objetoCopia(linha) && linha['tipo'] === 'venda')
+          exigirCopia(objetoCopia(venda) && Array.isArray(venda['itens']) && objetoCopia(venda['itens'][0])); venda['itens'][0]['preco'] = 1.25
+        }
         if (caso === 'vinculo') v[0]['clienteId'] = uuidv7()
         if (caso === 'segredo') v[0]['token'] = 'não pode passar'
         return new Blob([JSON.stringify(v)])
       }
       if ((caso === 'faltante' || caso === 'futuro') && nome === 'manifesto.json') {
         const v: unknown = JSON.parse(await blob.text()); exigirCopia(objetoCopia(v) && Array.isArray(v['arquivos']))
-        if (caso === 'faltante') v['arquivos'].pop(); else v['formato'] = 2
+        if (caso === 'faltante') v['arquivos'].pop(); else v['formato'] = 9999
         return new Blob([JSON.stringify(v)])
       }
       return blob

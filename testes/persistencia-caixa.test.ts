@@ -327,7 +327,7 @@ describe('E-31: persistência do caixa sob IndexedDB simulado, sem prova de apar
     } finally { antiga.close() }
     const atual = abrir(indexedDB, nome), repo = criarRepositorioCaixa(atual)
     await atual.open()
-    expect(atual.verno).toBe(6)
+    expect(atual.verno).toBe(7)
     // Também depois de gravar caixa: nenhuma escrita F3 toca cadastros/ficha/estoque/fotos.
     for (const [tabela, linhas] of anteriores) expect(await atual.table(tabela).toArray()).toEqual(linhas)
     expect(await repo.listarFatos()).toEqual([])

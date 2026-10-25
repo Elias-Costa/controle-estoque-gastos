@@ -75,7 +75,7 @@ describe('persistência F2 — lógica IndexedDB simulada, não prova de aparelh
     antiga.close()
     const atual = new BancoLocal('upgrade', { indexedDB, IDBKeyRange })
     await atual.open()
-    expect(atual.verno).toBe(6)
+    expect(atual.verno).toBe(7)
     expect(await atual.clientes.get('c')).toEqual(cliente)
     expect(await atual.lancamentos.get('saldo')).toEqual(lancamento)
     expect(await atual.fila.toArray()).toEqual([fila])

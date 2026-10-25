@@ -81,7 +81,7 @@ export const NOME_DO_BANCO = 'controle-fiado'
 export type TabelaSincronizada = 'clientes' | 'lancamentos'
 
 /** F2 usa a mesma FIFO; seu transporte conjunto entra em E-21, nunca pela rota financeira F1. */
-export type TabelaDaFila = TabelaSincronizada | 'categorias' | 'produtos' | 'operacoes' | 'encerramentos' | 'fotos' | 'operacoesCaixa'
+export type TabelaDaFila = TabelaSincronizada | 'categorias' | 'produtos' | 'operacoes' | 'encerramentos' | 'fotos' | 'operacoesCaixa' | 'modelos'
 
 /** Cadastro completo sujeito a LWW por registro, separado da referência derivada de compras. */
 export type ProdutoLocal = Produto & { readonly atualizadoEm: string }
@@ -203,6 +203,9 @@ export const ESQUEMA_V6 = {
   evidenciasCopia: 'id',
 } as const
 
+/** E-36/D-072: somente preferência de mensagens, preservando todas as versões publicadas. */
+export const ESQUEMA_V7 = { ...ESQUEMA_V6, modelos: 'chave' } as const
+
 /**
  * A base local. `dependencias` existe para os testes injetarem um IndexedDB de mentira
  * isolado por teste (`fake-indexeddb`); em produção ninguém passa nada e o Dexie usa o do
@@ -233,6 +236,7 @@ export class BancoLocal extends Dexie {
   readonly estagiosCopia: Table<EstagioCopia, Id, EstagioCopia>
   readonly lotesCopia: Table<LoteCopia, string, LoteCopia>
   readonly evidenciasCopia: Table<EvidenciaCopia, Id, EvidenciaCopia>
+  readonly modelos: Table<import('./modelos-whatsapp.ts').PreferenciaModelos, string>
 
   constructor(nome: string = NOME_DO_BANCO, dependencias?: DexieOptions) {
     super(nome, dependencias)
@@ -242,6 +246,7 @@ export class BancoLocal extends Dexie {
     this.version(4).stores(ESQUEMA_V4)
     this.version(5).stores(ESQUEMA_V5)
     this.version(6).stores(ESQUEMA_V6)
+    this.version(7).stores(ESQUEMA_V7)
     this.clientes = this.table('clientes')
     this.lancamentos = this.table('lancamentos')
     this.fila = this.table('fila')
@@ -265,5 +270,6 @@ export class BancoLocal extends Dexie {
     this.estagiosCopia = this.table('estagiosCopia')
     this.lotesCopia = this.table('lotesCopia')
     this.evidenciasCopia = this.table('evidenciasCopia')
+    this.modelos = this.table('modelos')
   }
 }

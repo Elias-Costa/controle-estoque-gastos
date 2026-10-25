@@ -5,17 +5,17 @@ import { quitar, reativarCliente } from '../dados/operacoes.ts'
 import { emReais } from '../dominio/dinheiro.ts'
 import type { Cliente, Id } from '../dominio/ficha.ts'
 import { podeConsiderarPago } from '../dominio/lancamentos.ts'
-import { Botao, BotaoLink } from './Botao.tsx'
+import { Botao } from './Botao.tsx'
 import { diaCurto, hoje } from './datas.ts'
 import { linhasDaFicha, resumir, separarDesfeitas, type LinhaDaFicha, type ResumoDaFicha } from './leitura-da-ficha.ts'
-import { mensagemDeCobranca, PALAVRAS_DA_COBRANCA } from './palavras-da-cobranca.ts'
+import { PALAVRAS_DA_COBRANCA } from './palavras-da-cobranca.ts'
 import { linhaDaProxima, PALAVRAS, verDesfeitas } from './palavras-da-ficha.ts'
 import { fraseDaRecusa, PALAVRAS_DA_VENDA } from './palavras-da-venda.ts'
 import { PALAVRAS_DO_RECEBIMENTO } from './palavras-do-recebimento.ts'
 import { PALAVRAS_DO_SALDO_ANTERIOR } from './palavras-do-saldo-anterior.ts'
 import { Topo } from './Topo.tsx'
 import { useLeitura } from './useLeitura.ts'
-import { linkDoWhatsApp } from './whatsapp.ts'
+import { MensagemWhatsApp } from './mensagem-whatsapp.tsx'
 
 /**
  * A ficha (RF-02): a tela que substitui a página do caderno. No topo, sem rolagem, quanto a
@@ -184,16 +184,9 @@ function CartaoDeSaldo({ resumo, cobravel }: { resumo: ResumoDaFicha; cobravel: 
         {linhaDaProxima(resumo.proxima, resumo.vazia)}
       </p>
       {resumo.proxima !== null && cobravel && (
-        <BotaoLink
-          tipo="secundario"
-          className="mt-4"
-          href={linkDoWhatsApp(
-            resumo.cliente.telefone,
-            mensagemDeCobranca({ nome: resumo.cliente.nome, vencimento: resumo.proxima.vencimento, vencida: resumo.proxima.vencida }),
-          )}
-        >
-          {PALAVRAS_DA_COBRANCA.cobrar}
-        </BotaoLink>
+        <MensagemWhatsApp situacao={resumo.proxima.vencida ? 'cobranca-vencida' : 'cobranca-a-vencer'}
+          dados={{ nome: resumo.cliente.nome, vencimento: resumo.proxima.vencimento, valor: resumo.proxima.restante }}
+          telefone={resumo.cliente.telefone} acao={PALAVRAS_DA_COBRANCA.cobrar} />
       )}
     </div>
   )

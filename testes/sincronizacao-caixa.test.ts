@@ -41,7 +41,7 @@ function nuvem(mudancas: Partial<Nuvem> = {}): Nuvem {
   return { temSessao: async () => true, aoMudarSessao: () => () => undefined, enviarCliente: enviado, enviarLancamento: enviado,
     enviarCategoria: enviado, enviarProduto: enviado, enviarGrupo: enviado, enviarEncerramento: async () => ({ ok: true, valor: 'id' }),
     buscarClientes: vazio, buscarLancamentos: vazio, buscarCategorias: vazio, buscarProdutos: vazio, buscarEstoque: vazio,
-    enviarCaixa: enviado, buscarCaixa: vazio, ...mudancas }
+    enviarCaixa: enviado, buscarCaixa: vazio, enviarModelos: enviado, buscarModelos: vazio, ...mudancas }
 }
 function motor(banco: BancoLocal, n: Nuvem) {
   return iniciarSincronizacao({ banco, nuvem: n, agendar: () => () => undefined, janela: null, documento: null })

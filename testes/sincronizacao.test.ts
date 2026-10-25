@@ -60,6 +60,8 @@ class NuvemDeMentira implements Nuvem {
   buscarEstoque = async (): Promise<Resposta<readonly LinhaRecebida[]>> => ({ ok: true, valor: [] })
   buscarCaixa = async (): Promise<Resposta<readonly LinhaRecebida[]>> => ({ ok: true, valor: [] })
   enviarCaixa = async (): Promise<Resposta<void>> => ({ ok: true, valor: undefined })
+  enviarModelos = async (): Promise<Resposta<void>> => ({ ok: true, valor: undefined })
+  buscarModelos = async (): Promise<Resposta<readonly LinhaRecebida[]>> => ({ ok: true, valor: [] })
   readonly clientes = new Map<string, ClienteGuardado>()
   readonly lancamentos = new Map<string, LancamentoGuardado>()
   sessao = true

@@ -9,6 +9,7 @@
 - **Parcelamento:** divisão em até seis parcelas, com valores e datas de vencimento ajustáveis.
 - **Recebimentos:** registro de pagamentos totais ou parciais, com abatimento automático das parcelas em aberto, da mais antiga para a mais recente.
 - **Cobrança:** consulta de clientes com saldo pendente, priorização por atraso e mensagens de cobrança ou recibo preparadas para envio manual pelo WhatsApp.
+- **Textos do WhatsApp:** quatro modelos editáveis, com prévia e inserção de nome, valores e vencimento pelos botões; guardados offline e restaurados na mesma conta.
 - **Saldo anterior:** inclusão de dívidas existentes, com opção de parcelamento, para transferir registros do caderno.
 - **Correções e estornos:** correção de registros pendentes e estorno de lançamentos já sincronizados, com preservação do histórico financeiro.
 
@@ -19,7 +20,7 @@ Vendas e recebimentos podem ser registrados sem acesso à internet. As operaçõ
 ## Cópia em arquivo
 
 Na tela inicial, abra **Cópia das anotações**, toque em **Preparar cópia completa** e depois
-em **Salvar arquivo**. O ZIP reúne fichas, estoque, caixa, fotos, histórico e pendências;
+em **Salvar arquivo**. O ZIP reúne fichas, estoque, caixa, fotos, textos do WhatsApp, histórico e pendências;
 as três consultas CSV podem ser abertas separadamente. Guarde o arquivo em local privado:
 ele contém nomes, telefones e valores, sem senha adicional. Uma preparação interrompida
 pode ser retomada nessa tela. Fotos sem original local exigem internet para completar.
@@ -30,6 +31,13 @@ antes de publicar localmente; anotações existentes impedem a importação. Ao 
 confere os dados mais novos da conta e protege as fotos antes de enviar pendências.
 Não há substituição de dados da nuvem. O limite do pacote é 256 MiB; excesso é recusado sem
 omitir anotações. Provas de aparelho e limites medidos constam na documentação local.
+
+Em **Mensagens do WhatsApp**, escolha a situação, edite e toque em **Guardar os textos**.
+Os quatro textos começam com as mensagens existentes. Os botões inserem os dados da ficha;
+o exemplo do editor usa dados fictícios. Na ficha e após receber, a prévia mostra a mensagem
+real antes do link. Quem envia continua sendo você, no WhatsApp. Edição inválida conserva
+o rascunho; mudança já salva por outra aba pede conferência. O novo leitor também aceita
+as cópias anteriores da E-35, restaurando os textos da mesma conta ao reconectar.
 
 ## Stack utilizada
 
@@ -50,7 +58,7 @@ A cópia usa zip.js 2.24.0; o aviso BSD-3-Clause acompanha o app em
 ## Estado atual
 
 Fichas e estoque estão em uso real, com entrega confirmada pelo mantenedor. Gastos, caixa
-mensal e cópia completa estão em desenvolvimento na F3, sem publicação confirmada.
+mensal, cópia completa e modelos de WhatsApp estão em desenvolvimento na F3, sem publicação confirmada.
 Indicadores do negócio continuam previstos para a fase seguinte.
 
 ## Verificação
@@ -73,7 +81,8 @@ com o projeto confirmado em `nuvem/destinos-de-teste.ts`. O mantenedor configura
 suítes nem resets. `TESTE_NOME` é um filtro opcional de integração para diagnóstico;
 removê-lo para executar o portão completo. Antes da publicação de caixa/F3, o mantenedor roda
 `bun run migrar` em produção: o runner aplica somente pendentes, em ordem, incluindo
-`0008_caixa`, preservando os dados existentes. A cópia usa v6 local aditiva, sem migration SQL nova. Só depois promove para
+`0008_caixa` e `0009_modelos-whatsapp`, preservando os dados existentes. Modelos acrescentam
+v7 local aditiva e a 0009 deve preceder o app que os sincroniza. Só depois promove para
 `main`, que publica pelo deploy existente. Não reverter migrations nem limpar dados para
 atualizar o app; conferir carimbo, fichas e envios pendentes na abertura seguinte.
 

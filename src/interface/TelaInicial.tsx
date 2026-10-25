@@ -39,6 +39,7 @@ export function TelaInicial({
   aoConferir,
   aoVerCaixa,
   aoCopia,
+  aoModelos,
 }: {
   busca: string
   aoBuscar: (texto: string) => void
@@ -51,6 +52,7 @@ export function TelaInicial({
   aoConferir: () => void
   aoVerCaixa: () => void
   aoCopia: () => void
+  aoModelos: () => void
 }) {
   return (
     <main className="tela">
@@ -76,6 +78,7 @@ export function TelaInicial({
       <ListaDeFichas busca={busca} aoBuscar={aoBuscar} aoAbrir={aoAbrirFicha} chave="inicio" comDesativadas />
 
       <Instalacao />
+      <button type="button" className="my-2 block min-h-11 border-0 bg-transparent px-1 text-acento underline" onClick={aoModelos}>Mensagens do WhatsApp ›</button>
       <button type="button" className="my-3 min-h-11 border-0 bg-transparent px-1 text-acento underline" onClick={aoCopia}>Cópia das anotações ›</button>
 
       {/* Discreto de propósito: serve ao mantenedor durante o teste, não a ela (RF-23, D-032). */}

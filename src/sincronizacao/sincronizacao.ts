@@ -43,6 +43,9 @@ import { aplicarRecepcaoCaixa } from './recepcao-caixa.ts'
 import { grupoCaixaParaNuvem, recepcaoCaixaDaNuvem } from './borda-caixa.ts'
 import { criarSincronizacaoFotos } from './fotos.ts'
 import { vincularContaCopia } from '../dados/repositorio-copia.ts'
+import { criarRepositorioModelos } from '../dados/repositorio-modelos.ts'
+import { modelosDaNuvem, modelosParaNuvem } from './borda-modelos.ts'
+import { aplicarModelos } from './recepcao-modelos.ts'
 
 /** O que o indicador mostra (RF-25) e o que o mantenedor lê no console. */
 export type EstadoDaSincronizacao = {
@@ -232,12 +235,22 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
   }
 
   async function enviar(nuvemLigada: Nuvem): Promise<Desfecho> {
+    const modelos = criarRepositorioModelos(banco)
     const itens = await banco.fila.orderBy('ordem').toArray()
     for (const item of itens) {
       if (await banco.controleCopia.get('restauracao')) return 'ok'
       // E-22: o ciclo de binários vem depois das operações; foto nunca segue pela rota financeira.
       if (item.tabela === 'fotos') continue
       if (item.problema !== undefined) continue
+      if (item.tabela === 'modelos') {
+        const envio = await modelos.capturarEnvio(item.registroId)
+        if (!envio) continue
+        const resposta = await nuvemLigada.enviarModelos(modelosParaNuvem(envio.preferencia))
+        if (resposta.ok) await modelos.responderEnvio(envio)
+        else if (resposta.falha.tipo !== 'recusa') return resposta.falha.tipo
+        else await modelos.responderEnvio(envio, problemaDaFalha(resposta.falha))
+        continue
+      }
       if (item.tabela === 'operacoesCaixa') {
         const envio = await caixa.capturarEnvio(item.registroId)
         if (!envio) continue
@@ -360,6 +373,10 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
   }
 
   async function baixar(nuvemLigada: Nuvem): Promise<Desfecho> {
+    const modelos = await nuvemLigada.buscarModelos()
+    if (!modelos.ok) return modelos.falha.tipo === 'sessao' ? 'sessao' : 'rede'
+    if (modelos.valor.length > 1) throw new Error('Mais de uma preferência de mensagens')
+    for (const linha of modelos.valor) await aplicarModelos(banco, modelosDaNuvem(linha))
     const clientes = await baixarTabela('clientes', (desde) => nuvemLigada.buscarClientes(desde), 'recebido_em', aplicarCliente)
     if (clientes !== 'ok') return clientes
     const lancamentos = await baixarTabela('lancamentos', (desde) => nuvemLigada.buscarLancamentos(desde), 'criado_em', aplicarLancamento)

@@ -9,6 +9,7 @@ import type { FatoCaixa } from '../dominio/gastos.ts'
 import type { GrupoCaixa, OperacaoCaixaLocal, VersaoCaixa } from './tipos-caixa.ts'
 import { LIMITE_FOTO_BYTES, LIMITE_MINIATURA_BYTES, type EnvioProdutoFoto, type EstadoFotos, type FotoLocal, type ProtecaoFotoLocal, type UsoFotoLocal } from './tipos-fotos.ts'
 import { LIMITES_COPIA, TABELAS_COPIA, type DadosCopia, type EvidenciaCopia, type TabelaCopia, type VinculoConta } from './tipos-copia.ts'
+import { preferenciaModelosValida } from './modelos-whatsapp.ts'
 
 /** Recusa de arquivo/preparação: códigos ficam na borda; a tela apresenta palavras próprias. */
 export class ErroCopia extends Error {
@@ -134,7 +135,7 @@ function versaoCaixa(v: unknown): v is VersaoCaixa {
     objetoCopia(v) && grupoCaixa(v['grupo']) && v['operacaoId'] === v['grupo'].operacao.id
 }
 function fila(v: unknown): v is ItemDaFila {
-  return campos(v, { ordem: positivo, tabela: escolha('clientes', 'lancamentos', 'categorias', 'produtos', 'operacoes', 'encerramentos', 'fotos', 'operacoesCaixa'), registroId: id, criadoEm: instante }, { versao: inteiro, problema })
+  return campos(v, { ordem: positivo, tabela: escolha('clientes', 'lancamentos', 'categorias', 'produtos', 'operacoes', 'encerramentos', 'fotos', 'operacoesCaixa', 'modelos'), registroId: id, criadoEm: instante }, { versao: inteiro, problema })
 }
 function cursor(v: unknown): v is CursorDeDownload {
   return campos(v, { chave: escolha('clientes', 'lancamentos', 'categorias', 'produtos', 'estoque', 'caixa'), valor: texto }) && objetoCopia(v) &&
@@ -173,7 +174,9 @@ export function dadosDaCopia(v: unknown): DadosCopia {
     versoesEstoque: lerLista(v['versoesEstoque'], versao), encerramentos: lerLista(v['encerramentos'], encerramento), relogioEstoque: lerLista(v['relogioEstoque'], relogio),
     fotos: lerLista(v['fotos'], foto), protecoesFotos: lerLista(v['protecoesFotos'], protecao), enviosProdutoFoto: lerLista(v['enviosProdutoFoto'], envio),
     usosFotos: lerLista(v['usosFotos'], uso), estadoFotos: lerLista(v['estadoFotos'], estadoFoto), fatosCaixa: lerLista(v['fatosCaixa'], fato),
-    operacoesCaixa: lerLista(v['operacoesCaixa'], opCaixa), versoesCaixa: lerLista(v['versoesCaixa'], versaoCaixa), evidenciasCopia: lerLista(v['evidenciasCopia'], evidencia) }
+    operacoesCaixa: lerLista(v['operacoesCaixa'], opCaixa), versoesCaixa: lerLista(v['versoesCaixa'], versaoCaixa), evidenciasCopia: lerLista(v['evidenciasCopia'], evidencia),
+    modelos: lerLista(v['modelos'], preferenciaModelosValida) }
+  exigirCopia(dados.modelos.length <= 1)
   validarVinculosCopia(dados)
   return dados
 }
