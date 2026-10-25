@@ -2,7 +2,7 @@ import type { BancoLocal, ProdutoLocal } from '../dados/banco.ts'
 import { criarRepositorioFotos } from '../dados/fotos.ts'
 import type { FotoLocal } from '../dados/tipos-fotos.ts'
 import { hashDaFoto, miniaturaDaFoto } from '../plataforma/fotos.ts'
-import { documentoEstoque, produtoDaNuvem } from './borda-estoque.ts'
+import { documentoProduto, produtoDaNuvem } from './borda-estoque.ts'
 import { documentoDaFoto, protecaoDaNuvem, type NuvemFotos } from './nuvem-fotos.ts'
 import type { Nuvem, Resposta, LinhaRecebida } from './nuvem.ts'
 
@@ -30,7 +30,7 @@ export function criarSincronizacaoFotos(banco: BancoLocal, nuvem: Nuvem, transpo
         const r = await registrar(foto)
         if (!r.ok) return r
       }
-      const r = await nuvem.enviarProduto(documentoEstoque(envio.cadastro))
+      const r = await nuvem.enviarProduto(documentoProduto(envio.cadastro))
       if (!r.ok) return r
       await repo.concluirProduto(envio.id)
     }

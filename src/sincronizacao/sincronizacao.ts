@@ -35,7 +35,8 @@ import { itemDaFilaDoRegistro } from '../dados/fila.ts'
 import { criarRepositorioEstoque } from '../dados/repositorio-estoque.ts'
 import { conteudoDoEfeito } from '../dominio/regras-estoque.ts'
 import { clienteDaNuvem, clienteParaNuvem, lancamentoDaNuvem, lancamentoParaNuvem, normalizarCarimbo } from './borda.ts'
-import { categoriaDaNuvem, documentoEstoque, produtoDaNuvem, recepcaoDaNuvem } from './borda-estoque.ts'
+import { categoriaDaNuvem, documentoEstoque, documentoProduto, produtoDaNuvem, recepcaoDaNuvem } from './borda-estoque.ts'
+import { produtoRecebido } from '../dados/receber-produto.ts'
 import { LINHAS_POR_PAGINA, type Falha, type LinhaRecebida, type Nuvem, type Resposta } from './nuvem.ts'
 import { aplicarRecepcaoEstoque } from './recepcao-estoque.ts'
 import { criarSincronizacaoFotos } from './fotos.ts'
@@ -197,7 +198,7 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
     if (item.tabela === 'produtos') {
       const produto = await banco.produtos.get(item.registroId)
       if (!produto) throw new Error('Fila sem produto')
-      return fotos ? fotos.enviarProduto(produto) : nuvemLigada.enviarProduto(documentoEstoque(produto))
+      return fotos ? fotos.enviarProduto(produto) : nuvemLigada.enviarProduto(documentoProduto(produto))
     }
     if (item.tabela === 'encerramentos') {
       const encerramento = await banco.encerramentos.get(item.registroId)
@@ -342,7 +343,7 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
       await banco.transaction('rw', banco.produtos, banco.categorias, async () => {
         if (!await banco.categorias.get(produto.categoriaId)) throw new Error('Produto remoto sem categoria')
         const local = await banco.produtos.get(produto.id)
-        if (!local || local.atualizadoEm < produto.atualizadoEm) await banco.produtos.put(produto)
+        await banco.produtos.put(produtoRecebido(local, produto))
       })
     })
     if (produtos !== 'ok') return produtos

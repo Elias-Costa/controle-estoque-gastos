@@ -52,7 +52,7 @@ function FormularioProduto({ catalogo, linhas, produtoId, aoVoltar, aoSalvar, ao
   const trava = useRef(false)
   const montado = useRef(true)
   const camera = useRef<HTMLInputElement>(null), arquivo = useRef<HTMLInputElement>(null)
-  const categoriaCampo = useId(), minimoCampo = useId()
+  const categoriaCampo = useId(), minimoCampo = useId(), classificacaoCampo = useId()
   const categorias = [...new Map([...categoriasLocais, ...catalogo.categorias].map((item) => [item.id, item])).values()]
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR') || a.id.localeCompare(b.id))
   const custoDaCompra = linha?.custoDaCompra ?? false
@@ -151,6 +151,14 @@ function FormularioProduto({ catalogo, linhas, produtoId, aoVoltar, aoSalvar, ao
       {preparando && <p role="status">{P.preparando}</p>}
       {erroFoto && <p role="alert" className="text-atraso">{erroFoto}</p>}
       <Campo rotulo={P.marca} valor={rascunho.marca} aoMudar={(marca) => mudar({ marca })} />
+      <Rotulo para={classificacaoCampo}>{P.classificacao}</Rotulo>
+      <select id={classificacaoCampo} className={CLASSES_DE_CAMPO} value={rascunho.classificacao} onChange={(evento) => mudar({ classificacao: evento.target.value })}>
+        <option value="">{P.semClassificacao}</option>
+        <option value="feminino">{P.feminino}</option>
+        <option value="masculino">{P.masculino}</option>
+        <option value="unissex">{P.unissex}</option>
+        <option value="nao-se-aplica">{P.naoSeAplica}</option>
+      </select>
       <Campo rotulo={P.codigo} valor={rascunho.codigoCatalogo} aoMudar={(codigoCatalogo) => mudar({ codigoCatalogo })} />
       {custoDaCompra ? <section className="mt-5 rounded-xl border border-borda bg-papel p-3" aria-label={P.custoCompra}>
         <p className="m-0">{P.custoCompra}: <strong>{linha?.custo === undefined ? P.desconhecido : emReais(linha.custo)}</strong></p>

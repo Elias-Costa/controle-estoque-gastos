@@ -6,6 +6,8 @@ export const PALAVRAS_DOS_PRODUTOS = {
   nome: 'Nome', categoria: 'Categoria', escolherCategoria: 'Escolha a categoria', novaCategoria: '+ Nova categoria',
   nomeCategoria: 'Nome da categoria', criarCategoria: 'Usar esta categoria', fecharCategoria: 'Deixar para depois',
   marca: 'Marca', codigo: 'Código do catálogo', custo: 'Preço de custo', preco: 'Preço de venda', minimo: 'Estoque mínimo',
+  classificacao: 'Classificação', semClassificacao: 'Não informado',
+  feminino: 'Feminino', masculino: 'Masculino', unissex: 'Unissex', naoSeAplica: 'Não se aplica',
   opcionais: 'Só nome e categoria são obrigatórios.', vazio: 'Nenhum produto ainda', lendo: 'Abrindo os produtos…',
   falhaLeitura: 'Não consegui abrir os produtos. Tente abrir de novo.',
   falhaGravacao: 'Não consegui salvar. Os dados continuam aqui. Tente de novo.',
@@ -29,6 +31,7 @@ export function fraseDaGuardaDoProduto(motivo: MotivoEstoque): string {
     case 'nome-obrigatorio': return 'Falta o nome do produto.'
     case 'categoria-obrigatoria': return 'Escolha uma categoria ou crie uma nova.'
     case 'categoria-inexistente': return 'Escolha uma categoria da lista.'
+    case 'classificacao-invalida': return 'Escolha uma classificação da lista ou deixe não informado.'
     case 'custo-invalido': return 'Confira o preço de custo.'
     case 'preco-negativo': return 'Confira o preço de venda.'
     case 'quantidade-invalida': return 'O mínimo precisa ser um número inteiro, de zero para cima.'

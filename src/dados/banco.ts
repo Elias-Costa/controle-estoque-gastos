@@ -81,7 +81,11 @@ export type TabelaSincronizada = 'clientes' | 'lancamentos'
 export type TabelaDaFila = TabelaSincronizada | 'categorias' | 'produtos' | 'operacoes' | 'encerramentos' | 'fotos'
 
 /** Cadastro completo sujeito a LWW por registro, separado da referência derivada de compras. */
-export type ProdutoLocal = Produto & { readonly atualizadoEm: string }
+export type ProdutoLocal = Produto & {
+  readonly atualizadoEm: string
+  /** D-075: linha/captura antiga sem conhecimento do campo não pede remoção ao retomar. */
+  readonly classificacaoConhecida?: true
+}
 
 /** O servidor pode já ter aceitado a mesma confirmação sob outro id; preservar o vínculo local. */
 export type EncerramentoLocal = EncerramentoTentativa & { readonly remotoId?: Id }

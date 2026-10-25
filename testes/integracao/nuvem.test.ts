@@ -185,7 +185,11 @@ async function contagem(tx: SQL): Promise<{ linhas: number; ids: number }> {
 describe.skipIf(!LIGADA)('a nuvem recusa o que o app não pode gravar (E-06, RI-09, D-041)', () => {
   test('a migration está aplicada e registrada', async () => {
     const registro = await sql<{ nome: string }[]>`select nome from public.migracoes order by nome`
-    expect(registro.map((linha) => linha.nome)).toEqual(migracoes.map((migracao) => migracao.nome))
+    const nomes = migracoes.map((migracao) => migracao.nome)
+    // D-075: ensaio F2.1 também roda na base F3 existente, sem apagar/reverter 0008/0009.
+    const extras = registro.map((linha) => linha.nome).filter((nome) => !nomes.includes(nome))
+    expect(extras.every((nome) => nome === '0008_caixa' || nome === '0009_modelos-whatsapp')).toBe(true)
+    expect(registro.map((linha) => linha.nome).filter((nome) => !extras.includes(nome))).toEqual(nomes)
     const [tabelas] = await sql<{ n: number }[]>`
       select count(*)::int as n from pg_tables where schemaname = 'public' and tablename in ('clientes', 'lancamentos')`
     expect(tabelas?.n).toBe(2)

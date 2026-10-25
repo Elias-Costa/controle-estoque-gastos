@@ -1,16 +1,17 @@
 import { emReais, lerDinheiro } from '../dominio/dinheiro.ts'
-import { novoProduto, type Categoria, type Produto } from '../dominio/produtos.ts'
+import { classificacaoProdutoValida, novoProduto, type Categoria, type Produto } from '../dominio/produtos.ts'
 import type { ResultadoEstoque } from '../dominio/regras-estoque.ts'
 
 /** Texto editável: vazio não vira preço, custo ou mínimo zero (D-055). */
 export type RascunhoDoProduto = {
   readonly nome: string; readonly categoriaId: string; readonly marca: string; readonly codigoCatalogo: string
   readonly custoTexto: string; readonly precoTexto: string; readonly minimoTexto: string
+  readonly classificacao: string
 }
 
 /** Preenche só o cadastro; custo vindo de compra é mostrado separadamente, sem copiá-lo para o manual. */
 export function rascunhoDoProduto(produto?: Produto): RascunhoDoProduto {
-  return { nome: produto?.nome ?? '', categoriaId: produto?.categoriaId ?? '', marca: produto?.marca ?? '',
+  return { nome: produto?.nome ?? '', categoriaId: produto?.categoriaId ?? '', marca: produto?.marca ?? '', classificacao: produto?.classificacao ?? '',
     codigoCatalogo: produto?.codigoCatalogo ?? '', custoTexto: produto?.custoManual === undefined ? '' : emReais(produto.custoManual).slice(3),
     precoTexto: produto?.precoVenda === undefined ? '' : emReais(produto.precoVenda).slice(3), minimoTexto: produto?.estoqueMinimo?.toString() ?? '' }
 }
@@ -23,8 +24,10 @@ export function conferirProduto(rascunho: RascunhoDoProduto, categorias: readonl
   const minimo = rascunho.minimoTexto === '' ? undefined : /^\d+$/.test(rascunho.minimoTexto) ? Number(rascunho.minimoTexto) : NaN
   if (custo === null) return { ok: false, motivo: 'custo-invalido' }
   if (preco === null) return { ok: false, motivo: 'preco-negativo' }
+  if (rascunho.classificacao !== '' && !classificacaoProdutoValida(rascunho.classificacao)) return { ok: false, motivo: 'classificacao-invalida' }
   return novoProduto({ id: original?.id ?? 'novo', nome: rascunho.nome, categoriaId: rascunho.categoriaId,
     ...(rascunho.marca.trim() && { marca: rascunho.marca.trim() }),
+    ...(classificacaoProdutoValida(rascunho.classificacao) && { classificacao: rascunho.classificacao }),
     ...(rascunho.codigoCatalogo.trim() && { codigoCatalogo: rascunho.codigoCatalogo.trim() }),
     ...(original?.fotoId && { fotoId: original.fotoId }),
     ...(custo !== undefined && { custoManual: custo }), ...(preco !== undefined && { precoVenda: preco }),

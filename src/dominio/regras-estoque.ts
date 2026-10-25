@@ -3,6 +3,7 @@ import type { Motivo } from './ficha.ts'
 /** Recusas de F2; as palavras apresentadas à usuária pertencem à interface (RI-07). */
 export type MotivoEstoque = Motivo
   | 'categoria-obrigatoria' | 'categoria-inexistente' | 'produto-inexistente'
+  | 'classificacao-invalida'
   | 'quantidade-invalida' | 'custo-invalido' | 'custo-definido-por-compra'
   | 'motivo-obrigatorio' | 'dependencia-ausente' | 'revisao-invalida'
   | 'conteudo-divergente' | 'alvo-invalido' | 'ja-anulado' | 'base-invalida'

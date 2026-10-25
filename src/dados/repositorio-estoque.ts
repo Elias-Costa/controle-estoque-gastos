@@ -172,7 +172,7 @@ export function criarRepositorioEstoque(banco: BancoLocal, agora: () => string =
       } else if (produto.fotoId && (await banco.fotos.get(produto.fotoId))?.dispensada) {
         throw new Error('A referência da foto mudou; releia o cadastro antes de salvar')
       }
-      await banco.produtos.put({ ...conferido.valor, atualizadoEm })
+      await banco.produtos.put({ ...conferido.valor, atualizadoEm, classificacaoConhecida: true })
       await enfileirar('produtos', produto.id)
       return conferido
     })

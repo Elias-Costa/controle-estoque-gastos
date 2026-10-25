@@ -2,6 +2,7 @@ import type { Id } from '../dominio/ficha.ts'
 import { conteudoDoEfeito } from '../dominio/regras-estoque.ts'
 import type { BancoLocal, ProdutoLocal } from './banco.ts'
 import { uuidv7 } from './identidade.ts'
+import { produtoRecebido } from './receber-produto.ts'
 import type { EnvioProdutoFoto, ProtecaoFoto, ProtecaoFotoLocal } from './tipos-fotos.ts'
 
 /** Chave composta apenas de identidades geradas em clientes; geração antiga não libera a nova. */
@@ -62,7 +63,7 @@ export function criarRepositorioFotos(banco: BancoLocal) {
     await banco.transaction('rw', tabelas, async () => {
       if (!await banco.categorias.get(produto.categoriaId)) throw new Error('Produto remoto sem categoria')
       const local = await banco.produtos.get(produto.id)
-      if (!local || local.atualizadoEm < produto.atualizadoEm) await banco.produtos.put(produto)
+      await banco.produtos.put(produtoRecebido(local, produto))
       if (!protecao) return
       if (protecao.fotoId !== produto.fotoId) throw new Error('Proteção não corresponde à intenção do cadastro')
       await guardarProtecao(protecao)
