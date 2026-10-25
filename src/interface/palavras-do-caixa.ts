@@ -25,6 +25,7 @@ export const PALAVRAS_DO_CAIXA = {
   enviada: 'Enviada', anterior: 'Anotação anterior', anotada: 'Anotada neste aparelho',
   desfeita: 'Desfez uma anotação', conferir: 'Anotações para conferir',
   recusada: 'Esta tentativa não foi aceita.', dependente: 'Esta anotação depende de uma tentativa que não foi aceita.',
+  copiada: 'Esta anotação veio de uma cópia anterior ao que já estava guardado na conta.',
   fora: 'Não entra nos totais. Os totais usam a anotação aceita; podem ter mudado ao receber as anotações do outro aparelho.',
   provisoria: 'Ainda entra nos totais deste aparelho. Confira antes de anotar novamente.',
 } as const

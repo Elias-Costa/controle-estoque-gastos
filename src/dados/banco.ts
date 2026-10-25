@@ -44,6 +44,7 @@ import type { GrupoEstoque, OperacaoEstoque } from '../dominio/vendas-estoque.ts
 import type { FatoCaixa } from '../dominio/gastos.ts'
 import type { OperacaoCaixaLocal, VersaoCaixa } from './tipos-caixa.ts'
 import type { EnvioProdutoFoto, EstadoFotos, FotoLocal, ProtecaoFotoLocal, UsoFotoLocal } from './tipos-fotos.ts'
+import type { ControleCopia, EstagioCopia, EvidenciaCopia, LoteCopia } from './tipos-copia.ts'
 
 /**
  * A linha de cliente como fica na base: o tipo do domínio mais o carimbo do último-que-escreve
@@ -193,6 +194,15 @@ export const ESQUEMA_V5 = {
   versoesCaixa: 'id, operacaoId',
 } as const
 
+/** D-071: estágio separado dos dados de uso; nenhuma linha publicada é convertida. */
+export const ESQUEMA_V6 = {
+  ...ESQUEMA_V5,
+  controleCopia: 'chave',
+  estagiosCopia: 'id',
+  lotesCopia: 'id, operacaoId',
+  evidenciasCopia: 'id',
+} as const
+
 /**
  * A base local. `dependencias` existe para os testes injetarem um IndexedDB de mentira
  * isolado por teste (`fake-indexeddb`); em produção ninguém passa nada e o Dexie usa o do
@@ -219,6 +229,10 @@ export class BancoLocal extends Dexie {
   readonly fatosCaixa: Table<FatoCaixa, Id, FatoCaixa>
   readonly operacoesCaixa: Table<OperacaoCaixaLocal, Id, OperacaoCaixaLocal>
   readonly versoesCaixa: Table<VersaoCaixa, Id, VersaoCaixa>
+  readonly controleCopia: Table<ControleCopia, string, ControleCopia>
+  readonly estagiosCopia: Table<EstagioCopia, Id, EstagioCopia>
+  readonly lotesCopia: Table<LoteCopia, string, LoteCopia>
+  readonly evidenciasCopia: Table<EvidenciaCopia, Id, EvidenciaCopia>
 
   constructor(nome: string = NOME_DO_BANCO, dependencias?: DexieOptions) {
     super(nome, dependencias)
@@ -227,6 +241,7 @@ export class BancoLocal extends Dexie {
     this.version(3).stores(ESQUEMA_V3)
     this.version(4).stores(ESQUEMA_V4)
     this.version(5).stores(ESQUEMA_V5)
+    this.version(6).stores(ESQUEMA_V6)
     this.clientes = this.table('clientes')
     this.lancamentos = this.table('lancamentos')
     this.fila = this.table('fila')
@@ -246,5 +261,9 @@ export class BancoLocal extends Dexie {
     this.fatosCaixa = this.table('fatosCaixa')
     this.operacoesCaixa = this.table('operacoesCaixa')
     this.versoesCaixa = this.table('versoesCaixa')
+    this.controleCopia = this.table('controleCopia')
+    this.estagiosCopia = this.table('estagiosCopia')
+    this.lotesCopia = this.table('lotesCopia')
+    this.evidenciasCopia = this.table('evidenciasCopia')
   }
 }

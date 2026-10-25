@@ -16,6 +16,21 @@
 
 Vendas e recebimentos podem ser registrados sem acesso à internet. As operações ficam no aparelho e são sincronizadas quando a conexão e o acesso à conta estão disponíveis. O aplicativo pode ser instalado na tela de início do celular e utilizado também no computador.
 
+## Cópia em arquivo
+
+Na tela inicial, abra **Cópia das anotações**, toque em **Preparar cópia completa** e depois
+em **Salvar arquivo**. O ZIP reúne fichas, estoque, caixa, fotos, histórico e pendências;
+as três consultas CSV podem ser abertas separadamente. Guarde o arquivo em local privado:
+ele contém nomes, telefones e valores, sem senha adicional. Uma preparação interrompida
+pode ser retomada nessa tela. Fotos sem original local exigem internet para completar.
+
+Para recuperar em uma base vazia, abra essa tela **antes do primeiro login**, escolha
+**Começar a usar uma cópia**, entre na mesma conta e selecione o arquivo. O app confere tudo
+antes de publicar localmente; anotações existentes impedem a importação. Ao voltar a internet,
+confere os dados mais novos da conta e protege as fotos antes de enviar pendências.
+Não há substituição de dados da nuvem. O limite do pacote é 256 MiB; excesso é recusado sem
+omitir anotações. Provas de aparelho e limites medidos constam na documentação local.
+
 ## Stack utilizada
 
 | Camada | Tecnologias |
@@ -29,11 +44,14 @@ Vendas e recebimentos podem ser registrados sem acesso à internet. As operaçõ
 | Runtime e gerenciamento de pacotes | Bun |
 | Qualidade e testes | oxlint, Bun Test e Playwright |
 
+A cópia usa zip.js 2.24.0; o aviso BSD-3-Clause acompanha o app em
+[`public/licencas/zip-js.txt`](public/licencas/zip-js.txt).
+
 ## Estado atual
 
-Em uso real, com a gestão de fichas e fiado disponível. O controle de estoque está implementado
-em desenvolvimento e aguarda a validação de uso e a entrega. Gastos e indicadores do negócio
-continuam previstos para as próximas fases.
+Fichas e estoque estão em uso real, com entrega confirmada pelo mantenedor. Gastos, caixa
+mensal e cópia completa estão em desenvolvimento na F3, sem publicação confirmada.
+Indicadores do negócio continuam previstos para a fase seguinte.
 
 ## Verificação
 
@@ -53,9 +71,9 @@ com o projeto confirmado em `nuvem/destinos-de-teste.ts`. O mantenedor configura
 `.env.homologacao.local` com `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `SUPABASE_DB_URL`
 (Session pooler, TLS), `SUPABASE_TESTE_EMAIL` e `SUPABASE_TESTE_SENHA`. Produção não recebe
 suítes nem resets. `TESTE_NOME` é um filtro opcional de integração para diagnóstico;
-removê-lo para executar o portão completo. Antes da publicação de estoque, o mantenedor roda
-`bun run migrar` em produção: o runner aplica somente pendentes, em ordem, de `0004_estoque`
-até `0007_conferencia-por-identidade`, preservando os dados de F1. Só depois promove para
+removê-lo para executar o portão completo. Antes da publicação de caixa/F3, o mantenedor roda
+`bun run migrar` em produção: o runner aplica somente pendentes, em ordem, incluindo
+`0008_caixa`, preservando os dados existentes. A cópia usa v6 local aditiva, sem migration SQL nova. Só depois promove para
 `main`, que publica pelo deploy existente. Não reverter migrations nem limpar dados para
 atualizar o app; conferir carimbo, fichas e envios pendentes na abertura seguinte.
 

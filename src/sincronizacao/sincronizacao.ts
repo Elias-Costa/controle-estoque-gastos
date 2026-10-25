@@ -42,6 +42,7 @@ import { aplicarRecepcaoEstoque } from './recepcao-estoque.ts'
 import { aplicarRecepcaoCaixa } from './recepcao-caixa.ts'
 import { grupoCaixaParaNuvem, recepcaoCaixaDaNuvem } from './borda-caixa.ts'
 import { criarSincronizacaoFotos } from './fotos.ts'
+import { vincularContaCopia } from '../dados/repositorio-copia.ts'
 
 /** O que o indicador mostra (RF-25) e o que o mantenedor lê no console. */
 export type EstadoDaSincronizacao = {
@@ -233,6 +234,7 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
   async function enviar(nuvemLigada: Nuvem): Promise<Desfecho> {
     const itens = await banco.fila.orderBy('ordem').toArray()
     for (const item of itens) {
+      if (await banco.controleCopia.get('restauracao')) return 'ok'
       // E-22: o ciclo de binários vem depois das operações; foto nunca segue pela rota financeira.
       if (item.tabela === 'fotos') continue
       if (item.problema !== undefined) continue
@@ -287,8 +289,17 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
   /** Cadastro é último-que-escreve (D-010): entra só se for mais novo que o local. */
   async function aplicarCliente(linha: LinhaRecebida): Promise<void> {
     const cliente = clienteDaNuvem(linha)
-    await banco.transaction('rw', banco.clientes, async () => {
+    await banco.transaction('rw', banco.clientes, banco.fila, banco.controleCopia, async () => {
       const local = await banco.clientes.get(cliente.id)
+      const restaurando = !!await banco.controleCopia.get('restauracao')
+      const origem = await banco.controleCopia.get(`registro:clientes/${cliente.id}`)
+      const copiado = origem && 'conteudo' in origem && origem.conteudo === conteudoDoEfeito(local)
+      if (restaurando && (!local || (local.atualizadoEm ?? '') < cliente.atualizadoEm || (copiado && local.atualizadoEm === cliente.atualizadoEm))) {
+        await banco.clientes.put(cliente)
+        const fila = await banco.fila.where('registroId').equals(cliente.id).and((i) => i.tabela === 'clientes').first()
+        if (fila) await banco.fila.delete(fila.ordem)
+        return
+      }
       // Linha da v1 sem carimbo conta como "mais antiga que qualquer coisa".
       if (local !== undefined && (local.atualizadoEm ?? '') >= cliente.atualizadoEm) return
       await banco.clientes.put(cliente)
@@ -300,7 +311,21 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
     // O cursor próprio de F2 é quem aplica financeiro e estoque juntos, inclusive após restauração.
     if (linha['operacao_estoque_id'] !== undefined && linha['operacao_estoque_id'] !== null) return
     const lancamento = lancamentoDaNuvem(linha)
-    await banco.transaction('rw', banco.lancamentos, banco.fila, banco.operacoes, async () => {
+    await banco.transaction('rw', banco.lancamentos, banco.fila, banco.operacoes, banco.controleCopia, banco.evidenciasCopia, async () => {
+      if (await banco.controleCopia.get('restauracao')) {
+        const fila = await itemDaFilaDoRegistro(banco, lancamento.id)
+        // Grupos F2 continuam indivisíveis, mesmo quando o arquivo tem uma linha F1 com o mesmo id.
+        if (fila && fila.tabela !== 'lancamentos') return
+        const local = await banco.lancamentos.get(lancamento.id)
+        const origem = await banco.controleCopia.get(`registro:lancamentos/${lancamento.id}`)
+        if (local && fila && (!origem || !('conteudo' in origem) || origem.conteudo !== conteudoDoEfeito(local))) return
+        if (local && conteudoDoEfeito(local) !== conteudoDoEfeito(lancamento)) {
+          await banco.evidenciasCopia.put({ id: lancamento.id, tentativa: local, aceita: lancamento })
+        }
+        if (fila) await banco.fila.delete(fila.ordem)
+        await banco.lancamentos.put(lancamento)
+        return
+      }
       if (await itemDaFilaDoRegistro(banco, lancamento.id)) return
       await banco.lancamentos.put(lancamento)
     })
@@ -343,10 +368,14 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
     if (!categorias.ok) return categorias.falha.tipo === 'sessao' ? 'sessao' : 'rede'
     for (const linha of categorias.valor) {
       const categoria = categoriaDaNuvem(linha)
-      await banco.transaction('rw', banco.categorias, async () => {
+      await banco.transaction('rw', banco.categorias, banco.fila, banco.controleCopia, async () => {
         const local = await banco.categorias.get(categoria.id)
         if (local && conteudoDoEfeito(local) !== conteudoDoEfeito(categoria)) throw new Error('Categoria remota divergente')
         await banco.categorias.put(categoria)
+        if (await banco.controleCopia.get('restauracao')) {
+          const fila = await banco.fila.where('registroId').equals(categoria.id).and((i) => i.tabela === 'categorias').first()
+          if (fila) await banco.fila.delete(fila.ordem)
+        }
       })
     }
     const produtos = await baixarTabela('produtos', (desde) => fotos ? fotos.buscarProdutos(desde) : nuvemLigada.buscarProdutos(desde), 'recebido_em', async (linha) => {
@@ -403,10 +432,37 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
       await atualizarEstado({ sessao: false, ultimaFalha: 'sessao' })
       return
     }
+    if (nuvem.identidade) {
+      try {
+        const identidade = await nuvem.identidade()
+        if (!identidade) throw new Error('Sessão sem identidade')
+        await vincularContaCopia(banco, identidade)
+      } catch (erro) {
+        console.error('sincronização: conta incompatível com a base local', erro)
+        await atualizarEstado({ sessao: false, enviando: false, ultimaFalha: 'sessao' }); return
+      }
+    }
     await atualizarEstado({ sessao: true, enviando: true })
     let desfecho: Desfecho
     try {
-      desfecho = await enviar(nuvem)
+      const restauracao = await banco.controleCopia.get('restauracao')
+      if (restauracao?.chave === 'restauracao' && restauracao.fase === 'escolher') {
+        await atualizarEstado({ enviando: false }); agendarConsulta(); return
+      }
+      desfecho = 'ok'
+      if (restauracao?.chave === 'restauracao') {
+        if (restauracao.fase === 'reconciliar') {
+          desfecho = await baixar(nuvem)
+          if (desfecho === 'ok') await banco.controleCopia.put({ ...restauracao, fase: 'proteger' })
+        }
+        if (desfecho === 'ok') {
+          if (!fotos && await banco.fotos.count()) throw new Error('Restauração de fotos sem transporte')
+          const protecao = await fotos?.protegerRestauracao()
+          if (protecao && !protecao.ok) desfecho = protecao.falha.tipo === 'sessao' ? 'sessao' : 'rede'
+          if (desfecho === 'ok') await banco.controleCopia.delete('restauracao')
+        }
+      }
+      if (desfecho === 'ok') desfecho = await enviar(nuvem)
       if (desfecho === 'ok') desfecho = await baixar(nuvem)
       if (desfecho === 'ok' && fotos) {
         const resposta = await fotos.ciclo()

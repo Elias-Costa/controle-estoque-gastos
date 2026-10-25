@@ -38,6 +38,7 @@ export function TelaInicial({
   aoVerProdutos,
   aoConferir,
   aoVerCaixa,
+  aoCopia,
 }: {
   busca: string
   aoBuscar: (texto: string) => void
@@ -49,6 +50,7 @@ export function TelaInicial({
   aoVerProdutos: () => void
   aoConferir: () => void
   aoVerCaixa: () => void
+  aoCopia: () => void
 }) {
   return (
     <main className="tela">
@@ -74,6 +76,7 @@ export function TelaInicial({
       <ListaDeFichas busca={busca} aoBuscar={aoBuscar} aoAbrir={aoAbrirFicha} chave="inicio" comDesativadas />
 
       <Instalacao />
+      <button type="button" className="my-3 min-h-11 border-0 bg-transparent px-1 text-acento underline" onClick={aoCopia}>Cópia das anotações ›</button>
 
       {/* Discreto de propósito: serve ao mantenedor durante o teste, não a ela (RF-23, D-032). */}
       <p className="mt-6 text-[0.8rem] text-suave">versão {CARIMBO_DE_BUILD}</p>

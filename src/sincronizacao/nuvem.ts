@@ -34,6 +34,7 @@ import type { ClienteNaNuvem, LancamentoNaNuvem } from './borda.ts'
 import { COLUNAS_CATEGORIA, COLUNAS_PRODUTO, type DocumentoEstoque } from './borda-estoque.ts'
 import { criarNuvemFotos, type NuvemFotos } from './nuvem-fotos.ts'
 import type { DocumentoCaixa } from './borda-caixa.ts'
+import type { VinculoConta } from '../dados/tipos-copia.ts'
 
 /** Por que uma ida à nuvem não deu certo. */
 export type Falha =
@@ -52,6 +53,8 @@ export type LinhaRecebida = Readonly<Record<string, unknown>>
  * o download devolve as linhas com o carimbo do servidor (`recebido_em` / `criado_em`) dentro.
  */
 export type Nuvem = {
+  /** Identidade da sessão e destino fornecido na composição; nunca exporta tokens. */
+  readonly identidade?: () => Promise<VinculoConta | null>
   readonly fotos?: NuvemFotos
   readonly temSessao: () => Promise<boolean>
   /** Avisa quando a sessão muda (entrou, saiu, renovou). Devolve a função que cancela. */
@@ -110,7 +113,7 @@ export function criarClienteSupabase(url: string, chaveAnonima: string): Supabas
 }
 
 /** A `Nuvem` sobre um cliente do Supabase — o do app ou o de um teste. */
-export function criarNuvemSupabase(supabase: SupabaseClient): Nuvem {
+export function criarNuvemSupabase(supabase: SupabaseClient, destino?: string): Nuvem {
   async function enviar(tabela: 'clientes' | 'lancamentos', linha: LinhaRecebida): Promise<Resposta<void>> {
     // Sem `.select()`: `return=minimal`, nada volta e nada precisa voltar. O `on conflict (id)`
     // é o reenvio idempotente de RI-05; o gatilho do lado de lá decide o resto.
@@ -147,6 +150,10 @@ export function criarNuvemSupabase(supabase: SupabaseClient): Nuvem {
   }
 
   return {
+    identidade: destino ? async () => {
+      const { data } = await supabase.auth.getSession()
+      return data.session ? { contaId: data.session.user.id, destino: new URL(destino).origin } : null
+    } : undefined,
     fotos: criarNuvemFotos(supabase),
     temSessao: async () => {
       const { data } = await supabase.auth.getSession()

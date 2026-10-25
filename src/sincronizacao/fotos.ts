@@ -5,6 +5,7 @@ import { hashDaFoto, miniaturaDaFoto } from '../plataforma/fotos.ts'
 import { documentoEstoque, produtoDaNuvem } from './borda-estoque.ts'
 import { documentoDaFoto, protecaoDaNuvem, type NuvemFotos } from './nuvem-fotos.ts'
 import type { Nuvem, Resposta, LinhaRecebida } from './nuvem.ts'
+import { uuidv7 } from '../dados/identidade.ts'
 
 const OK: Resposta<void> = { ok: true, valor: undefined }
 
@@ -63,6 +64,34 @@ export function criarSincronizacaoFotos(banco: BancoLocal, nuvem: Nuvem, transpo
     }
   }
 
+  /** D-071: proteger referências importadas antes de liberar edição, envios ou coleta. */
+  async function protegerRestauracao(): Promise<Resposta<void>> {
+    const referencias = new Set([...(await banco.produtos.toArray()).flatMap((p) => p.fotoId ? [p.fotoId] : []),
+      ...(await banco.enviosProdutoFoto.toArray()).flatMap((e) => e.cadastro.fotoId ? [e.cadastro.fotoId] : []),
+      ...(await banco.usosFotos.toArray()).map((u) => u.fotoId)])
+    for (const foto of await repo.fotos()) {
+      if (!referencias.has(foto.id)) {
+        if (foto.binario) await repo.concluirFoto(foto.id, 'superada')
+        continue
+      }
+      let resposta = await registrar(foto)
+      // Arquivo antigo pode citar localização já coletada. Bytes íntegros permitem uma
+      // cópia física nova, nunca reutilizar caminho encerrado nem mudar identidade lógica.
+      if (!resposta.ok && resposta.falha.tipo === 'recusa' && /foto_caminho_encerrado/.test(`${resposta.falha.constraint} ${resposta.falha.mensagem}`) && foto.binario) {
+        const nova = await banco.transaction('rw', banco.fotos, async () => {
+          const atual = await banco.fotos.get(foto.id)
+          if (!atual) throw new Error('Foto restaurada ausente')
+          if (atual.copiaId !== foto.copiaId) return atual
+          const nova = { ...atual, copiaId: uuidv7(), geracaoEnvio: uuidv7(), caminho: undefined, registrada: false, geracaoReferencia: undefined }
+          await banco.fotos.put(nova); return nova
+        })
+        resposta = await registrar(nova)
+      }
+      if (!resposta.ok) return resposta
+    }
+    return OK
+  }
+
   async function ciclo(): Promise<Resposta<void>> {
     for (const foto of await repo.fotos()) {
       if (foto.dispensada) continue
@@ -119,5 +148,5 @@ export function criarSincronizacaoFotos(banco: BancoLocal, nuvem: Nuvem, transpo
     }
     return OK
   }
-  return { enviarProduto, buscarProdutos, receberProduto, ciclo }
+  return { enviarProduto, buscarProdutos, receberProduto, ciclo, protegerRestauracao }
 }

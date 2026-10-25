@@ -64,7 +64,7 @@ export function TelaCaixa({ mes, corte, aoMes, aoCorte, aoVoltar, aoAnotar, aoCo
     {problemas.length > 0 && <section aria-label={P.conferir} className="my-5 rounded-xl border border-atraso p-3 [overflow-wrap:anywhere]">
       <h2 className="text-xl">{P.conferir}</h2>
       {problemas.map((v) => <div key={v.id} data-caixa-conferencia={v.id} className="border-b border-borda py-3 last:border-0">
-        <p className="font-semibold">{v.problema ? P.recusada : P.dependente}</p>
+        <p className="font-semibold">{v.problema ? P.recusada : v.restaurada && v.foraDaProjecao?.causaId === v.id ? P.copiada : P.dependente}</p>
         {v.problema && v.foraDaProjecao && v.foraDaProjecao.causaId !== v.id && <p>{P.dependente}</p>}
         {v.grupo.fatos.map((f) => <ResumoFato key={f.id} fato={f} fatos={fatosHistoricos} />)}
         <p>{v.foraDaProjecao ? P.fora : P.provisoria}</p>

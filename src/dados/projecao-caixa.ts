@@ -18,7 +18,9 @@ export async function recomporProjecaoCaixa(banco: BancoLocal): Promise<void> {
   const locais = atuais.flatMap((op) => { const v = porId.get(op.versaoId); return v && !v.aceita ? [v] : [] })
   // Uma recusa não retira nada sozinha: é necessário conhecer o aceite incompatível.
   for (const v of locais) {
-    if (v.problema && aceitas.some((a) => incompativeis(v, a))) {
+    // D-071: edição de arquivo antigo não ganha prioridade de uma nova intenção local.
+    // Não fabricar recusa remota: restaurada conserva diagnóstico/estado de origem.
+    if ((v.problema || v.restaurada) && aceitas.some((a) => incompativeis(v, a))) {
       await banco.versoesCaixa.put({ ...v, foraDaProjecao: { causaId: v.id } })
     }
   }

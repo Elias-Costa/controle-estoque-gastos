@@ -25,6 +25,8 @@ export type VersaoCaixa = {
   readonly grupo: GrupoCaixa
   readonly aceita?: boolean
   readonly problema?: Problema
+  /** D-071: versão trazida de arquivo, ainda sem edição neste aparelho. */
+  readonly restaurada?: boolean
   /** D-070: evidência recusada/dependente preservada fora dos efeitos correntes. */
   readonly foraDaProjecao?: { readonly causaId: Id }
 }

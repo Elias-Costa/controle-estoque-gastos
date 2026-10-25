@@ -19,11 +19,14 @@ import { projetarEstoque } from '../dominio/estoque.ts'
 import { custoDoProduto } from '../dominio/produtos.ts'
 import { conteudoDoEfeito } from '../dominio/regras-estoque.ts'
 import { prepararCancelamento, prepararRetorno } from '../dominio/vendas-estoque.ts'
-import { sincronizacao, supabaseDoApp } from '../sincronizacao/instancia.ts'
+import { sincronizacao, supabaseDoApp, copia } from '../sincronizacao/instancia.ts'
+import { criarRepositorioCopia } from '../dados/repositorio-copia.ts'
 import type { Sincronizacao } from '../sincronizacao/sincronizacao.ts'
 
 /** O que o teste encontra em `window.laboratorio`. As operações já vêm presas ao repositório do app. */
 export type Laboratorio = {
+  readonly copia: typeof copia
+  readonly repositorioCopia: ReturnType<typeof criarRepositorioCopia>
   readonly prepararFoto: typeof prepararFoto
   readonly repositorioFotos: typeof repositorioFotos
   readonly banco: BancoLocal
@@ -76,6 +79,8 @@ async function sair(): Promise<void> {
 }
 
 window.laboratorio = {
+  copia,
+  repositorioCopia: criarRepositorioCopia(banco),
   prepararFoto,
   repositorioFotos,
   banco,

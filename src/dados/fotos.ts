@@ -12,7 +12,7 @@ export function chaveDaProtecao(protecao: Pick<ProtecaoFoto, 'copiaId' | 'geraca
 /** Estado durável de foto/proteções. Não conhece transporte, sessão nem disponibilidade da rede. */
 export function criarRepositorioFotos(banco: BancoLocal) {
   const tabelas = [banco.fotos, banco.produtos, banco.fila, banco.protecoesFotos,
-    banco.enviosProdutoFoto, banco.usosFotos, banco.estadoFotos, banco.categorias]
+    banco.enviosProdutoFoto, banco.usosFotos, banco.estadoFotos, banco.categorias, banco.controleCopia]
 
   async function identidade(chave: 'aparelho' | 'leitura'): Promise<Id> {
     return banco.transaction('rw', banco.estadoFotos, async () => {
@@ -62,7 +62,20 @@ export function criarRepositorioFotos(banco: BancoLocal) {
     await banco.transaction('rw', tabelas, async () => {
       if (!await banco.categorias.get(produto.categoriaId)) throw new Error('Produto remoto sem categoria')
       const local = await banco.produtos.get(produto.id)
-      if (!local || local.atualizadoEm < produto.atualizadoEm) await banco.produtos.put(produto)
+      const restaurando = !!await banco.controleCopia.get('restauracao')
+      const origem = await banco.controleCopia.get(`registro:produtos/${produto.id}`)
+      const copiado = origem && 'conteudo' in origem && origem.conteudo === conteudoDoEfeito(local)
+      const remotoVence = !local || local.atualizadoEm < produto.atualizadoEm || (restaurando && copiado && local.atualizadoEm === produto.atualizadoEm)
+      if (remotoVence) {
+        await banco.produtos.put(produto)
+        if (restaurando) {
+          const fila = await banco.fila.where('registroId').equals(produto.id).and((i) => i.tabela === 'produtos').first()
+          if (fila) await banco.fila.delete(fila.ordem)
+          for (const e of await banco.enviosProdutoFoto.where('produtoId').equals(produto.id).toArray()) {
+            if (e.cadastro.atualizadoEm <= produto.atualizadoEm) await banco.enviosProdutoFoto.delete(e.id)
+          }
+        }
+      }
       if (!protecao) return
       if (protecao.fotoId !== produto.fotoId) throw new Error('Proteção não corresponde à intenção do cadastro')
       await guardarProtecao(protecao)
@@ -70,7 +83,9 @@ export function criarRepositorioFotos(banco: BancoLocal) {
       if (foto && foto.sha256 !== protecao.sha256) throw new Error('Identidade de foto com conteúdo divergente')
       // Um envio local conserva sua localização até o próprio desfecho; o remoto não o apaga.
       if (foto?.binario) {
-        if (foto.copiaId === protecao.copiaId) await banco.fotos.put({ ...foto, geracaoReferencia: protecao.geracao })
+        if (restaurando) await banco.fotos.put({ ...foto, copiaId: protecao.copiaId, caminho: protecao.caminho,
+          geracaoReferencia: protecao.geracao, registrada: true, situacao: protecao.disponivel ? 'disponivel' : foto.situacao })
+        else if (foto.copiaId === protecao.copiaId) await banco.fotos.put({ ...foto, geracaoReferencia: protecao.geracao })
       } else {
         const { fotoId, aparelhoId: _aparelho, geracao, disponivel, ...arquivo } = protecao
         await banco.fotos.put({ ...foto, ...arquivo, id: fotoId, produtoId: produto.id,
@@ -118,9 +133,16 @@ export function criarRepositorioFotos(banco: BancoLocal) {
   }
 
   async function reterReferencia(fotoId: Id): Promise<Id> {
-    return banco.transaction('rw', banco.fotos, banco.usosFotos, async () => {
+    return banco.transaction('rw', banco.fotos, banco.usosFotos, banco.controleCopia, banco.protecoesFotos, banco.estadoFotos, async () => {
       const foto = await banco.fotos.get(fotoId)
       if (!foto || foto.dispensada) throw new Error('Referência indisponível para edição')
+      const restauracao = await banco.controleCopia.get('restauracao')
+      if (restauracao) {
+        const aparelho = await banco.estadoFotos.get('aparelho')
+        const protegida = await banco.protecoesFotos.where('fotoId').equals(fotoId)
+          .and((p) => p.aparelhoId === aparelho?.valor && !p.liberar).first()
+        if (!protegida) throw new Error('A foto da cópia ainda aguarda proteção neste aparelho')
+      }
       const id = uuidv7()
       await banco.usosFotos.add({ id, fotoId })
       return id

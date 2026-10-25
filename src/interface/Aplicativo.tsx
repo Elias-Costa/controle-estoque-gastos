@@ -24,6 +24,7 @@ import { TelaConferencias } from './tela-conferencias.tsx'
 import { TelaProdutosNoMinimo } from './tela-produtos-no-minimo.tsx'
 import { TelaCaixa } from './tela-caixa.tsx'
 import { TelaMovimentoCaixa } from './tela-movimento-caixa.tsx'
+import { TelaCopia } from './tela-copia.tsx'
 import { hoje } from './datas.ts'
 import type { CorteCaixa } from './leitura-do-caixa.ts'
 import type { ReferenciaFatoCaixa } from '../dominio/gastos.ts'
@@ -43,6 +44,7 @@ import type { ReferenciaFatoCaixa } from '../dominio/gastos.ts'
  */
 type Rota =
   | { readonly tela: 'inicio' }
+  | { readonly tela: 'copia' }
   | { readonly tela: 'caixa' }
   | { readonly tela: 'movimento-caixa'; readonly tipo: 'despesa' | 'receita-avulsa'; readonly alvo?: ReferenciaFatoCaixa }
   | { readonly tela: 'conferencias' }
@@ -52,7 +54,7 @@ type Rota =
   | { readonly tela: 'estoque'; readonly produtoId: Id }
   | { readonly tela: 'entrada'; readonly produtoId: Id; readonly tipo: 'compra' | 'estoque-inicial'; readonly alvo?: ReferenciaEfeito }
   | { readonly tela: 'ajuste'; readonly produtoId: Id; readonly alvo?: ReferenciaEfeito; readonly conferir?: boolean }
-  | { readonly tela: 'entrar' }
+  | { readonly tela: 'entrar'; readonly origem?: 'copia' }
   | { readonly tela: 'devedoras' }
   | { readonly tela: 'ficha'; readonly clienteId: Id; readonly origem?: 'devedoras' }
   | { readonly tela: 'cadastro'; readonly nome: string; readonly destino: 'ficha' | 'venda' }
@@ -103,8 +105,10 @@ export function Aplicativo() {
           aoVerProdutos={() => setRota({ tela: 'produtos' })}
           aoConferir={() => setRota({ tela: 'conferencias' })}
           aoVerCaixa={() => setRota({ tela: 'caixa' })}
+          aoCopia={() => setRota({ tela: 'copia' })}
         />
       )
+    case 'copia': return <TelaCopia aoVoltar={irParaInicio} aoEntrar={() => setRota({ tela: 'entrar', origem: 'copia' })} />
     case 'caixa':
       return <TelaCaixa mes={mesCaixa} corte={corteCaixa} aoMes={setMesCaixa} aoCorte={setCorteCaixa} aoVoltar={irParaInicio}
         aoAnotar={(tipo) => setRota({ tela: 'movimento-caixa', tipo })}
@@ -144,7 +148,8 @@ export function Aplicativo() {
       return <TelaAjuste key={`${rota.produtoId}/${rota.alvo?.id ?? 'novo'}/${rota.alvo?.revisao ?? ''}`} produtoId={rota.produtoId} alvo={rota.alvo} conferir={rota.conferir} aoVoltar={voltar} aoSalvar={voltar} />
     }
     case 'entrar':
-      return <TelaEntrar aoVoltar={irParaInicio} aoEntrar={irParaInicio} />
+      return <TelaEntrar aoVoltar={rota.origem === 'copia' ? () => setRota({ tela: 'copia' }) : irParaInicio}
+        aoEntrar={rota.origem === 'copia' ? () => setRota({ tela: 'copia' }) : irParaInicio} />
     case 'devedoras':
       return <TelaDevedoras aoVoltar={irParaInicio} aoAbrirFicha={(clienteId) => setRota({ tela: 'ficha', clienteId, origem: 'devedoras' })} />
     case 'ficha':
