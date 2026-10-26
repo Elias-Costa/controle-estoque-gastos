@@ -54,8 +54,12 @@ export async function gerarPdfDivulgacao(itens: readonly ItemPdfDivulgacao[], ge
     if (identidade.logo) {
       const imagem = doc.getImageProperties(identidade.logo)
       const escala = Math.min(56 / imagem.width, 56 / imagem.height)
+      // D-076: a moldura também vale para PNGs antigos, sem alterar a preferência guardada.
+      doc.saveGraphicsState()
+      doc.circle(52, 52, 28, null).clip().discardPath()
       doc.addImage(identidade.logo, 'PNG', 24 + (56 - imagem.width * escala) / 2, 24 + (56 - imagem.height * escala) / 2,
         imagem.width * escala, imagem.height * escala, 'logo-loja')
+      doc.restoreGraphicsState()
     }
     doc.setTextColor(CORES.verde).setFontSize(24).text(nomes, xNome, 44 + (alturaDaMarca - nomes.length * 29) / 2, { lineHeightFactor: 29 / 24 })
     if (descricao.length) doc.setTextColor(CORES.suave).setFontSize(10).text(descricao, 24, fimDaMarca + 14, { lineHeightFactor: 1.3 })

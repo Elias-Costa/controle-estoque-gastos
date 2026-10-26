@@ -45,6 +45,7 @@ async function abrirDivulgacao(page: Page) {
       return tela.toDataURL('image/png').split(',')[1] ?? ''
     })
     await page.getByLabel('Escolher logo', { exact: true }).setInputFiles({ name: 'logo-teste.png', mimeType: 'image/png', buffer: Buffer.from(logo, 'base64') })
+    await page.getByRole('button', { name: 'Usar logo', exact: true }).click()
     await expect(page.getByRole('img', { name: 'Prévia da logo da loja', exact: true })).toBeVisible()
     await page.getByRole('button', { name: 'Salvar identificação', exact: true }).click()
     await expect(page.getByRole('button', { name: 'Editar identificação', exact: true })).toBeVisible()
@@ -57,7 +58,7 @@ async function abrirDivulgacao(page: Page) {
       c.drawImage(img, 0, 0)
       return { largura: img.naturalWidth, altura: img.naturalHeight, alfa: c.getImageData(0, 0, 1, 1).data[3] }
     })
-    expect(imagem).toEqual({ largura: 160, altura: 80, alfa: 0 })
+    expect(imagem).toEqual({ largura: 160, altura: 160, alfa: 0 })
   }
 }
 

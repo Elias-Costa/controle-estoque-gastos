@@ -13,6 +13,7 @@ test('D-076 nome/logo salvos offline, reabertura, restauração em outro aparelh
   await page.getByLabel('Nome da loja ou marca', { exact: true }).fill('Cícera Mult')
   await page.getByLabel('Descrição da loja (opcional)', { exact: true }).fill('Perfumaria, moda íntima, beleza e acessórios para celular')
   await page.getByLabel('Escolher logo', { exact: true }).setInputFiles(fileURLToPath(new URL('../../public/icones/icone-192.png', import.meta.url)))
+  await page.getByRole('button', { name: 'Usar logo', exact: true }).click()
   await expect(page.getByRole('img', { name: 'Prévia da logo da loja', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Salvar identificação', exact: true }).click()
   await expect(page.getByRole('img', { name: 'Logo da loja', exact: true })).toBeVisible()
