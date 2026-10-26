@@ -31,9 +31,12 @@ Vendas e recebimentos podem ser registrados sem acesso à internet. As operaçõ
 
 ## Estado atual
 
-Em uso real, com a gestão de fichas e fiado disponível. O controle de estoque está implementado
-em desenvolvimento e aguarda a validação de uso e a entrega. Gastos e indicadores do negócio
-continuam previstos para as próximas fases.
+Fichas, fiado e controle de estoque estão em uso real. A divulgação de produtos disponíveis
+por PDF para compartilhamento manual no WhatsApp está implementada nesta branch e aguarda
+publicação e conferência da atualização. A extensão inclui classificação opcional dos produtos
+e filtros por categoria, marca e sexo. O PDF usa nome/descrição editáveis e logo opcional da
+loja, salvos offline e recuperáveis pela mesma conta. Gastos, cópia completa e modelos editáveis de mensagens
+estão em desenvolvimento separado; indicadores do negócio continuam previstos para fase futura.
 
 ## Verificação
 
@@ -53,11 +56,13 @@ com o projeto confirmado em `nuvem/destinos-de-teste.ts`. O mantenedor configura
 `.env.homologacao.local` com `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `SUPABASE_DB_URL`
 (Session pooler, TLS), `SUPABASE_TESTE_EMAIL` e `SUPABASE_TESTE_SENHA`. Produção não recebe
 suítes nem resets. `TESTE_NOME` é um filtro opcional de integração para diagnóstico;
-removê-lo para executar o portão completo. Antes da publicação de estoque, o mantenedor roda
-`bun run migrar` em produção: o runner aplica somente pendentes, em ordem, de `0004_estoque`
-até `0007_conferencia-por-identidade`, preservando os dados de F1. Só depois promove para
+removê-lo para executar o portão completo. Antes de publicar esta extensão sobre a F2 em uso,
+o mantenedor roda `bun run migrar` no checkout conferido da melhoria. O pacote contém
+`0001`–`0007`, `0010_classificacao-produto` e `0011_identidade-loja`; com a F2 aplicada,
+somente 0010/0011 podem estar pendentes. Não incluir `0008_caixa`/`0009_modelos-whatsapp` da entrega futura neste pacote:
+o runner aplica todas as pendentes da pasta. Só depois da aplicação concluída promove para
 `main`, que publica pelo deploy existente. Não reverter migrations nem limpar dados para
-atualizar o app; conferir carimbo, fichas e envios pendentes na abertura seguinte.
+atualizar o app; conferir carimbo, fichas, estoque, fotos e envios pendentes na abertura seguinte.
 
 ## Android pelo Wi-Fi nos testes
 

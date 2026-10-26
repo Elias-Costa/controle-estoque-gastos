@@ -30,6 +30,35 @@ async function abrirDivulgacao(page: Page) {
   await page.getByRole('button', { name: /^Produtos/ }).click()
   await page.getByRole('button', { name: P.abrir, exact: true }).click()
   await expect(page.getByRole('heading', { name: P.titulo, exact: true })).toBeVisible()
+  const identificar = page.getByRole('button', { name: 'Identificar loja', exact: true })
+  await expect(page.getByRole('region', { name: 'Identificação da loja', exact: true })).toBeVisible()
+  if (await identificar.count()) {
+    await identificar.click()
+    await page.getByLabel('Nome da loja ou marca', { exact: true }).fill('Cícera Mult')
+    await page.getByLabel('Descrição da loja (opcional)', { exact: true }).fill('Perfumaria, moda íntima, beleza e acessórios para celular')
+    // Logo de diagnóstico, sem representar a marca real; canto transparente e proporção 2:1.
+    const logo = await page.evaluate(() => {
+      const tela = document.createElement('canvas'); tela.width = 160; tela.height = 80
+      const c = tela.getContext('2d'); if (!c) throw new Error('sem Canvas')
+      c.fillStyle = '#0b5f3a'; c.fillRect(10, 10, 140, 60)
+      c.fillStyle = '#ffffff'; c.font = '20px sans-serif'; c.fillText('TESTE', 48, 48)
+      return tela.toDataURL('image/png').split(',')[1] ?? ''
+    })
+    await page.getByLabel('Escolher logo', { exact: true }).setInputFiles({ name: 'logo-teste.png', mimeType: 'image/png', buffer: Buffer.from(logo, 'base64') })
+    await expect(page.getByRole('img', { name: 'Prévia da logo da loja', exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'Salvar identificação', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Editar identificação', exact: true })).toBeVisible()
+    const imagem = await page.evaluate(async () => {
+      const p = await window.laboratorio?.repositorioIdentidadeLoja.ler()
+      if (!p?.identidade.logo) throw new Error('sem logo')
+      const img = new Image(); img.src = p.identidade.logo; await img.decode()
+      const tela = document.createElement('canvas'); tela.width = img.naturalWidth; tela.height = img.naturalHeight
+      const c = tela.getContext('2d'); if (!c) throw new Error('sem Canvas')
+      c.drawImage(img, 0, 0)
+      return { largura: img.naturalWidth, altura: img.naturalHeight, alfa: c.getImageData(0, 0, 1, 1).data[3] }
+    })
+    expect(imagem).toEqual({ largura: 160, altura: 80, alfa: 0 })
+  }
 }
 
 test('E-28C prévia offline, foto/preço/telefone, PDF exato, cancelamento e releitura de outra aba', async ({ page, context }, info) => {

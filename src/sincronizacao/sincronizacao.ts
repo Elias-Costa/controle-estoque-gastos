@@ -40,6 +40,8 @@ import { produtoRecebido } from '../dados/receber-produto.ts'
 import { LINHAS_POR_PAGINA, type Falha, type LinhaRecebida, type Nuvem, type Resposta } from './nuvem.ts'
 import { aplicarRecepcaoEstoque } from './recepcao-estoque.ts'
 import { criarSincronizacaoFotos } from './fotos.ts'
+import { criarRepositorioIdentidadeLoja } from '../dados/repositorio-identidade-loja.ts'
+import { aplicarIdentidadeLoja, identidadeDaNuvem, identidadeParaNuvem } from './identidade-loja.ts'
 
 /** O que o indicador mostra (RF-25) e o que o mantenedor lê no console. */
 export type EstadoDaSincronizacao = {
@@ -122,6 +124,7 @@ const agendarPadrao: Agendar = (fn, ms) => {
 export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao {
   const { banco, nuvem } = dependencias
   const estoque = criarRepositorioEstoque(banco)
+  const identidadeLoja = criarRepositorioIdentidadeLoja(banco)
   const fotos = nuvem?.fotos ? criarSincronizacaoFotos(banco, nuvem, nuvem.fotos) : null
   const agora = dependencias.agora ?? (() => new Date())
   const agendar = dependencias.agendar ?? agendarPadrao
@@ -233,6 +236,16 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
       // E-22: o ciclo de binários vem depois das operações; foto nunca segue pela rota financeira.
       if (item.tabela === 'fotos') continue
       if (item.problema !== undefined) continue
+      if (item.tabela === 'identidadeLoja') {
+        if (!nuvemLigada.identidadeLoja) continue
+        const envio = await identidadeLoja.capturarEnvio(item.registroId)
+        if (!envio) continue
+        const resposta = await nuvemLigada.identidadeLoja.enviar(identidadeParaNuvem(envio.preferencia))
+        if (resposta.ok) await identidadeLoja.responderEnvio(envio)
+        else if (resposta.falha.tipo !== 'recusa') return resposta.falha.tipo
+        else await identidadeLoja.responderEnvio(envio, problemaDaFalha(resposta.falha))
+        continue
+      }
       if (item.tabela === 'operacoes') {
         const envio = await estoque.capturarEnvio(item.registroId)
         if (!envio) continue
@@ -347,6 +360,20 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
       })
     })
     if (produtos !== 'ok') return produtos
+    if (nuvemLigada.identidadeLoja) {
+      const cursor = (await banco.sincronizacao.get('identidadeLoja'))?.valor ?? null
+      const resposta = await nuvemLigada.identidadeLoja.buscar(cursor === null ? null : comMargem(cursor))
+      if (!resposta.ok) return resposta.falha.tipo === 'sessao' ? 'sessao' : 'rede'
+      if (resposta.valor.length > 1) throw new Error('Mais de uma identificação na conta')
+      const preferencias = resposta.valor.map((linha) => ({ preferencia: identidadeDaNuvem(linha),
+        recebidoEm: normalizarCarimbo('identidade.recebido_em', linha['recebido_em']) }))
+      await banco.transaction('rw', banco.identidadesLoja, banco.fila, banco.sincronizacao, async () => {
+        for (const { preferencia, recebidoEm } of preferencias) {
+          await aplicarIdentidadeLoja(banco, preferencia)
+          if (cursor === null || recebidoEm > cursor) await banco.sincronizacao.put({ chave: 'identidadeLoja', valor: recebidoEm })
+        }
+      })
+    }
     for (;;) {
       const cursor = (await banco.sincronizacao.get('estoque'))?.valor ?? '0'
       const resposta = await nuvemLigada.buscarEstoque(cursor, LINHAS_POR_PAGINA)

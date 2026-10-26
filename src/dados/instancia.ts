@@ -18,6 +18,7 @@ import { criarRepositorioEstoque } from './repositorio-estoque.ts'
 import { criarOperacoesEstoque } from './operacoes-estoque.ts'
 import { criarRepositorioFotos } from './fotos.ts'
 import { criarLeituraDivulgacao } from './leitura-divulgacao.ts'
+import { criarRepositorioIdentidadeLoja } from './repositorio-identidade-loja.ts'
 
 export const banco = new BancoLocal()
 
@@ -49,3 +50,8 @@ export const repositorioFotos = criarRepositorioFotos(banco)
 
 /** Catálogo e compromissos lidos consistentemente, com observação das alterações entre abas. */
 export const leituraDivulgacao = criarLeituraDivulgacao(banco)
+
+/** Identificação privada da loja, salva offline e anunciada ao mesmo motor da fila. */
+export const repositorioIdentidadeLoja = criarRepositorioIdentidadeLoja(banco, undefined, () => {
+  for (const ouvinte of ouvintes) ouvinte()
+})

@@ -36,6 +36,7 @@
  */
 
 import Dexie, { type DexieOptions, type Table } from 'dexie'
+import type { PreferenciaIdentidadeLoja } from './identidade-loja.ts'
 import type { Cliente, Id, Lancamento } from '../dominio/ficha.ts'
 import type { MovimentoEstoque } from '../dominio/estoque.ts'
 import type { Categoria, Produto } from '../dominio/produtos.ts'
@@ -78,7 +79,7 @@ export const NOME_DO_BANCO = 'controle-fiado'
 export type TabelaSincronizada = 'clientes' | 'lancamentos'
 
 /** F2 usa a mesma FIFO; seu transporte conjunto entra em E-21, nunca pela rota financeira F1. */
-export type TabelaDaFila = TabelaSincronizada | 'categorias' | 'produtos' | 'operacoes' | 'encerramentos' | 'fotos'
+export type TabelaDaFila = TabelaSincronizada | 'categorias' | 'produtos' | 'operacoes' | 'encerramentos' | 'fotos' | 'identidadeLoja'
 
 /** Cadastro completo sujeito a LWW por registro, separado da referência derivada de compras. */
 export type ProdutoLocal = Produto & {
@@ -138,7 +139,7 @@ export type NovoItemDaFila = Omit<ItemDaFila, 'ordem'>
 
 /** Uma linha da tabela `sincronizacao`: o cursor de download de cada tabela (D-042). */
 export type CursorDeDownload = {
-  readonly chave: TabelaSincronizada | 'categorias' | 'produtos' | 'estoque'
+  readonly chave: TabelaSincronizada | 'categorias' | 'produtos' | 'estoque' | 'identidadeLoja'
   /** O maior carimbo do servidor já visto naquela tabela, ISO UTC; o download pede "desde aqui, com margem". */
   readonly valor: string
 }
@@ -187,13 +188,12 @@ export const ESQUEMA_V4 = {
   estadoFotos: 'chave',
 } as const
 
-/**
- * A base local. `dependencias` existe para os testes injetarem um IndexedDB de mentira
- * isolado por teste (`fake-indexeddb`); em produção ninguém passa nada e o Dexie usa o do
- * navegador. As tabelas vêm de `this.table(...)`, que é o registro do próprio Dexie — sem
- * `as` e sem `!` (AGENTS.md §4).
- */
+/** D-076: v5–v7 reservadas à F3; nova preferência é aditiva na v8. */
+export const ESQUEMA_V8 = { ...ESQUEMA_V4, identidadesLoja: 'chave' } as const
+
+/** Base local aditiva; dependências injetáveis mantêm testes separados do aparelho. */
 export class BancoLocal extends Dexie {
+  readonly identidadesLoja: Table<PreferenciaIdentidadeLoja, string, PreferenciaIdentidadeLoja>
   readonly clientes: Table<ClienteLocal, Id, ClienteLocal>
   readonly lancamentos: Table<Lancamento, Id, Lancamento>
   readonly fila: Table<ItemDaFila, number, NovoItemDaFila>
@@ -217,6 +217,8 @@ export class BancoLocal extends Dexie {
     this.version(2).stores(ESQUEMA_V2)
     this.version(3).stores(ESQUEMA_V3)
     this.version(4).stores(ESQUEMA_V4)
+    this.version(8).stores(ESQUEMA_V8)
+    this.identidadesLoja = this.table('identidadesLoja')
     this.clientes = this.table('clientes')
     this.lancamentos = this.table('lancamentos')
     this.fila = this.table('fila')

@@ -67,7 +67,7 @@ describe('E-28B — classificação opcional e compatibilidade D-074/075', () =>
     expect(produtoRecebido(novo, { ...remoto, atualizadoEm: '2026-10-26T12:00:00.000Z' }).nome).toBe('Outro nome')
   })
 
-  test('base F2 preenchida reabre sem mudar v4, fila/recusas, fotos, captura antiga ou financeiro', async () => {
+  test('base F2 preenchida ganha upgrade aditivo sem mudar fila/recusas, fotos, captura antiga ou financeiro', async () => {
     const indexedDB = new IDBFactory(), nome = uuidv7()
     const legado = new Dexie(nome, { indexedDB, IDBKeyRange }); bancos.push(legado)
     legado.version(4).stores(ESQUEMA_V4)
@@ -86,7 +86,7 @@ describe('E-28B — classificação opcional e compatibilidade D-074/075', () =>
     ok(await repo.salvarProduto({ ...antigo, classificacao: 'masculino' }))
     banco.close()
     const reaberto = abrir(indexedDB, nome)
-    expect(reaberto.verno).toBe(4)
+    expect(reaberto.verno).toBe(8)
     expect(await reaberto.produtos.get(antigo.id)).toEqual({ ...antigo, classificacao: 'masculino', classificacaoConhecida: true })
     expect(await Promise.all(['fotos', 'lancamentos', 'enviosProdutoFoto'].map((tabela) => reaberto.table(tabela).toArray()))).toEqual(antes)
     expect((await reaberto.fila.toArray())[0]?.versao).toBe(5)
@@ -131,7 +131,7 @@ describe('E-28B — classificação opcional e compatibilidade D-074/075', () =>
     const banco = abrir(indexedDB, nome)
     banco.version(5).stores(v5); banco.version(6).stores(v6); banco.version(7).stores(v7)
     ok(await criarRepositorioEstoque(banco).salvarProduto({ ...antigo, classificacao: 'unissex' }))
-    expect(banco.verno).toBe(7)
+    expect(banco.verno).toBe(8)
     expect(await Promise.all(tabelasF3.map((tabela) => banco.table(tabela).toArray()))).toEqual(antes)
     expect((await banco.produtos.get(antigo.id))?.classificacao).toBe('unissex')
   })
@@ -156,7 +156,7 @@ describe('E-28B — classificação opcional e compatibilidade D-074/075', () =>
     await banco.categorias.put(categoria); await banco.produtos.put(antigo)
     await banco.sincronizacao.put({ chave: 'produtos', valor: CARIMBO })
     const base = criarNuvemSupabase(createClient('http://127.0.0.1:9', 'ficticia', { auth: { persistSession: false, autoRefreshToken: false } }))
-    const { fotos: _fotos, ...metadados } = base
+    const { fotos: _fotos, identidadeLoja: _identidadeLoja, ...metadados } = base
     let classificacao = 'inválida'
     const nuvem: Nuvem = { ...metadados, temSessao: async () => true, aoMudarSessao: () => () => undefined,
       buscarClientes: async () => ({ ok: true, valor: [] }), buscarLancamentos: async () => ({ ok: true, valor: [] }),

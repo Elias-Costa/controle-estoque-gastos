@@ -1,5 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { leituraDivulgacao, repositorioFotos } from '../dados/instancia.ts'
+import { leituraDivulgacao, repositorioFotos, repositorioIdentidadeLoja } from '../dados/instancia.ts'
+import { mesmaPreferenciaIdentidade, type PreferenciaIdentidadeLoja } from '../dados/identidade-loja.ts'
+import { IdentificacaoLoja } from './identificacao-loja.tsx'
 import type { RetratoDivulgacao } from '../dados/leitura-divulgacao.ts'
 import { emReais } from '../dominio/dinheiro.ts'
 import { podeCompartilharDivulgacao, compartilharDivulgacao } from '../plataforma/compartilhar-divulgacao.ts'
@@ -29,10 +31,13 @@ export function TelaDivulgacao({ aoVoltar }: { aoVoltar: () => void }) {
   const [edicao, setEdicao] = useState<{ tipo: 'produto' | 'cliente'; id: string }>()
   const [ocupado, setOcupado] = useState(false)
   const [mensagem, setMensagem] = useState<string>()
-  const [pronto, setPronto] = useState<{ arquivo: File; previa: PreviaNaTela; geradoEm: string }>()
+  const [identidade, setIdentidade] = useState<PreferenciaIdentidadeLoja>()
+  const [identidadeLida, setIdentidadeLida] = useState(false)
+  const [pronto, setPronto] = useState<{ arquivo: File; previa: PreviaNaTela; geradoEm: string; identidade: PreferenciaIdentidadeLoja }>()
   const montado = useRef(true)
   const trava = useRef(false)
   useEffect(() => { montado.current = true; return () => { montado.current = false } }, [])
+  useEffect(() => repositorioIdentidadeLoja.assinar((valor) => { setIdentidade(valor); setIdentidadeLida(true) }, () => { setIdentidadeLida(false); setPronto(undefined) }), [])
   useEffect(() => leituraDivulgacao.assinar((valor) => {
     try {
       const atuais = filtrarDivulgacao(valor, filtros)
@@ -46,7 +51,7 @@ export function TelaDivulgacao({ aoVoltar }: { aoVoltar: () => void }) {
   const cliente = retrato?.clientes.find((item) => item.id === clienteId && !item.desativadoEm)
   const temTelefone = !!telefoneParaWhatsApp(cliente?.telefone)
   const faltamDados = selecionadas.some((linha) => linha.produto.precoVenda === undefined || !linha.foto?.length)
-  const valido = !!pronto && !!previa && pronto.previa.chave === chave && mesmasLinhasDivulgacao(pronto.previa.linhas, previa.linhas) &&
+  const valido = !!pronto && !!previa && identidadeLida && mesmaPreferenciaIdentidade(pronto.identidade, identidade) && pronto.previa.chave === chave && mesmasLinhasDivulgacao(pronto.previa.linhas, previa.linhas) &&
     mesmasLinhasDivulgacao(pronto.previa.linhas.filter((linha) => !pronto.previa.desmarcados.includes(linha.produto.id)), selecionadas)
   const podeAbrir = valido && pronto !== undefined && podeCompartilharDivulgacao(pronto.arquivo)
 
@@ -54,17 +59,20 @@ export function TelaDivulgacao({ aoVoltar }: { aoVoltar: () => void }) {
     setFiltros((anteriores) => ({ ...anteriores, [campo]: valor })); setPronto(undefined); setMensagem(undefined)
   }
   async function preparar() {
-    if (!previa || trava.current) return
+    if (!previa || !identidade || !identidadeLida || trava.current) return
     trava.current = true; setOcupado(true); setPronto(undefined); setMensagem(undefined)
     const geradoEm = new Date().toLocaleString('pt-BR')
     try {
       const resultado = await prepararDivulgacao(previa, filtros, { ler: leituraDivulgacao.ler, fotos: repositorioFotos,
-        gerar: async (itens) => (await import('../plataforma/pdf-divulgacao.ts')).gerarPdfDivulgacao(itens, geradoEm) })
+        gerar: async (itens) => (await import('../plataforma/pdf-divulgacao.ts')).gerarPdfDivulgacao(itens, geradoEm, identidade.identidade) })
       if (!montado.current) return
+      if (!mesmaPreferenciaIdentidade(identidade, await repositorioIdentidadeLoja.ler())) {
+        setMensagem('A identificação da loja mudou. Confira e prepare o PDF novamente.'); return
+      }
       const revisada = { ...resultado.previa, chave }
       setPrevia(revisada)
       if (resultado.estado === 'alterada') setMensagem(P.mudou)
-      else setPronto({ arquivo: resultado.arquivo, previa: revisada, geradoEm })
+      else setPronto({ arquivo: resultado.arquivo, previa: revisada, geradoEm, identidade })
     } catch { if (montado.current) setMensagem(P.falhaPdf) }
     finally { trava.current = false; if (montado.current) setOcupado(false) }
   }
@@ -85,6 +93,7 @@ export function TelaDivulgacao({ aoVoltar }: { aoVoltar: () => void }) {
   return <main className="tela [overflow-wrap:anywhere]">
     <Topo titulo={P.titulo} aoVoltar={ocupado ? undefined : aoVoltar} />
     <p>{P.explicacao}</p>
+    {identidadeLida ? <IdentificacaoLoja preferencia={identidade} ocupado={ocupado} /> : <p role="status">Conferindo a identificação da loja…</p>}
     {falhou && <p role="alert">{P.falhaLeitura}</p>}
     {!retrato || !previa ? <p role="status">{P.lendo}</p> : <>
       <label className="mt-3 block" htmlFor={`${idCampos}-categoria`}>Categoria</label>
@@ -131,7 +140,7 @@ export function TelaDivulgacao({ aoVoltar }: { aoVoltar: () => void }) {
       {cliente && !temTelefone && <><p>{P.faltaTelefone}</p><Botao tipo="secundario" desabilitado={ocupado} aoTocar={() => { setPronto(undefined); setEdicao({ tipo: 'cliente', id: cliente.id }) }}>Adicionar ou corrigir telefone</Botao></>}
       <p>{P.referencia}</p>
       {faltamDados && <p role="status">{P.faltamDados}</p>}
-      <Botao tipo="principal" className="mt-3" desabilitado={ocupado || falhou || previa.chave !== chave || !selecionadas.length || faltamDados || !temTelefone} aoTocar={() => void preparar()}>{ocupado ? 'Preparando ou compartilhando…' : 'Preparar PDF'}</Botao>
+      <Botao tipo="principal" className="mt-3" desabilitado={ocupado || falhou || !identidadeLida || !identidade || previa.chave !== chave || !selecionadas.length || faltamDados || !temTelefone} aoTocar={() => void preparar()}>{ocupado ? 'Preparando ou compartilhando…' : 'Preparar PDF'}</Botao>
       {valido && pronto && <><p role="status">PDF pronto com {selecionadas.length} produtos. Gerado em {pronto.geradoEm}.</p>{!podeAbrir && <p role="status">{P.semSuporte}</p>}<Botao tipo="principal" desabilitado={ocupado || falhou || !temTelefone || !podeAbrir} aoTocar={compartilhar}>Compartilhar PDF</Botao></>}
       {mensagem && <p role="status" className="font-semibold">{mensagem}</p>}
     </>}

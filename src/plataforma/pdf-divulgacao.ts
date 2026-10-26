@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf'
 import { emReais } from '../dominio/dinheiro.ts'
 import type { ItemPdfDivulgacao } from '../interface/divulgacao-produtos.ts'
+import { identidadeLojaValida, type IdentidadeLoja } from '../dados/identidade-loja.ts'
 
 function conferirLetras(fonte: unknown, texto: string): void {
   // jsPDF 4.2.1: glifo zero significa ausência no cmap; não publicar nomes mutilados.
@@ -11,8 +12,9 @@ function conferirLetras(fonte: unknown, texto: string): void {
   }
 }
 
-/** D-074/E-28C: PDF único local; módulo carregado sob demanda, fonte livre no precache. */
-export async function gerarPdfDivulgacao(itens: readonly ItemPdfDivulgacao[], geradoEm: string): Promise<File> {
+/** D-074: PDF local identificado pela vendedora; módulo sob demanda, fonte livre no precache. */
+export async function gerarPdfDivulgacao(itens: readonly ItemPdfDivulgacao[], geradoEm: string, identidade: IdentidadeLoja): Promise<File> {
+  if (!identidadeLojaValida(identidade)) throw new Error('Informe a identificação da loja.')
   if (!itens.length) throw new Error('Escolha pelo menos um produto.')
   for (const item of itens) {
     if (typeof item.preco !== 'bigint' || item.preco < 0n || !item.foto.length || !Number.isSafeInteger(item.quantidade) || item.quantidade < 1) throw new Error('Produto incompleto para o PDF.')
@@ -26,14 +28,34 @@ export async function gerarPdfDivulgacao(itens: readonly ItemPdfDivulgacao[], ge
   doc.addFileToVFS('NotoSans-Regular.ttf', btoa(binario))
   doc.addFont('NotoSans-Regular.ttf', 'Noto', 'normal')
   doc.setFont('Noto')
-  doc.setProperties({ title: 'Produtos disponíveis', author: 'Fichinhas' })
+  conferirLetras(doc.getFont().metadata, identidade.nome)
+  conferirLetras(doc.getFont().metadata, identidade.descricao)
+  doc.setProperties({ title: `${identidade.nome} - Produtos disponíveis`, author: identidade.nome })
+  const xNome = identidade.logo ? 96 : 24
+  doc.setFontSize(24)
+  const nomes: string[] = doc.splitTextToSize(identidade.nome.normalize('NFC'), 396 - xNome)
+  doc.setFontSize(10)
+  const descricao: string[] = identidade.descricao ? doc.splitTextToSize(identidade.descricao.normalize('NFC'), 372) : []
+  const alturaDaMarca = Math.max(identidade.logo ? 56 : 0, nomes.length * 29)
+  const fimDaMarca = 24 + alturaDaMarca
+  const yTitulo = fimDaMarca + (descricao.length ? 14 + (descricao.length - 1) * 13 + 28 : 24)
+  const inicioDosProdutos = yTitulo + 68
+  if (inicioDosProdutos > 432) throw new Error('A identificação ficou grande demais para o PDF. Encurte o nome ou a descrição.')
   let pagina = 1
-  let y = 110
+  let y = inicioDosProdutos
   function cabecalho() {
     doc.setFillColor('#0b5f3a').rect(0, 0, 420, 7, 'F')
-    doc.setTextColor('#173829').setFontSize(21).text('Produtos disponíveis', 24, 40)
-    doc.setFontSize(10).text(`Gerado em ${geradoEm} | ${itens.length} produtos`, 24, 60)
-    doc.setTextColor('#444444').setFontSize(10).text(['Quantidade e preço no momento da geração.', 'A disponibilidade pode mudar; isto não é uma reserva.'], 24, 78)
+    if (identidade.logo) {
+      const imagem = doc.getImageProperties(identidade.logo)
+      const escala = Math.min(56 / imagem.width, 56 / imagem.height)
+      doc.addImage(identidade.logo, 'PNG', 24 + (56 - imagem.width * escala) / 2, 24 + (56 - imagem.height * escala) / 2,
+        imagem.width * escala, imagem.height * escala, 'logo-loja')
+    }
+    doc.setTextColor('#0b5f3a').setFontSize(24).text(nomes, xNome, 44 + (alturaDaMarca - nomes.length * 29) / 2, { lineHeightFactor: 29 / 24 })
+    if (descricao.length) doc.setTextColor('#444444').setFontSize(10).text(descricao, 24, fimDaMarca + 14, { lineHeightFactor: 1.3 })
+    doc.setTextColor('#173829').setFontSize(18).text('Produtos disponíveis', 24, yTitulo)
+    doc.setFontSize(10).text(`Gerado em ${geradoEm} | ${itens.length} produtos`, 24, yTitulo + 18)
+    doc.setTextColor('#444444').setFontSize(10).text(['Quantidade e preço no momento da geração.', 'A disponibilidade pode mudar; isto não é uma reserva.'], 24, yTitulo + 36)
   }
   function rodape() {
     doc.setTextColor('#555555').setFontSize(9).text(`Página ${pagina}`, 396, 576, { align: 'right' })
@@ -52,8 +74,8 @@ export async function gerarPdfDivulgacao(itens: readonly ItemPdfDivulgacao[], ge
     const preco: string[] = doc.splitTextToSize(item.preco === 0n ? `${emReais(item.preco)} (gratuito)` : emReais(item.preco), 240)
     const altura = Math.max(116, nome.length * 17 + marca.length * 14 + preco.length * 18 + 55)
     // Ensaio E-28C: bloco inteiro; nunca cortar nomes ou separar foto/informações entre páginas.
-    if (altura > 438) throw new Error('Um nome ou marca ficou grande demais para o PDF. Confira o cadastro e tente novamente.')
-    if (y + altura > 552) { rodape(); doc.addPage(); pagina++; y = 110; cabecalho() }
+    if (altura > 548 - inicioDosProdutos) throw new Error('Um nome ou marca ficou grande demais para o PDF. Confira o cadastro e tente novamente.')
+    if (y + altura > 552) { rodape(); doc.addPage(); pagina++; y = inicioDosProdutos; cabecalho() }
     doc.setDrawColor('#d7e3dc').roundedRect(24, y, 372, altura - 6, 7, 7)
     const imagem = doc.getImageProperties(item.foto)
     const escala = Math.min(88 / imagem.width, 88 / imagem.height)
