@@ -17,6 +17,7 @@ import { criarRepositorioLocal } from './repositorio.ts'
 import { criarRepositorioEstoque } from './repositorio-estoque.ts'
 import { criarOperacoesEstoque } from './operacoes-estoque.ts'
 import { criarRepositorioFotos } from './fotos.ts'
+import { criarLeituraDivulgacao } from './leitura-divulgacao.ts'
 
 export const banco = new BancoLocal()
 
@@ -45,3 +46,6 @@ export const operacoesEstoque = criarOperacoesEstoque(repositorioEstoque)
 
 /** Miniaturas e retenção local usadas no cadastro; não depende da sessão nem da rede. */
 export const repositorioFotos = criarRepositorioFotos(banco)
+
+/** Catálogo e compromissos lidos consistentemente, com observação das alterações entre abas. */
+export const leituraDivulgacao = criarLeituraDivulgacao(banco)
