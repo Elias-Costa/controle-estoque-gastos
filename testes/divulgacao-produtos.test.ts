@@ -7,7 +7,7 @@ import { prepararDivulgacao } from '../src/interface/preparar-divulgacao.ts'
 import { compra, item, venda, ok } from './apoio-estoque.ts'
 import { novaContagem } from '../src/dominio/estoque.ts'
 
-const filtros: FiltrosDivulgacao = { categoria: '', marca: '', classificacao: '' }
+const filtros: FiltrosDivulgacao = { categorias: null, marcas: null, classificacao: '' }
 const foto = new Uint8Array([255, 216, 255, 217])
 const matriz = [
   { id: 'P1', categoriaId: 'C1', marca: 'X', classificacao: 'masculino', fisico: 3, promessa: 2 },
@@ -31,13 +31,13 @@ function previa(base = retrato()): PreviaDivulgacao { return { linhas: filtrarDi
 
 test('RF-29 matriz independente E-28A: interseção, promessa e unissex, sem inferir ausências', () => {
   for (const [escolha, ids] of [
-    [{ categoria: 'C1', marca: 'marca:x', classificacao: 'masculino' }, ['P1', 'P7', 'P9']],
-    [{ categoria: 'C1', marca: 'marca:x', classificacao: 'feminino' }, ['P2', 'P9']],
-    [{ categoria: 'C1', marca: 'marca:x', classificacao: '' }, ['P1', 'P2', 'P7', 'P8', 'P9']],
-    [{ categoria: '', marca: 'marca:x', classificacao: 'masculino' }, ['P1', 'P6', 'P7', 'P9']],
-    [{ categoria: 'C1', marca: '', classificacao: 'masculino' }, ['P1', 'P5', 'P7', 'P9']],
-    [{ categoria: '', marca: 'sem-marca', classificacao: '' }, ['P5']],
-    [{ categoria: '', marca: '', classificacao: 'sem-classificacao' }, ['P8']],
+    [{ categorias: ['C1'], marcas: ['marca:x'], classificacao: 'masculino' }, ['P1', 'P7', 'P9']],
+    [{ categorias: ['C1'], marcas: ['marca:x'], classificacao: 'feminino' }, ['P2', 'P9']],
+    [{ categorias: ['C1'], marcas: ['marca:x'], classificacao: '' }, ['P1', 'P2', 'P7', 'P8', 'P9']],
+    [{ categorias: null, marcas: ['marca:x'], classificacao: 'masculino' }, ['P1', 'P6', 'P7', 'P9']],
+    [{ categorias: ['C1'], marcas: null, classificacao: 'masculino' }, ['P1', 'P5', 'P7', 'P9']],
+    [{ categorias: null, marcas: ['sem-marca'], classificacao: '' }, ['P5']],
+    [{ categorias: null, marcas: null, classificacao: 'sem-classificacao' }, ['P8']],
   ] satisfies readonly (readonly [FiltrosDivulgacao, readonly string[]])[]) {
     expect(filtrarDivulgacao(retrato(), escolha).map((linha) => linha.produto.id)).toEqual(ids)
   }
@@ -52,10 +52,36 @@ test('homônimos por identidade, marca com acento, não se aplica e ordenação 
       { ...p, id: 'a', nome: 'Água', marca: 'Oleo', classificacao: undefined }],
     movimentos: [{ ...compra('a'), produtoId: 'a' }, { ...compra('b'), produtoId: 'b' }], lancamentos: [] }
   expect(filtrarDivulgacao(r, filtros).map((l) => l.produto.id)).toEqual(['a', 'b'])
-  expect(filtrarDivulgacao(r, { ...filtros, categoria: 'C1' }).map((l) => l.produto.id)).toEqual(['a'])
-  expect(filtrarDivulgacao(r, { ...filtros, marca: chaveDaMarca(' óleo ') }).map((l) => l.produto.id)).toEqual(['b'])
+  expect(filtrarDivulgacao(r, { ...filtros, categorias: ['C1'] }).map((l) => l.produto.id)).toEqual(['a'])
+  expect(filtrarDivulgacao(r, { ...filtros, marcas: [chaveDaMarca(' óleo ')] }).map((l) => l.produto.id)).toEqual(['b'])
   expect(filtrarDivulgacao(r, { ...filtros, classificacao: 'nao-se-aplica' }).map((l) => l.produto.id)).toEqual(['b'])
   expect(filtrarDivulgacao(r, { ...filtros, classificacao: 'sem-classificacao' }).map((l) => l.produto.id)).toEqual(['a'])
+})
+
+test('D-074 várias categorias e marcas: união por grupo, interseção, nenhuma e seleção fora do catálogo', () => {
+  const base = retrato(), modelo = base.produtos[0]
+  if (!modelo) throw new Error('matriz incompleta')
+  const adicionais = [
+    { id: 'P10', categoriaId: 'C2', marca: 'Y', classificacao: 'unissex' },
+    { id: 'P11', categoriaId: 'C3', marca: 'X', classificacao: 'masculino' },
+    { id: 'P12', categoriaId: 'C3', marca: 'Z', classificacao: 'unissex' },
+    { id: 'P13', categoriaId: 'C1', marca: 'Z', classificacao: 'masculino' },
+    { id: 'P14', categoriaId: 'C2', marca: undefined, classificacao: 'masculino' },
+  ] as const
+  const r: RetratoDivulgacao = { ...base, categorias: [...base.categorias, { id: 'C3', nome: 'Outra categoria' }],
+    produtos: [...base.produtos, ...adicionais.map((p) => ({ ...modelo, ...p, nome: p.id }))],
+    movimentos: [...base.movimentos, ...adicionais.map((p) => ({ ...compra(`c-${p.id}`, 1), produtoId: p.id }))] }
+  const escolha: FiltrosDivulgacao = { categorias: ['C1', 'C2'], marcas: ['marca:x', 'marca:y'], classificacao: 'masculino' }
+  const ids = (f: FiltrosDivulgacao) => filtrarDivulgacao(r, f).map((l) => l.produto.id)
+  expect(ids(escolha)).toEqual(['P1', 'P10', 'P6', 'P7', 'P9'])
+  expect(ids({ ...escolha, categorias: ['C2', 'C1', 'C1'], marcas: ['marca:y', 'marca:x', 'marca:x'] })).toEqual(ids(escolha))
+  expect(ids({ ...escolha, categorias: [] })).toEqual([])
+  expect(ids({ ...escolha, marcas: [] })).toEqual([])
+  expect(ids({ ...escolha, categorias: ['inexistente'] })).toEqual([])
+  expect(ids({ ...escolha, marcas: ['marca:inexistente'] })).toEqual([])
+  expect(ids({ ...escolha, marcas: ['sem-marca', 'marca:y'] })).toEqual(['P10', 'P14', 'P5'])
+  expect(ids({ ...escolha, categorias: null })).toContain('P11')
+  expect(ids({ ...escolha, marcas: null })).toContain('P13')
 })
 
 test('RN-06/D-054: contagem em disputa usa posição provisória; promessa/físico negativo não entram', () => {

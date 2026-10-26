@@ -3,8 +3,8 @@ import type { Produto } from '../dominio/produtos.ts'
 import { posicaoEstoque, projetarEstoque } from '../dominio/estoque.ts'
 import { prometidoDoProduto } from '../dominio/vendas-estoque.ts'
 
-/** Sem escolha não restringe; ausência continua distinta de não se aplica (D-074). */
-export type FiltrosDivulgacao = { readonly categoria: string; readonly marca: string; readonly classificacao: string }
+/** D-074: null inclui todas; lista vazia não inclui nenhuma, sem ampliar a escolha. */
+export type FiltrosDivulgacao = { readonly categorias: readonly string[] | null; readonly marcas: readonly string[] | null; readonly classificacao: string }
 /** Posição derivada pelas mesmas funções da venda, sem saldo próprio da divulgação. */
 export type LinhaDivulgacao = { readonly produto: Produto; readonly foto?: Uint8Array; readonly fisico: number; readonly prometido: number;
   readonly disponivel: number; readonly falta: number; readonly contagensAfetadas: boolean; readonly divergenciaFisica: boolean }
@@ -16,11 +16,12 @@ export type ItemPdfDivulgacao = { readonly nome: string; readonly marca?: string
 /** Chave de marca conforme E-28A: pontas/caixa, sem remover acentos ou pontuação. */
 export function chaveDaMarca(marca?: string): string { return marca?.trim() ? `marca:${marca.trim().toLowerCase()}` : 'sem-marca' }
 
-/** RF-29/RN-06: interseção dos atributos e disponibilidade estritamente positiva. */
+/** RF-29/RN-06: união em cada grupo, interseção entre grupos e disponibilidade positiva. */
 export function filtrarDivulgacao(retrato: RetratoDivulgacao, filtros: FiltrosDivulgacao): readonly LinhaDivulgacao[] {
   const fotos = new Map(retrato.miniaturas.map((foto) => [foto.fotoId, foto.binario]))
   return retrato.produtos.flatMap((produto) => {
-    if (filtros.categoria && produto.categoriaId !== filtros.categoria || filtros.marca && chaveDaMarca(produto.marca) !== filtros.marca) return []
+    if (filtros.categorias !== null && !filtros.categorias.includes(produto.categoriaId) ||
+      filtros.marcas !== null && !filtros.marcas.includes(chaveDaMarca(produto.marca))) return []
     if (filtros.classificacao && (filtros.classificacao === 'sem-classificacao' ? produto.classificacao !== undefined :
       produto.classificacao !== filtros.classificacao && !(['masculino', 'feminino'].includes(filtros.classificacao) && produto.classificacao === 'unissex'))) return []
     const estoque = projetarEstoque(retrato.movimentos, produto.id)

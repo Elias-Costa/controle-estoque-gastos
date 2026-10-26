@@ -53,11 +53,19 @@ for (const cenario of [
     await page.getByRole('button', { name: 'Salvar identificação', exact: true }).click()
     await expect(page.getByRole('button', { name: 'Editar identificação', exact: true })).toBeVisible()
     await page.getByLabel('Para qual fichinha?', { exact: true }).selectOption({ label: 'Cliente fictícia com nome comprido E-28C' })
-    for (const rotulo of ['Categoria', 'Marca', 'Classificação', 'Para qual fichinha?']) {
+    for (const titulo of ['Categorias', 'Marcas']) {
+      const grupo = page.getByRole('group', { name: titulo, exact: true }), resumo = grupo.locator('summary')
+      await resumo.focus(); await expect(resumo).toBeFocused()
+      expect((await resumo.boundingBox())?.height).toBeGreaterThanOrEqual(44)
+      await resumo.press('Enter')
+      for (const caixa of await grupo.getByRole('checkbox').all()) expect((await caixa.locator('..').boundingBox())?.height).toBeGreaterThanOrEqual(44)
+    }
+    await page.screenshot({ path: info.outputPath('filtros-multiplos.png'), fullPage: true })
+    for (const rotulo of ['Classificação', 'Para qual fichinha?']) {
       const campo = page.getByLabel(rotulo, { exact: true }); await campo.focus(); await expect(campo).toBeFocused()
       expect((await campo.boundingBox())?.height).toBeGreaterThanOrEqual(44)
     }
-    expect((await page.getByRole('checkbox').locator('..').boundingBox())?.height).toBeGreaterThanOrEqual(44)
+    expect((await page.locator('[data-divulgacao-id]').getByRole('checkbox').locator('..').boundingBox())?.height).toBeGreaterThanOrEqual(44)
     await expect(page.getByText('R$ 9.007.199.254.740.993.123,45', { exact: true })).toBeVisible()
     const botao = page.getByRole('button', { name: 'Preparar PDF', exact: true })
     await expect(botao).toBeEnabled(); await botao.focus(); await expect(botao).toBeFocused()

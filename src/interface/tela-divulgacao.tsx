@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { leituraDivulgacao, repositorioFotos, repositorioIdentidadeLoja } from '../dados/instancia.ts'
 import { mesmaPreferenciaIdentidade, type PreferenciaIdentidadeLoja } from '../dados/identidade-loja.ts'
 import { IdentificacaoLoja } from './identificacao-loja.tsx'
+import { FiltroMultiploDivulgacao } from './filtro-multiplo-divulgacao.tsx'
 import type { RetratoDivulgacao } from '../dados/leitura-divulgacao.ts'
 import { emReais } from '../dominio/dinheiro.ts'
 import { podeCompartilharDivulgacao, compartilharDivulgacao } from '../plataforma/compartilhar-divulgacao.ts'
@@ -22,7 +23,7 @@ type PreviaNaTela = PreviaDivulgacao & { readonly chave: string }
 /** RF-29: seleção local conferível; nenhuma ação de compartilhar grava venda, reserva ou envio. */
 export function TelaDivulgacao({ aoVoltar }: { aoVoltar: () => void }) {
   const idCampos = useId()
-  const [filtros, setFiltros] = useState<FiltrosDivulgacao>({ categoria: '', marca: '', classificacao: '' })
+  const [filtros, setFiltros] = useState<FiltrosDivulgacao>({ categorias: null, marcas: null, classificacao: '' })
   const chave = JSON.stringify(filtros)
   const [retrato, setRetrato] = useState<RetratoDivulgacao>()
   const [previa, setPrevia] = useState<PreviaNaTela>()
@@ -55,7 +56,7 @@ export function TelaDivulgacao({ aoVoltar }: { aoVoltar: () => void }) {
     mesmasLinhasDivulgacao(pronto.previa.linhas.filter((linha) => !pronto.previa.desmarcados.includes(linha.produto.id)), selecionadas)
   const podeAbrir = valido && pronto !== undefined && podeCompartilharDivulgacao(pronto.arquivo)
 
-  function mudarFiltro(campo: keyof FiltrosDivulgacao, valor: string) {
+  function mudarFiltro<C extends keyof FiltrosDivulgacao>(campo: C, valor: FiltrosDivulgacao[C]) {
     setFiltros((anteriores) => ({ ...anteriores, [campo]: valor })); setPronto(undefined); setMensagem(undefined)
   }
   async function preparar() {
@@ -96,16 +97,10 @@ export function TelaDivulgacao({ aoVoltar }: { aoVoltar: () => void }) {
     {identidadeLida ? <IdentificacaoLoja preferencia={identidade} ocupado={ocupado} /> : <p role="status">Conferindo a identificação da loja…</p>}
     {falhou && <p role="alert">{P.falhaLeitura}</p>}
     {!retrato || !previa ? <p role="status">{P.lendo}</p> : <>
-      <label className="mt-3 block" htmlFor={`${idCampos}-categoria`}>Categoria</label>
-      <select id={`${idCampos}-categoria`} className={CLASSES_DE_CAMPO} disabled={ocupado} value={filtros.categoria} onChange={(e) => mudarFiltro('categoria', e.target.value)}>
-        <option value="">Todas as categorias</option>
-        {retrato.categorias.map((c) => <option key={c.id} value={c.id}>{rotuloDaCategoria(c, retrato.categorias)}</option>)}
-      </select>
-      <label className="mt-3 block" htmlFor={`${idCampos}-marca`}>Marca</label>
-      <select id={`${idCampos}-marca`} className={CLASSES_DE_CAMPO} disabled={ocupado} value={filtros.marca} onChange={(e) => mudarFiltro('marca', e.target.value)}>
-        <option value="">Todas as marcas</option>
-        {[...marcas].sort((a, b) => a[1].localeCompare(b[1], 'pt-BR')).map(([valor, rotulo]) => <option key={valor} value={valor}>{rotulo}</option>)}
-      </select>
+      <FiltroMultiploDivulgacao titulo="Categorias" todas="Todas as categorias" ocupado={ocupado} selecionadas={filtros.categorias}
+        opcoes={retrato.categorias.map((c) => ({ valor: c.id, rotulo: rotuloDaCategoria(c, retrato.categorias) }))} aoMudar={(valores) => mudarFiltro('categorias', valores)} />
+      <FiltroMultiploDivulgacao titulo="Marcas" todas="Todas as marcas" ocupado={ocupado} selecionadas={filtros.marcas}
+        opcoes={[...marcas].sort((a, b) => a[1].localeCompare(b[1], 'pt-BR')).map(([valor, rotulo]) => ({ valor, rotulo }))} aoMudar={(valores) => mudarFiltro('marcas', valores)} />
       <label className="mt-3 block" htmlFor={`${idCampos}-classificacao`}>Classificação</label>
       <select id={`${idCampos}-classificacao`} className={CLASSES_DE_CAMPO} disabled={ocupado} value={filtros.classificacao} onChange={(e) => mudarFiltro('classificacao', e.target.value)}>
         <option value="">Todas as classificações</option>
