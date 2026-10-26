@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf'
 import { emReais } from '../dominio/dinheiro.ts'
-import type { ItemPdfDivulgacao } from '../interface/divulgacao-produtos.ts'
+import type { ItemPdfDivulgacao, SecaoPdfDivulgacao } from '../interface/divulgacao-produtos.ts'
 import { identidadeLojaValida, type IdentidadeLoja } from '../dados/identidade-loja.ts'
 
 // D-076: paleta da referência da loja; dourado nas molduras, cores escuras para leitura.
@@ -12,14 +12,16 @@ function conferirLetras(fonte: unknown, texto: string): void {
   if (!fonte || typeof fonte !== 'object' || !('characterToGlyph' in fonte) || typeof fonte.characterToGlyph !== 'function') throw new Error('Não consegui conferir as letras do PDF.')
   for (const letra of texto.normalize('NFC')) {
     if (letra === '\n' || letra === '\r') continue
-    if (!fonte.characterToGlyph.call(fonte, letra.codePointAt(0))) throw new Error('Um nome ou marca tem uma letra que não consegui escrever no PDF. Confira o cadastro.')
+    if (!fonte.characterToGlyph.call(fonte, letra.codePointAt(0))) throw new Error('Um nome, marca ou categoria tem uma letra que não consegui escrever no PDF. Confira o cadastro.')
   }
 }
 
 /** D-074: PDF local identificado pela vendedora; módulo sob demanda, fonte livre no precache. */
-export async function gerarPdfDivulgacao(itens: readonly ItemPdfDivulgacao[], geradoEm: string, identidade: IdentidadeLoja): Promise<File> {
+export async function gerarPdfDivulgacao(secoes: readonly SecaoPdfDivulgacao[], geradoEm: string, identidade: IdentidadeLoja): Promise<File> {
   if (!identidadeLojaValida(identidade)) throw new Error('Informe a identificação da loja.')
+  const itens = secoes.flatMap((secao) => secao.itens)
   if (!itens.length) throw new Error('Escolha pelo menos um produto.')
+  for (const secao of secoes) if (!secao.categoria.trim() || !secao.itens.length) throw new Error('Categoria incompleta para o PDF.')
   for (const item of itens) {
     if (typeof item.preco !== 'bigint' || item.preco < 0n || !item.foto.length || !Number.isSafeInteger(item.quantidade) || item.quantidade < 1) throw new Error('Produto incompleto para o PDF.')
   }
@@ -72,10 +74,7 @@ export async function gerarPdfDivulgacao(itens: readonly ItemPdfDivulgacao[], ge
     doc.setDrawColor(CORES.dourado).setLineWidth(0.7).line(24, 560, 396, 560)
     doc.setTextColor(CORES.suave).setFontSize(9).text(`Página ${pagina}`, 396, 576, { align: 'right' })
   }
-  cabecalho()
-  for (let i = 0; i < itens.length; i++) {
-    const item = itens[i]
-    if (!item) throw new Error('Lista incompleta.')
+  function medirItem(item: ItemPdfDivulgacao) {
     conferirLetras(doc.getFont().metadata, item.nome)
     if (item.marca) conferirLetras(doc.getFont().metadata, item.marca)
     doc.setFontSize(14)
@@ -85,24 +84,46 @@ export async function gerarPdfDivulgacao(itens: readonly ItemPdfDivulgacao[], ge
     doc.setFontSize(15)
     const preco: string[] = doc.splitTextToSize(item.preco === 0n ? `${emReais(item.preco)} (gratuito)` : emReais(item.preco), 240)
     const altura = Math.max(116, nome.length * 17 + marca.length * 14 + preco.length * 18 + 55)
-    // Ensaio E-28C: bloco inteiro; nunca cortar nomes ou separar foto/informações entre páginas.
-    if (altura > 548 - inicioDosProdutos) throw new Error('Um nome ou marca ficou grande demais para o PDF. Confira o cadastro e tente novamente.')
-    if (y + altura > 552) { rodape(); doc.addPage(); pagina++; y = inicioDosProdutos; cabecalho() }
-    doc.setFillColor(CORES.papel).setDrawColor(CORES.borda).setLineWidth(0.6).roundedRect(24, y, 372, altura - 6, 7, 7, 'FD')
-    const imagem = doc.getImageProperties(item.foto)
-    const escala = Math.min(88 / imagem.width, 88 / imagem.height)
-    const largura = imagem.width * escala, alturaFoto = imagem.height * escala
-    doc.addImage(item.foto, 'JPEG', 34 + (88 - largura) / 2, y + 10 + (88 - alturaFoto) / 2, largura, alturaFoto, `foto-${i}`)
-    let textoY = y + 21
-    doc.setTextColor(CORES.verde).setFontSize(14).text(nome, 138, textoY, { lineHeightFactor: 17 / 14 })
-    textoY += nome.length * 17 + 4
-    doc.setTextColor(CORES.suave).setFontSize(11).text(marca, 138, textoY, { lineHeightFactor: 14 / 11 })
-    textoY += marca.length * 14 + 5
-    doc.setTextColor(CORES.terracota).setFontSize(15).text(preco, 138, textoY, { lineHeightFactor: 18 / 15 })
-    textoY += preco.length * 18 + 3
-    doc.setTextColor(CORES.texto).setFontSize(11).text(`Quantidade disponível: ${item.quantidade}`, 138, textoY)
+    return { item, nome, marca, preco, altura }
+  }
+  function novaPagina() { rodape(); doc.addPage(); pagina++; y = inicioDosProdutos; cabecalho() }
+  function tituloDaSecao(titulo: string[], altura: number) {
+    doc.setFillColor(CORES.verde).roundedRect(24, y, 372, altura - 6, 5, 5, 'F')
+    doc.setTextColor(CORES.creme).setFontSize(13).text(titulo, 34, y + 17, { lineHeightFactor: 16 / 13 })
     y += altura
-    if (i % 10 === 0) await new Promise<void>((resolver) => setTimeout(resolver, 0))
+  }
+  cabecalho()
+  let indiceFoto = 0
+  for (const secao of secoes) {
+    conferirLetras(doc.getFont().metadata, secao.categoria)
+    doc.setFontSize(13)
+    const titulo: string[] = doc.splitTextToSize(secao.categoria.normalize('NFC'), 352)
+    const alturaTitulo = titulo.length * 16 + 16
+    const produtos = secao.itens.map(medirItem), primeiro = produtos[0]
+    if (!primeiro) throw new Error('Categoria sem produtos.')
+    // D-074: título nunca fica sozinho; cada página da seção recebe novamente seu nome.
+    if (produtos.some((produto) => alturaTitulo + produto.altura > 548 - inicioDosProdutos)) throw new Error('Uma categoria, nome ou marca ficou grande demais para o PDF. Confira o cadastro e tente novamente.')
+    if (y > inicioDosProdutos) y += 10
+    if (y + alturaTitulo + primeiro.altura > 552) novaPagina()
+    tituloDaSecao(titulo, alturaTitulo)
+    for (const { item, nome, marca, preco, altura } of produtos) {
+      if (y + altura > 552) { novaPagina(); tituloDaSecao(titulo, alturaTitulo) }
+      doc.setFillColor(CORES.papel).setDrawColor(CORES.borda).setLineWidth(0.6).roundedRect(24, y, 372, altura - 6, 7, 7, 'FD')
+      const imagem = doc.getImageProperties(item.foto)
+      const escala = Math.min(88 / imagem.width, 88 / imagem.height)
+      const largura = imagem.width * escala, alturaFoto = imagem.height * escala
+      doc.addImage(item.foto, 'JPEG', 34 + (88 - largura) / 2, y + 10 + (88 - alturaFoto) / 2, largura, alturaFoto, `foto-${indiceFoto}`)
+      let textoY = y + 21
+      doc.setTextColor(CORES.verde).setFontSize(14).text(nome, 138, textoY, { lineHeightFactor: 17 / 14 })
+      textoY += nome.length * 17 + 4
+      doc.setTextColor(CORES.suave).setFontSize(11).text(marca, 138, textoY, { lineHeightFactor: 14 / 11 })
+      textoY += marca.length * 14 + 5
+      doc.setTextColor(CORES.terracota).setFontSize(15).text(preco, 138, textoY, { lineHeightFactor: 18 / 15 })
+      textoY += preco.length * 18 + 3
+      doc.setTextColor(CORES.texto).setFontSize(11).text(`Quantidade disponível: ${item.quantidade}`, 138, textoY)
+      y += altura
+      if (indiceFoto++ % 10 === 0) await new Promise<void>((resolver) => setTimeout(resolver, 0))
+    }
   }
   rodape()
   return new File([doc.output('blob')], 'produtos-disponiveis.pdf', { type: 'application/pdf' })

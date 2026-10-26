@@ -65,7 +65,7 @@ export function TelaDivulgacao({ aoVoltar }: { aoVoltar: () => void }) {
     const geradoEm = new Date().toLocaleString('pt-BR')
     try {
       const resultado = await prepararDivulgacao(previa, filtros, { ler: leituraDivulgacao.ler, fotos: repositorioFotos,
-        gerar: async (itens) => (await import('../plataforma/pdf-divulgacao.ts')).gerarPdfDivulgacao(itens, geradoEm, identidade.identidade) })
+        gerar: async (secoes) => (await import('../plataforma/pdf-divulgacao.ts')).gerarPdfDivulgacao(secoes, geradoEm, identidade.identidade) })
       if (!montado.current) return
       if (!mesmaPreferenciaIdentidade(identidade, await repositorioIdentidadeLoja.ler())) {
         setMensagem('A identificação da loja mudou. Confira e prepare o PDF novamente.'); return

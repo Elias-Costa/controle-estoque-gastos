@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb'
 import { BancoLocal } from '../src/dados/banco.ts'
 import { criarLeituraDivulgacao, type RetratoDivulgacao } from '../src/dados/leitura-divulgacao.ts'
-import { chaveDaMarca, filtrarDivulgacao, itensPdfDivulgacao, mesmasLinhasDivulgacao, relerPreviaDivulgacao, type FiltrosDivulgacao, type PreviaDivulgacao } from '../src/interface/divulgacao-produtos.ts'
+import { chaveDaMarca, filtrarDivulgacao, itensPdfDivulgacao, secoesPdfDivulgacao, mesmasLinhasDivulgacao, relerPreviaDivulgacao, type FiltrosDivulgacao, type PreviaDivulgacao, type SecaoPdfDivulgacao } from '../src/interface/divulgacao-produtos.ts'
 import { prepararDivulgacao } from '../src/interface/preparar-divulgacao.ts'
 import { compra, item, venda, ok } from './apoio-estoque.ts'
 import { novaContagem } from '../src/dominio/estoque.ts'
@@ -56,6 +56,41 @@ test('homônimos por identidade, marca com acento, não se aplica e ordenação 
   expect(filtrarDivulgacao(r, { ...filtros, marcas: [chaveDaMarca(' óleo ')] }).map((l) => l.produto.id)).toEqual(['b'])
   expect(filtrarDivulgacao(r, { ...filtros, classificacao: 'nao-se-aplica' }).map((l) => l.produto.id)).toEqual(['b'])
   expect(filtrarDivulgacao(r, { ...filtros, classificacao: 'sem-classificacao' }).map((l) => l.produto.id)).toEqual(['a'])
+  const secoes = secoesPdfDivulgacao(filtrarDivulgacao(r, filtros))
+  expect(secoes.map((s) => s.categoria)).toEqual(['Perfumes (1)', 'Perfumes (2)'])
+  expect(secoes.map((s) => s.itens.map((i) => i.marca))).toEqual([['Oleo'], ['Óleo']])
+})
+
+test('D-074 seções alfabéticas por categoria e produtos, sem seção vazia ou ids na porta do PDF', () => {
+  const base = retrato(), linhas = filtrarDivulgacao({ ...base,
+    categorias: [{ id: 'C1', nome: 'Perfumes' }, { id: 'C2', nome: 'Acessórios' }, { id: 'C3', nome: 'Vazia' }] }, filtros)
+  const invertidas = [...linhas].reverse(), copia = structuredClone(invertidas)
+  const secoes = secoesPdfDivulgacao(invertidas)
+  expect(secoes.map((s) => s.categoria)).toEqual(['Acessórios', 'Perfumes'])
+  expect(secoes.map((s) => s.itens.map((i) => i.nome))).toEqual([['P6'], ['P1', 'P2', 'P5', 'P7', 'P8', 'P9']])
+  expect(secoes.map((s) => Object.keys(s).sort())).toEqual([['categoria', 'itens'], ['categoria', 'itens']])
+  expect(invertidas).toEqual(copia)
+  expect(secoesPdfDivulgacao(linhas.filter((l) => l.produto.categoriaId === 'C2')).map((s) => s.categoria)).toEqual(['Acessórios'])
+  expect(() => secoesPdfDivulgacao([])).toThrow()
+  expect(() => filtrarDivulgacao({ ...base, categorias: [] }, filtros)).toThrow('Categoria incompleta')
+})
+
+test('D-074 nome/rótulo da categoria alterado durante o preparo invalida o PDF e libera fotos', async () => {
+  const base = retrato(), inicial = previa(base)
+  for (const categorias of [base.categorias.map((c) => ({ ...c, nome: `Nova ${c.nome}` })), [...base.categorias, { id: 'C3', nome: 'Perfumes' }]]) {
+    let mudou = false
+    const liberados: string[] = [], recebidas: SecaoPdfDivulgacao[] = []
+    const resultado = await prepararDivulgacao(inicial, filtros, {
+      ler: async () => mudou ? { ...base, categorias } : base,
+      fotos: { reterReferencia: async (id) => id, liberarUso: async (id) => { liberados.push(id) } },
+      gerar: async (secoes) => { recebidas.push(...secoes); mudou = true; return new File(['PDF'], 'teste.pdf') },
+    })
+    expect(recebidas.map((s) => s.categoria)).toEqual(['Perfumes', 'Sabonetes'])
+    expect(resultado.estado).toBe('alterada')
+    expect(resultado.previa.alterada).toBe(true)
+    expect(resultado.previa.desmarcados).toEqual(inicial.desmarcados)
+    expect(liberados).toHaveLength(inicial.linhas.length)
+  }
 })
 
 test('D-074 várias categorias e marcas: união por grupo, interseção, nenhuma e seleção fora do catálogo', () => {
