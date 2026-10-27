@@ -32,8 +32,8 @@ Vendas e recebimentos podem ser registrados sem acesso à internet. As operaçõ
 ## Estado atual
 
 Fichas, fiado e controle de estoque estão em uso real. A divulgação de produtos disponíveis
-por PDF para compartilhamento manual no WhatsApp está implementada nesta branch e aguarda
-publicação e conferência da atualização. A extensão inclui classificação opcional dos produtos
+por PDF para compartilhamento manual no WhatsApp foi entregue e conferida no aparelho.
+A extensão inclui classificação opcional dos produtos
 e filtros por categoria, marca e sexo. O PDF usa nome/descrição editáveis e logo opcional da
 loja, salvos offline e recuperáveis pela mesma conta. Gastos, cópia completa e modelos editáveis de mensagens
 estão em desenvolvimento separado; indicadores do negócio continuam previstos para fase futura.
@@ -58,11 +58,35 @@ com o projeto confirmado em `nuvem/destinos-de-teste.ts`. O mantenedor configura
 suítes nem resets. `TESTE_NOME` é um filtro opcional de integração para diagnóstico;
 removê-lo para executar o portão completo. Antes de publicar esta extensão sobre a F2 em uso,
 o mantenedor roda `bun run migrar` no checkout conferido da melhoria. O pacote contém
-`0001`–`0007`, `0010_classificacao-produto` e `0011_identidade-loja`; com a F2 aplicada,
-somente 0010/0011 podem estar pendentes. Não incluir `0008_caixa`/`0009_modelos-whatsapp` da entrega futura neste pacote:
+`0001`–`0007`, `0010_classificacao-produto`, `0011_identidade-loja` e `0012_contato-suporte`.
+Com a F2.1 já aplicada, somente 0012 deve estar pendente; ela prepara o contato privado do
+suporte descrito abaixo. Não incluir `0008_caixa`/`0009_modelos-whatsapp` da entrega futura neste pacote:
 o runner aplica todas as pendentes da pasta. Só depois da aplicação concluída promove para
 `main`, que publica pelo deploy existente. Não reverter migrations nem limpar dados para
 atualizar o app; conferir carimbo, fichas, estoque, fotos e envios pendentes na abertura seguinte.
+
+## Contato privado para relatar problema de envio
+
+O número do mantenedor não pertence ao código, aos testes nem a variáveis VITE. Após
+aplicar 0012, o mantenedor configura o contato no SQL Editor do Supabase de produção,
+substituindo o marcador pelo número completo com país e DDD, apenas dígitos:
+
+```sql
+insert into public.contato_suporte(chave, telefone)
+values ('mantenedor', '<numero_com_pais_e_ddd>')
+on conflict (chave) do update set telefone = excluded.telefone;
+```
+
+A tabela é inacessível aos papéis do app. Só a RPC `obter_contato_suporte` pode devolver
+o número a uma sessão autenticada, e o aplicativo a chama somente ao tocar em “Relatar
+problema”. Sem cache do contato no aparelho; a busca exige conexão. O WhatsApp abre com
+o diagnóstico pronto e a pessoa confirma o envio. Abrir a conversa não marca a anotação
+como enviada nem resolve sua recusa.
+
+As suítes de integração/navegador usam temporariamente um contato fictício nos ambientes
+de teste validados e restauram a configuração anterior no encerramento, inclusive após
+falha do teste. Se a conexão impedir a restauração, o comando falha e essa configuração
+de teste precisa ser recuperada antes de outra rodada. Não configuram nem testam produção.
 
 ## Android pelo Wi-Fi nos testes
 

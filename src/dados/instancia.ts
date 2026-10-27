@@ -19,6 +19,7 @@ import { criarOperacoesEstoque } from './operacoes-estoque.ts'
 import { criarRepositorioFotos } from './fotos.ts'
 import { criarLeituraDivulgacao } from './leitura-divulgacao.ts'
 import { criarRepositorioIdentidadeLoja } from './repositorio-identidade-loja.ts'
+import { criarLeituraProblemasDeEnvio } from './problemas-de-envio.ts'
 
 export const banco = new BancoLocal()
 
@@ -55,3 +56,6 @@ export const leituraDivulgacao = criarLeituraDivulgacao(banco)
 export const repositorioIdentidadeLoja = criarRepositorioIdentidadeLoja(banco, undefined, () => {
   for (const ouvinte of ouvintes) ouvinte()
 })
+
+/** Diagnósticos locais observados, sem exportar a base nem tocar na fila (D-077). */
+export const leituraProblemasDeEnvio = criarLeituraProblemasDeEnvio(banco)
