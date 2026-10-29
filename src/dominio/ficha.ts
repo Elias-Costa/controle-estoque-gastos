@@ -166,6 +166,7 @@ export type Motivo =
   | 'id-repetido'
   | 'data-invalida'
   | 'sem-itens'
+  | 'item-sem-descricao'
   | 'preco-negativo'
   | 'desconto-invalido'
   | 'sem-parcelas'
@@ -391,6 +392,11 @@ function motivoDasParcelas(lista: readonly Parcela[], ids: Set<Id>): Motivo | nu
     if (parcela.valor < 0n) return 'parcela-negativa'
   }
   return null
+}
+
+/** D-078: novas gravações exigem descrição; a leitura do histórico não é revalidada por isso. */
+export function descricaoDoItemPreenchida(descricao: string): boolean {
+  return descricao.trim() !== ''
 }
 
 /** Regras de uma venda, fiado ou à vista (RF-03). */

@@ -1,5 +1,5 @@
 import { multiplicar, type Centavos } from './dinheiro.ts'
-import { parcelas, totalDaVenda, validar, type Dia, type Ficha, type Id, type ItemVenda, type Lancamento, type VendaAVista, type VendaFiado } from './ficha.ts'
+import { descricaoDoItemPreenchida, parcelas, totalDaVenda, validar, type Dia, type Ficha, type Id, type ItemVenda, type Lancamento, type VendaAVista, type VendaFiado } from './ficha.ts'
 import { corrigir, corrigirCliente, estornar } from './lancamentos.ts'
 import { custoDoProduto, type Produto } from './produtos.ts'
 import { baseConhecida, chaveDoEfeito, corrigirMovimento, projetarEstoque, referenciaDoEfeito, registrarMovimentos,
@@ -77,6 +77,7 @@ function validarFichas(lancamentos: readonly Lancamento[]): ResultadoEstoque<rea
   return { ok: true, valor: lancamentos }
 }
 function conferirVenda(venda: VendaEstoque): ResultadoEstoque<VendaEstoque> {
+  if (venda.itens.some((item) => !descricaoDoItemPreenchida(item.descricao))) return { ok: false, motivo: 'item-sem-descricao' }
   const resultado = validar([venda])
   if (!resultado.ok) return resultado
   if (venda.itens.some((item) => !item.id || item.quantidade === undefined || item.precoUnitario === undefined)) return { ok: false, motivo: 'item-invalido' }
@@ -86,6 +87,7 @@ function conferirVenda(venda: VendaEstoque): ResultadoEstoque<VendaEstoque> {
 
 /** Preço sugerido do cadastro é editável; vazio exige valor, zero explícito continua zero. */
 export function criarItemVendido(entrada: { readonly id: Id; readonly descricao: string; readonly quantidade: number; readonly precoUnitario?: Centavos; readonly produto?: Produto }): ResultadoEstoque<ItemVendido> {
+  if (!descricaoDoItemPreenchida(entrada.descricao)) return { ok: false, motivo: 'item-sem-descricao' }
   if (!entrada.id || !quantidadeValida(entrada.quantidade, 1)) return { ok: false, motivo: 'quantidade-invalida' }
   const precoUnitario = entrada.precoUnitario ?? entrada.produto?.precoVenda
   if (precoUnitario === undefined) return { ok: false, motivo: 'valor-invalido' }

@@ -20,6 +20,7 @@ import { criarRepositorioFotos } from './fotos.ts'
 import { criarLeituraDivulgacao } from './leitura-divulgacao.ts'
 import { criarRepositorioIdentidadeLoja } from './repositorio-identidade-loja.ts'
 import { criarLeituraProblemasDeEnvio } from './problemas-de-envio.ts'
+import { criarCorrecaoDescricaoEnvio } from './completar-descricao-envio.ts'
 
 export const banco = new BancoLocal()
 
@@ -59,3 +60,8 @@ export const repositorioIdentidadeLoja = criarRepositorioIdentidadeLoja(banco, u
 
 /** Diagnósticos locais observados, sem exportar a base nem tocar na fila (D-077). */
 export const leituraProblemasDeEnvio = criarLeituraProblemasDeEnvio(banco)
+
+/** Completa somente o texto faltante após conferência humana, sem alterar o financeiro. */
+export const correcaoDescricaoEnvio = criarCorrecaoDescricaoEnvio(banco, () => {
+  for (const ouvinte of ouvintes) ouvinte()
+})

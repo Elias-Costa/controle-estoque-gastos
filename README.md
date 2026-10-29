@@ -5,7 +5,7 @@
 ## Funcionalidades
 
 - **Clientes e fichas:** cadastro e atualização de dados, consulta de saldos, histórico de movimentações e desativação ou reativação de fichas.
-- **Vendas:** registro de vendas à vista ou fiado, com descrição dos itens, preços editáveis e desconto opcional.
+- **Vendas:** registro de vendas à vista ou fiado, com descrição obrigatória dos itens, preços editáveis e desconto opcional.
 - **Parcelamento:** divisão em até seis parcelas, com valores e datas de vencimento ajustáveis.
 - **Recebimentos:** registro de pagamentos totais ou parciais, com abatimento automático das parcelas em aberto, da mais antiga para a mais recente.
 - **Cobrança:** consulta de clientes com saldo pendente, priorização por atraso e mensagens de cobrança ou recibo preparadas para envio manual pelo WhatsApp.
@@ -15,6 +15,8 @@
 ## Uso sem conexão
 
 Vendas e recebimentos podem ser registrados sem acesso à internet. As operações ficam no aparelho e são sincronizadas quando a conexão e o acesso à conta estão disponíveis. O aplicativo pode ser instalado na tela de início do celular e utilizado também no computador.
+
+Quando uma venda antiga tiver sido recusada por faltar a descrição de um item, o aviso oferece **Completar o que foi vendido**. A pessoa informa somente os nomes faltantes e confirma **Salvar e tentar enviar**. IDs, valores, datas e parcelas são preservados; o salvamento funciona offline e o envio espera a conexão. A opção só aparece quando o app confirma essa condição específica. Outros problemas continuam com a opção de relato ao mantenedor.
 
 ## Stack utilizada
 

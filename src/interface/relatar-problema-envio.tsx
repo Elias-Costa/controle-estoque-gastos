@@ -6,6 +6,7 @@ import { conta, consultarContatoSuporte } from '../sincronizacao/instancia.ts'
 import { Botao, BotaoLink } from './Botao.tsx'
 import { linkDoRelatoDeEnvio } from './relato-de-envio.ts'
 import type { Leitura } from './useLeitura.ts'
+import { CompletarDescricaoEnvio } from './completar-descricao-envio.tsx'
 
 /** D-077: explica a recusa sem jargão e oferece relato técnico pronto só para o mantenedor. */
 export function RelatarProblemaEnvio() {
@@ -18,6 +19,7 @@ export function RelatarProblemaEnvio() {
   if (leitura.estado === 'lido' && leitura.valor.length === 0) return null
   return <aside aria-label="Problema no envio" className="my-3 rounded-xl border border-borda bg-papel p-3">
     <p className="mt-0">{leitura.estado === 'lido' && leitura.valor.length > 1 ? 'Algumas anotações não puderam ser enviadas.' : 'Uma anotação não pôde ser enviada.'}</p>
+    {leitura.estado === 'lido' && leitura.valor.some((p) => p.tabela === 'lancamentos' && p.problema.codigo === '23514' && p.problema.constraint === 'lancamentos_sem_itens') && <CompletarDescricaoEnvio />}
     {leitura.estado === 'lendo' ? <p role="status">Preparando relato…</p>
       : leitura.estado === 'falhou' ? <p role="status">Não consegui preparar o relato. Feche e abra o aplicativo para tentar de novo.</p>
         : estadoDaConta !== 'entrou' ? <p>Entre na sua conta para relatar o problema.</p>
