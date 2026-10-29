@@ -1,6 +1,6 @@
 import { RodapeDeAcoes } from './rodape-de-acoes.tsx'
 import { useEffect, useState } from 'react'
-import { repositorio } from '../dados/instancia.ts'
+import { correcaoDescricaoEnvio, repositorio } from '../dados/instancia.ts'
 import { estornarLancamento } from '../dados/operacoes.ts'
 import { emReais, somar } from '../dominio/dinheiro.ts'
 import type { Id, Recebimento, SaldoAnterior, Venda } from '../dominio/ficha.ts'
@@ -24,8 +24,8 @@ type Anotado = Venda | Recebimento | SaldoAnterior
  * um saldo anterior (E-14, D-049): o que ela tocou na ficha, aberto — data, itens, desconto,
  * total, parcelas ou forma; valor, forma e observação; ou o total e as parcelas — e **um**
  * botão, pelo `caminhoDeCorrecao` do domínio: "Corrigir" enquanto não subiu (a tela certa
- * reabre preenchida) ou "Desfazer" depois (estorno, RI-03). Nunca os dois. Item que a nuvem recusou ("com problema", D-042)
- * só desfaz: regravar tentaria de novo o que já foi recusado.
+ * reabre preenchida) ou "Desfazer" depois (estorno, RI-03). Nunca os dois. Recusa segue
+ * D-042, exceto D-078: venda F1 elegível aponta para completar nomes no começo, sem estorno.
  *
  * "Desfazer" pede um segundo toque — é a única ação da tela que ela não desfaz com um "‹",
  * e a resposta fica visível: as duas linhas, na ficha. A janela de D-013 é lida ao abrir;
@@ -52,13 +52,15 @@ export function TelaLancamento({
     const ficha = await repositorio.lerFicha(clienteId)
     const anotado = ficha.find((lancamento) => lancamento.id === lancamentoId)
     if (anotado === undefined || (anotado.tipo !== 'venda' && anotado.tipo !== 'recebimento' && anotado.tipo !== 'saldo-anterior')) return null
+    const comProblema = await repositorio.comProblema(lancamentoId)
     return {
       nome: cliente.nome,
       desativada: cliente.desativadoEm !== undefined,
       anotado,
       desfeito: ficha.some((lancamento) => lancamento.tipo === 'estorno' && lancamento.estornaId === lancamentoId),
       sincronizado: await repositorio.sincronizado(lancamentoId),
-      comProblema: await repositorio.comProblema(lancamentoId),
+      comProblema,
+      completarDescricao: comProblema && (await correcaoDescricaoEnvio.ler()).some((r) => r.venda.id === lancamentoId),
     }
   }, lancamentoId)
 
@@ -76,7 +78,7 @@ export function TelaLancamento({
     )
   }
 
-  const { nome, anotado, desfeito, sincronizado, comProblema, desativada } = leitura.valor
+  const { nome, anotado, desfeito, sincronizado, comProblema, completarDescricao, desativada } = leitura.valor
   const vendaF2 = anotado.tipo === 'venda' && ehVendaEstoque(anotado)
   const caminho = comProblema ? 'estornar' : caminhoDeCorrecao(sincronizado)
   const palavras = palavrasDe(anotado)
@@ -106,13 +108,15 @@ export function TelaLancamento({
       {anotado.tipo === 'recebimento' && <DetalheDoRecebimento recebimento={anotado} />}
       {anotado.tipo === 'saldo-anterior' && <DetalheDoSaldoAnterior saldo={anotado} />}
 
-      {comProblema && <p className="mt-5 mb-0 font-semibold text-atraso">{palavras.comProblema}</p>}
+      {comProblema && <p className="mt-5 mb-0 font-semibold text-atraso">{completarDescricao
+        ? 'Falta completar o que foi vendido. Volte ao começo e toque em “Completar o que foi vendido”.'
+        : palavras.comProblema}</p>}
       {confirmando && <p className="mt-5 mb-0 font-semibold">{PALAVRAS_DA_VENDA.anotacao.desfazerMesmo}</p>}
       {erro !== null && <p className="mt-4 mb-0 font-semibold text-atraso">{erro}</p>}
 
       {vendaF2 && !desativada && <AcoesDaVenda venda={anotado} cancelada={desfeito} comProblema={comProblema}
         aoCorrigir={() => aoCorrigir('venda')} aoConcluir={aoVoltar} />}
-      {!desfeito && !vendaF2 && !desativada && (
+      {!desfeito && !vendaF2 && !desativada && !completarDescricao && (
         <RodapeDeAcoes>
           {caminho === 'corrigir' && (
             <Botao tipo="principal" aoTocar={() => aoCorrigir(anotado.tipo)}>

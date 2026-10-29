@@ -72,6 +72,8 @@ export function fraseDaGuarda(guarda: Guarda, soma: Centavos, total: Centavos): 
       return null
     case 'falta-preco':
       return 'Falta o preço de um item'
+    case 'falta-descricao':
+      return 'Informe o que foi vendido em cada item'
     case 'preco-ilegivel':
       return 'Não entendi um dos preços'
     case 'desconto-ilegivel':
@@ -103,6 +105,8 @@ export function linhasDaConfirmacao(nome: string, fiado: boolean, total: Centavo
  */
 export function fraseDaRecusa(motivo: MotivoEstoque): string {
   switch (motivo) {
+    case 'item-sem-descricao':
+      return 'Informe o que foi vendido em cada item.'
     case 'ja-sincronizado':
       return 'Já foi enviada. Desfaça e anote de novo.'
     case 'parcela-paga-alterada':

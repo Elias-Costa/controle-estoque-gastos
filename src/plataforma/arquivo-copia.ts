@@ -2,7 +2,7 @@ import { BlobReader, BlobWriter, ZipReader, ZipWriter, type FileEntry } from '@z
 import { dadosDaCopia, exigirCopia, jsonDaCopia, lerJsonDaTabela, lerVinculoCopia, objetoCopia } from '../dados/formato-copia.ts'
 import { consultasDaCopia } from '../dados/consultas-copia.ts'
 import { fotosNecessariasCopia, mesmoVinculo } from '../dados/repositorio-copia.ts'
-import { LIMITES_COPIA as L, TABELAS_COPIA, TABELAS_COPIA_V1, type DadosCopia, type EstagioCopia, type TabelaCopia, type VinculoConta } from '../dados/tipos-copia.ts'
+import { LIMITES_COPIA as L, TABELAS_COPIA, TABELAS_COPIA_V1, TABELAS_COPIA_V2, type DadosCopia, type EstagioCopia, type TabelaCopia, type VinculoConta } from '../dados/tipos-copia.ts'
 import { hashDaFoto } from './fotos.ts'
 
 type ArquivoListado = { nome: string; bytes: number; sha256: string }
@@ -49,7 +49,7 @@ export async function criarArquivoCopia(estagio: EstagioCopia, dados: DadosCopia
       if (foto.miniatura) await adicionar(`miniaturas/${foto.id}.jpeg`, new Blob([new Uint8Array(foto.miniatura)]))
     }
     for (const [nome, conteudo] of Object.entries(consultasDaCopia(dados))) await adicionar(nome, new Blob([conteudo], { type: 'text/csv;charset=utf-8' }))
-    const manifesto = textoJson({ formato: 2, esquema: 7, id: estagio.id, vinculo: estagio.vinculo,
+    const manifesto = textoJson({ formato: 3, esquema: 9, id: estagio.id, vinculo: estagio.vinculo,
       capturadoEm: estagio.capturadoEm, quantidades: Object.fromEntries(TABELAS_COPIA.map((t) => [t, dados[t].length])), arquivos })
     exigirCopia(manifesto.size <= L.manifesto && bytes + manifesto.size <= L.arquivo, 'limite')
     await escritor.add('manifesto.json', new BlobReader(manifesto))
@@ -88,11 +88,13 @@ export async function lerArquivoCopia(arquivo: Blob, vinculo: VinculoConta): Pro
     }
     const manifesto: unknown = JSON.parse(await (await ler('manifesto.json', L.manifesto)).text())
     exigirCopia(objetoCopia(manifesto) && Object.keys(manifesto).sort().join(',') === 'arquivos,capturadoEm,esquema,formato,id,quantidades,vinculo' &&
-      ((manifesto['formato'] === 1 && manifesto['esquema'] === 6) || (manifesto['formato'] === 2 && manifesto['esquema'] === 7)) && typeof manifesto['id'] === 'string' && /^[0-9a-f-]{36}$/i.test(manifesto['id']) &&
+      ((manifesto['formato'] === 1 && manifesto['esquema'] === 6) || (manifesto['formato'] === 2 && manifesto['esquema'] === 7) ||
+        (manifesto['formato'] === 3 && manifesto['esquema'] === 9)) && typeof manifesto['id'] === 'string' && /^[0-9a-f-]{36}$/i.test(manifesto['id']) &&
       typeof manifesto['capturadoEm'] === 'string' && !Number.isNaN(new Date(manifesto['capturadoEm']).getTime()) &&
       Array.isArray(manifesto['arquivos']) && objetoCopia(manifesto['quantidades']))
     exigirCopia(mesmoVinculo(lerVinculoCopia(manifesto['vinculo']), vinculo), 'conta')
-    const tabelas = manifesto['formato'] === 1 ? TABELAS_COPIA_V1 : TABELAS_COPIA
+    const formato = manifesto['formato']
+    const tabelas = formato === 1 ? TABELAS_COPIA_V1 : formato === 2 ? TABELAS_COPIA_V2 : TABELAS_COPIA
     const arquivos: ArquivoListado[] = manifesto['arquivos'].map((v: unknown) => {
       exigirCopia(objetoCopia(v) && Object.keys(v).sort().join(',') === 'bytes,nome,sha256' && typeof v['nome'] === 'string' && NOME_VALIDO.test(v['nome']) &&
         typeof v['bytes'] === 'number' && Number.isSafeInteger(v['bytes']) && v['bytes'] >= 0 && typeof v['sha256'] === 'string' && /^[0-9a-f]{64}$/.test(v['sha256']))
@@ -128,8 +130,7 @@ export async function lerArquivoCopia(arquivo: Blob, vinculo: VinculoConta): Pro
       return { ...v, ...(binario ? { binario } : {}), ...(miniatura ? { miniatura } : {}) }
     })
     exigirCopia(binarios.size === 0 && miniaturas.size === 0)
-    const dados = dadosDaCopia(porTabela)
-    if (manifesto['formato'] === 1) exigirCopia(!dados.fila.some((f) => f.tabela === 'modelos'))
+    const dados = dadosDaCopia(porTabela, formato)
     for (const f of dados.fotos) if (f.caminho) exigirCopia(f.caminho === `${vinculo.contaId}/${f.id}/${f.copiaId}.jpeg`)
     for (const p of dados.protecoesFotos) exigirCopia(p.caminho === `${vinculo.contaId}/${p.fotoId}/${p.copiaId}.jpeg` && p.id === `${p.copiaId}/${p.geracao}`)
     const quantidades = manifesto['quantidades']

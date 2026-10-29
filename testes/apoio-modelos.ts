@@ -7,14 +7,14 @@ export async function pacoteSemModelos(arquivo: Blob, antigo: boolean): Promise<
   const escritor = new ZipWriter(new BlobWriter(), { level: 0, useWebWorkers: false })
   for (const entrada of await leitor.getEntries()) {
     exigirCopia(!entrada.directory)
-    if (entrada.filename.startsWith('dados/modelos/')) continue
+    if (entrada.filename.startsWith('dados/modelos/') || (antigo && entrada.filename.startsWith('dados/identidadesLoja/'))) continue
     let blob = await entrada.getData(new BlobWriter())
     if (entrada.filename === 'manifesto.json') {
       const m: unknown = JSON.parse(await blob.text())
       exigirCopia(objetoCopia(m) && objetoCopia(m['quantidades']) && Array.isArray(m['arquivos']))
-      m['arquivos'] = m['arquivos'].filter((a: unknown) => { exigirCopia(objetoCopia(a) && typeof a['nome'] === 'string'); return !a['nome'].startsWith('dados/modelos/') })
+      m['arquivos'] = m['arquivos'].filter((a: unknown) => { exigirCopia(objetoCopia(a) && typeof a['nome'] === 'string'); return !a['nome'].startsWith('dados/modelos/') && !(antigo && a['nome'].startsWith('dados/identidadesLoja/')) })
       delete m['quantidades']['modelos']
-      if (antigo) { m['formato'] = 1; m['esquema'] = 6 }
+      if (antigo) { m['formato'] = 1; m['esquema'] = 6; delete m['quantidades']['identidadesLoja'] }
       blob = new Blob([JSON.stringify(m)])
     }
     await escritor.add(entrada.filename, new BlobReader(blob))

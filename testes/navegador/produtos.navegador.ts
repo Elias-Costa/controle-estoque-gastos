@@ -42,6 +42,7 @@ test('E-23 formulário completo — opcionais, foto, edição, aviso e reabertur
   await categoria(page, ' perfumes e-23 ')
   expect(await page.evaluate(async () => window.laboratorio?.banco.categorias.count())).toBe(1)
   await page.getByLabel(P.marca, { exact: true }).fill('Marca teste')
+  await page.getByLabel(P.classificacao, { exact: true }).selectOption('masculino')
   await page.getByLabel(P.codigo, { exact: true }).fill('0012-AB')
   await page.getByLabel(P.custo, { exact: true }).fill('0')
   await expect(page.getByLabel(P.custo, { exact: true })).toHaveValue('0,00')
@@ -69,12 +70,13 @@ test('E-23 formulário completo — opcionais, foto, edição, aviso e reabertur
     return { ...p, custoManual: String(p?.custoManual), precoVenda: String(p?.precoVenda),
       bytes: p?.fotoId ? (await window.laboratorio?.banco.fotos.get(p.fotoId))?.binario?.length : 0 }
   }, inicial.id)
-  expect(completo).toMatchObject({ custoManual: '0', precoVenda: '25', estoqueMinimo: 0, codigoCatalogo: '0012-AB' })
+  expect(completo).toMatchObject({ custoManual: '0', precoVenda: '25', estoqueMinimo: 0, codigoCatalogo: '0012-AB', classificacao: 'masculino' })
   expect(completo.bytes).toBeGreaterThan(0)
   await recarregar(page); await produtos(page)
   await expect(page.locator(`[data-produto-id="${inicial.id}"] img`)).toBeVisible()
   expect(await page.locator(`[data-produto-id="${inicial.id}"] img`).evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0)
   await page.locator(`[data-produto-id="${inicial.id}"]`).click()
+  await expect(page.getByLabel(P.classificacao, { exact: true })).toHaveValue('masculino')
   await expect.poll(() => page.evaluate(async () => window.laboratorio?.banco.usosFotos.count())).toBe(1)
   await page.getByLabel(P.nome, { exact: true }).fill('Perfume alterado E-23')
   await page.getByLabel(P.preco, { exact: true }).fill('0')
@@ -104,12 +106,13 @@ test('E-23 formulário completo — opcionais, foto, edição, aviso e reabertur
   await page.getByLabel(P.preco, { exact: true }).fill('')
   await page.getByLabel(P.custo, { exact: true }).fill('')
   await page.getByLabel(P.minimo, { exact: true }).fill('')
+  await page.getByLabel(P.classificacao, { exact: true }).selectOption('')
   await page.getByRole('button', { name: P.salvar, exact: true }).click()
   await expect(page.getByRole('heading', { name: P.titulo, exact: true })).toBeVisible()
   expect(await page.evaluate(async (id) => {
     const p = await window.laboratorio?.banco.produtos.get(id)
-    return { custo: p?.custoManual === undefined, preco: p?.precoVenda === undefined, minimo: p?.estoqueMinimo === undefined }
-  }, inicial.id)).toEqual({ custo: true, preco: true, minimo: true })
+    return { custo: p?.custoManual === undefined, preco: p?.precoVenda === undefined, minimo: p?.estoqueMinimo === undefined, classificacao: p?.classificacao === undefined }
+  }, inicial.id)).toEqual({ custo: true, preco: true, minimo: true, classificacao: true })
   expect(erros).toEqual([])
 })
 

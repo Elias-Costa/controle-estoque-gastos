@@ -141,6 +141,7 @@ export function criarRepositorioCopia(banco: BancoLocal, agora = () => new Date(
       for (const c of dados.clientes) await banco.controleCopia.put({ chave: `registro:clientes/${c.id}`, conteudo: conteudoDoEfeito(c) })
       for (const p of dados.produtos) await banco.controleCopia.put({ chave: `registro:produtos/${p.id}`, conteudo: conteudoDoEfeito(p) })
       for (const m of dados.modelos) await banco.controleCopia.put({ chave: `registro:modelos/${m.id}`, conteudo: conteudoDoEfeito(m) })
+      for (const p of dados.identidadesLoja) await banco.controleCopia.put({ chave: `registro:identidadeLoja/${p.id}`, conteudo: conteudoDoEfeito(p) })
       // Todos os cursores recomeçam; não confiar no ponto em que o aparelho de origem parou.
       for (const cursor of await banco.sincronizacao.toArray()) await banco.sincronizacao.delete(cursor.chave)
       await banco.controleCopia.put({ chave: 'restauracao', id, fase: 'reconciliar' })

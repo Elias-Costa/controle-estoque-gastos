@@ -18,6 +18,7 @@ import type { Centavos } from './dinheiro.ts'
 import {
   LIMITE_QUITACAO,
   aceito,
+  descricaoDoItemPreenchida,
   ehDebito,
   parcelas,
   recusado,
@@ -43,6 +44,7 @@ import {
 
 /** Valida um lançamento por ele mesmo, como ficha de um item só. Serve aos construtores. */
 function validarSozinho<L extends Lancamento>(lancamento: L): Resultado<L> {
+  if (lancamento.tipo === 'venda' && lancamento.itens.some((item) => !descricaoDoItemPreenchida(item.descricao))) return recusado('item-sem-descricao')
   const resultado = validar([lancamento])
   return resultado.ok ? aceito(lancamento) : resultado
 }
@@ -309,6 +311,7 @@ export function corrigir<L extends Lancamento>(ficha: Ficha, substituto: L, corr
   if (original === undefined) return recusado('lancamento-nao-encontrado')
   if (original.tipo === 'estorno') return recusado('lancamento-e-estorno')
   if (original.tipo !== substituto.tipo) return recusado('tipo-diferente')
+  if (substituto.tipo === 'venda' && substituto.itens.some((item) => !descricaoDoItemPreenchida(item.descricao))) return recusado('item-sem-descricao')
 
   if (ehDebito(original)) {
     // RN-08: toda parcela derivada como paga continua igual. Parcela de valor zero não conta
@@ -359,6 +362,7 @@ export function corrigirCliente(
   if (original === undefined) return recusado('lancamento-nao-encontrado')
   if (original.tipo === 'estorno') return recusado('lancamento-e-estorno')
   if (original.clienteId === novoClienteId) return recusado('mesmo-cliente')
+  if (original.tipo === 'venda' && original.itens.some((item) => !descricaoDoItemPreenchida(item.descricao))) return recusado('item-sem-descricao')
   if (origem.some((lancamento) => lancamento.tipo === 'estorno' && lancamento.estornaId === lancamentoId)) {
     return recusado('ja-estornado')
   }

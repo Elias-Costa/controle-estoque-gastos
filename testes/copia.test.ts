@@ -188,7 +188,7 @@ describe('E-35: arquivo e estágio, IndexedDB simulado; não prova aparelho', ()
     antiga.close()
     const b = aparelho(fabrica, nome); await b.open()
     expect(await b.clientes.get(c.id)).toEqual(c); expect(await b.fila.count()).toBe(1)
-    expect(await b.controleCopia.count()).toBe(0); expect(b.verno).toBe(7); b.close()
+    expect(await b.controleCopia.count()).toBe(0); expect(b.verno).toBe(9); b.close()
   })
   test('Q47A encerrada e recusa de caixa conservam evidência e fila sem reabrir efeitos provisórios', async () => {
     const a = aparelho(), ids = await povoar(a), repo = criarRepositorioEstoque(a), estoque = criarOperacoesEstoque(repo)

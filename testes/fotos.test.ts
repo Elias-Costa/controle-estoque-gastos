@@ -154,7 +154,7 @@ describe('fotos locais — D-025/Q34/41, E-22', () => {
     anterior.close()
     const atual = abrir(indexedDB, nome)
     await atual.open()
-    expect(atual.verno).toBe(7)
+    expect(atual.verno).toBe(9)
     expect(await atual.produtos.get(produto.id)).toEqual(produto)
     expect(await atual.fila.count()).toBe(1)
     expect((await atual.sincronizacao.get('estoque'))?.valor).toBe('567')

@@ -29,6 +29,7 @@ import { TelaModelos } from './tela-modelos.tsx'
 import { hoje } from './datas.ts'
 import type { CorteCaixa } from './leitura-do-caixa.ts'
 import type { ReferenciaFatoCaixa } from '../dominio/gastos.ts'
+import { TelaDivulgacao } from './tela-divulgacao.tsx'
 
 /**
  * Onde ela está. Sem roteador e sem URL: uma mão, o "‹" do topo (como o protótipo). A venda
@@ -52,6 +53,7 @@ type Rota =
   | { readonly tela: 'conferencias' }
   | { readonly tela: 'produtos' }
   | { readonly tela: 'minimo' }
+  | { readonly tela: 'divulgacao' }
   | { readonly tela: 'produto'; readonly produtoId?: Id; readonly origem?: 'estoque' }
   | { readonly tela: 'estoque'; readonly produtoId: Id }
   | { readonly tela: 'entrada'; readonly produtoId: Id; readonly tipo: 'compra' | 'estoque-inicial'; readonly alvo?: ReferenciaEfeito }
@@ -123,11 +125,13 @@ export function Aplicativo() {
     case 'conferencias': return <TelaConferencias aoVoltar={irParaInicio} />
     case 'produtos':
       return <TelaProdutos aoVoltar={irParaInicio} aoNovo={() => setRota({ tela: 'produto' })}
+        aoDivulgar={() => setRota({ tela: 'divulgacao' })}
         aoMinimo={() => setRota({ tela: 'minimo' })}
         aoAbrir={(produtoId) => { setOrigemEstoque('produtos'); setRota({ tela: 'produto', produtoId }) }} />
     case 'minimo':
       return <TelaProdutosNoMinimo aoVoltar={() => setRota({ tela: 'produtos' })}
         aoAbrir={(produtoId) => { setOrigemEstoque('minimo'); setRota({ tela: 'estoque', produtoId }) }} />
+    case 'divulgacao': return <TelaDivulgacao aoVoltar={() => setRota({ tela: 'produtos' })} />
     case 'produto': {
       const { produtoId, origem } = rota
       const voltar = () => setRota(origem === 'estoque' && produtoId ? { tela: 'estoque', produtoId } : { tela: 'produtos' })

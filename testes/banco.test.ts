@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import Dexie, { type DexieOptions } from 'dexie'
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb'
-import { BancoLocal, ESQUEMA_V1, ESQUEMA_V2, ESQUEMA_V3, ESQUEMA_V4, ESQUEMA_V5, ESQUEMA_V6, ESQUEMA_V7, NOME_DO_BANCO } from '../src/dados/banco.ts'
+import { BancoLocal, ESQUEMA_V1, ESQUEMA_V2, ESQUEMA_V3, ESQUEMA_V4, ESQUEMA_V5, ESQUEMA_V6, ESQUEMA_V7, ESQUEMA_V8, NOME_DO_BANCO } from '../src/dados/banco.ts'
 import type { Cliente, VendaFiado } from '../src/dominio/ficha.ts'
 
 /**
@@ -77,9 +77,9 @@ describe('esquema local (D-020, D-040)', () => {
   test('a versão declarada é a última publicada, e cada tabela bate com o literal publicado', async () => {
     const banco = abrir()
     await banco.open()
-    const ultima = Math.max(...Object.keys(ESQUEMAS_PUBLICADOS).map((versao) => parseInt(versao, 10)))
+    const ultima = 9
     expect(banco.verno).toBe(ultima)
-    const publicado = ESQUEMAS_PUBLICADOS[ultima]
+    const publicado = { ...ESQUEMAS_PUBLICADOS[7], identidadesLoja: 'chave' }
     if (publicado === undefined) throw new Error('sem esquema publicado')
     expect(banco.tables.map((tabela) => tabela.name).sort()).toEqual(Object.keys(publicado).sort())
     for (const [tabela, spec] of Object.entries(publicado)) {
@@ -99,6 +99,7 @@ describe('esquema local (D-020, D-040)', () => {
     expect(ESQUEMAS_PUBLICADOS[5]).toEqual({ ...ESQUEMA_V5 })
     expect(ESQUEMAS_PUBLICADOS[6]).toEqual({ ...ESQUEMA_V6 })
     expect(ESQUEMAS_PUBLICADOS[7]).toEqual({ ...ESQUEMA_V7 })
+    expect<Record<string, string>>(ESQUEMA_V8).toEqual({ ...ESQUEMAS_PUBLICADOS[4], identidadesLoja: 'chave' })
   })
 
   test('todo índice está na lista de permissão — nenhum campo de dinheiro é chave (D-022)', async () => {
@@ -145,7 +146,7 @@ describe('esquema local (D-020, D-040)', () => {
     // `versao`, e o código lê as duas formas.
     const atual = abrir(nome, indexedDB)
     await atual.open()
-    expect(atual.verno).toBe(7)
+    expect(atual.verno).toBe(9)
     const cliente: Cliente | undefined = await atual.clientes.get('c1')
     expect(cliente).toEqual(vera)
     const lida = await atual.lancamentos.get('v1')

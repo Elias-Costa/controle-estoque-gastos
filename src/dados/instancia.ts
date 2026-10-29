@@ -20,6 +20,10 @@ import { criarRepositorioFotos } from './fotos.ts'
 import { criarRepositorioCaixa } from './repositorio-caixa.ts'
 import { criarOperacoesCaixa } from './operacoes-caixa.ts'
 import { criarRepositorioModelos } from './repositorio-modelos.ts'
+import { criarLeituraDivulgacao } from './leitura-divulgacao.ts'
+import { criarRepositorioIdentidadeLoja } from './repositorio-identidade-loja.ts'
+import { criarLeituraProblemasDeEnvio } from './problemas-de-envio.ts'
+import { criarCorrecaoDescricaoEnvio } from './completar-descricao-envio.ts'
 
 export const banco = new BancoLocal()
 
@@ -59,5 +63,21 @@ export const operacoesCaixa = criarOperacoesCaixa(repositorioCaixa)
 
 /** Preferência offline dos quatro textos; a sincronização escuta a mesma fila. */
 export const repositorioModelos = criarRepositorioModelos(banco, undefined, () => {
+  for (const ouvinte of ouvintes) ouvinte()
+})
+
+/** Catálogo e compromissos lidos consistentemente, com observação das alterações entre abas. */
+export const leituraDivulgacao = criarLeituraDivulgacao(banco)
+
+/** Identificação privada da loja, salva offline e anunciada ao mesmo motor da fila. */
+export const repositorioIdentidadeLoja = criarRepositorioIdentidadeLoja(banco, undefined, () => {
+  for (const ouvinte of ouvintes) ouvinte()
+})
+
+/** Diagnósticos locais observados, sem exportar a base nem tocar na fila (D-077). */
+export const leituraProblemasDeEnvio = criarLeituraProblemasDeEnvio(banco)
+
+/** Completa somente o texto faltante após conferência humana, sem alterar o financeiro. */
+export const correcaoDescricaoEnvio = criarCorrecaoDescricaoEnvio(banco, () => {
   for (const ouvinte of ouvintes) ouvinte()
 })

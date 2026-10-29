@@ -1,6 +1,6 @@
 import type { ProdutoLocal } from '../dados/banco.ts'
 import type { EvidenciaBase, MovimentoEstoque, ReferenciaEfeito } from '../dominio/estoque.ts'
-import type { Categoria, Produto } from '../dominio/produtos.ts'
+import { classificacaoProdutoValida, type Categoria, type Produto } from '../dominio/produtos.ts'
 import type { EncerramentoTentativa } from '../dominio/recuperacao-estoque.ts'
 import type { GrupoEstoque } from '../dominio/vendas-estoque.ts'
 import { lancamentoDaNuvem, normalizarCarimbo } from './borda.ts'
@@ -42,6 +42,14 @@ export function documentoEstoque(valor: object): DocumentoEstoque {
   return objeto(JSON.parse(JSON.stringify(valor, (_chave, item: unknown) => typeof item === 'bigint' ? String(item) : item)))
 }
 
+/** D-075: omissão durável legada preserva o remoto; edição nova declara valor ou null. */
+export function documentoProduto(produto: ProdutoLocal): DocumentoEstoque {
+  const { classificacaoConhecida, classificacao, ...cadastro } = produto
+  if (classificacao !== undefined && !classificacaoProdutoValida(classificacao)) return erro('classificação')
+  return documentoEstoque({ ...cadastro,
+    ...((classificacaoConhecida || classificacao !== undefined) && { classificacao: classificacao ?? null }) })
+}
+
 /** Categoria conserva a identidade mesmo quando outra tem o mesmo nome (Q46A). */
 export function categoriaDaNuvem(valor: unknown): Categoria {
   const c = objeto(valor)
@@ -51,7 +59,10 @@ export function categoriaDaNuvem(valor: unknown): Categoria {
 /** Cadastro inteiro, sem misturar campos de versões LWW e sem confundir zero com ausência. */
 export function produtoDaNuvem(valor: unknown): ProdutoLocal {
   const c = objeto(valor)
+  if (Object.hasOwn(c, 'classificacao') && c['classificacao'] !== null && !classificacaoProdutoValida(c['classificacao'])) return erro('classificação')
   return { id: texto(c['id']), nome: texto(c['nome']), categoriaId: texto(c['categoria_id']),
+    ...(classificacaoProdutoValida(c['classificacao']) && { classificacao: c['classificacao'] }),
+    ...(Object.hasOwn(c, 'classificacao') && { classificacaoConhecida: true }),
     ...opcional('marca', c['marca'], texto), ...opcional('codigoCatalogo', c['codigo_catalogo'], texto),
     ...opcional('fotoId', c['foto_id'], texto),
     ...opcional('custoManual', c['custo_manual'], (v) => BigInt(digitos(v))),
@@ -128,13 +139,14 @@ export function recepcaoDaNuvem(valor: unknown): RecepcaoEstoque {
 }
 
 /** Colunas completas do cadastro, incluindo os opcionais que uma edição pode remover. */
-export const COLUNAS_PRODUTO = 'id, nome, categoria_id, marca, codigo_catalogo, foto_id, custo_manual::text, preco_venda::text, estoque_minimo, atualizado_em, recebido_em'
+export const COLUNAS_PRODUTO = 'id, nome, categoria_id, marca, classificacao, codigo_catalogo, foto_id, custo_manual::text, preco_venda::text, estoque_minimo, atualizado_em, recebido_em'
 /** Categoria não é unida por nome ao ser recebida. */
 export const COLUNAS_CATEGORIA = 'id, nome'
 
 /** Forma física de produto, útil para conferir ida/volta de todas as colunas. */
 export function produtoParaLinha(produto: Produto): DocumentoEstoque {
   return { id: produto.id, nome: produto.nome, categoria_id: produto.categoriaId, marca: produto.marca ?? null,
+    classificacao: produto.classificacao ?? null,
     codigo_catalogo: produto.codigoCatalogo ?? null, foto_id: produto.fotoId ?? null,
     custo_manual: produto.custoManual === undefined ? null : String(produto.custoManual),
     preco_venda: produto.precoVenda === undefined ? null : String(produto.precoVenda), estoque_minimo: produto.estoqueMinimo ?? null }

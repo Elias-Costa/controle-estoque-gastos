@@ -10,6 +10,7 @@ import { CLASSES_DE_CAMPO } from './Campo.tsx'
 import { hoje } from './datas.ts'
 import { ItensDaVenda } from './itens-da-venda.tsx'
 import { fraseVendaEstoque } from './palavras-venda-estoque.ts'
+import { fraseDaGuarda } from './palavras-da-venda.ts'
 import { useLeitura } from './useLeitura.ts'
 import { conferirVendaComEstoque, lerQuantidade, type RascunhoComEstoque } from './venda-com-estoque.ts'
 
@@ -105,7 +106,7 @@ export function AcoesDaVenda({ venda, cancelada, comProblema, aoCorrigir, aoConc
             <p>Total que fica na venda: <strong>{emReais(troca.total)}</strong></p>
             <p>Desconto que fica: {emReais(troca.desconto)}</p>
             <p>{troca.diferenca < 0n ? 'Redução' : 'Acréscimo'}: {emReais(troca.diferenca < 0n ? -troca.diferenca : troca.diferenca)}{venda.pagamento === 'avista' ? ' · Acerte a diferença com a cliente.' : ''}</p>
-            {novasGuardas.length > 0 && <p className="text-atraso">Falta o preço de um item novo.</p>}
+            {novasGuardas.map((guarda, indice) => <p key={indice} className="text-atraso">{fraseDaGuarda(guarda, 0n, conferencia.total)}</p>)}
           </>}
           {!retornoValido && <p role="status">Confira o que voltou; use zero se nada voltou.</p>}
         </>}

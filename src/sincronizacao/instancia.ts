@@ -18,6 +18,7 @@ import { criarConta, type Conta } from './conta.ts'
 import { criarClienteSupabase, criarNuvemSupabase, type Nuvem } from './nuvem.ts'
 import { iniciarSincronizacao } from './sincronizacao.ts'
 import { criarServicoCopia } from './copia.ts'
+import { criarConsultaContatoSuporte } from './contato-suporte.ts'
 
 const url: string | undefined = import.meta.env.VITE_SUPABASE_URL
 const chaveAnonima: string | undefined = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -34,6 +35,12 @@ export const nuvemDoApp: Nuvem | null = supabaseDoApp ? criarNuvemSupabase(supab
 
 /** A conta do app (E-13, D-048): a tela de login e a linha "Entrar ›" da tela inicial vivem sobre ela. */
 export const conta: Conta = criarConta(supabaseDoApp?.auth ?? null)
+
+/** D-077: chamada apenas pelo botão; a RPC exige autenticação no servidor e não há cache. */
+export const consultarContatoSuporte = criarConsultaContatoSuporte(supabaseDoApp ? async () => {
+  const { data, error } = await supabaseDoApp.rpc('obter_contato_suporte')
+  return { data, error }
+} : null)
 
 /** O motor do app. Acorda a cada gravação local (a única ligação entre `dados` e esta pasta, e nesta direção). */
 export const sincronizacao = iniciarSincronizacao({ banco, nuvem: nuvemDoApp })

@@ -22,7 +22,7 @@ for (const cenario of cenarios) {
 
     await page.getByRole('button', { name: 'Produtos', exact: true }).click()
     await page.getByRole('button', { name: '+ Novo produto', exact: true }).click()
-    for (const rotulo of ['Nome', 'Categoria']) {
+    for (const rotulo of ['Nome', 'Categoria', 'Classificação']) {
       const contraste = await page.getByLabel(rotulo, { exact: true }).evaluate((elemento) => {
         const estilo = getComputedStyle(elemento)
         function luminancia(cor: string): number {

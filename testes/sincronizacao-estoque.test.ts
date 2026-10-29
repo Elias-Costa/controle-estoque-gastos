@@ -41,7 +41,7 @@ describe('borda F2: campos completos e inteiros exatos', () => {
     const produto = { id: 'p', nome: 'Perfume', categoriaId: 'c', marca: '', codigoCatalogo: 'A', fotoId: 'foto',
       custoManual: GRANDE, precoVenda: 0n, estoqueMinimo: 0, atualizadoEm: AGORA }
     const linha = { ...produtoParaLinha(produto), atualizado_em: AGORA }
-    expect(produtoDaNuvem(linha)).toEqual(produto)
+    expect(produtoDaNuvem(linha)).toEqual({ ...produto, classificacaoConhecida: true })
     for (const chave of Object.keys(linha)) expect(COLUNAS_PRODUTO.replaceAll('::text', '').split(', ').includes(chave)).toBe(true)
     expect(produtoDaNuvem({ id: 'p', nome: 'P', categoria_id: 'c', atualizado_em: AGORA })).toEqual({ id: 'p', nome: 'P', categoriaId: 'c', atualizadoEm: AGORA })
     const g = grupo()

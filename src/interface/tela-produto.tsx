@@ -19,7 +19,7 @@ import { Topo } from './Topo.tsx'
 import { useLeitura } from './useLeitura.ts'
 
 /** Cadastro/edição lê a base antes de abrir o formulário; nenhuma leitura aguarda rede. */
-export function TelaProduto({ produtoId, aoVoltar, aoSalvar, aoEstoque }: { produtoId?: string; aoVoltar: () => void; aoSalvar: () => void; aoEstoque: () => void }) {
+export function TelaProduto({ produtoId, aoVoltar, aoSalvar, aoEstoque }: { produtoId?: string; aoVoltar: () => void; aoSalvar: () => void; aoEstoque?: () => void }) {
   const leitura = useLeitura(async () => {
     const catalogo = await repositorioEstoque.lerCatalogo()
     const linhas = lerProdutos(catalogo)
@@ -32,7 +32,7 @@ export function TelaProduto({ produtoId, aoVoltar, aoSalvar, aoEstoque }: { prod
 }
 
 function FormularioProduto({ catalogo, linhas, produtoId, aoVoltar, aoSalvar, aoEstoque }: {
-  catalogo: CatalogoProdutos; linhas: readonly LinhaProduto[]; produtoId?: string; aoVoltar: () => void; aoSalvar: () => void; aoEstoque: () => void
+  catalogo: CatalogoProdutos; linhas: readonly LinhaProduto[]; produtoId?: string; aoVoltar: () => void; aoSalvar: () => void; aoEstoque?: () => void
 }) {
   const linha = linhas.find((item) => item.produto.id === produtoId)
   // Uma releitura após sincronização atualiza avisos/custo sem apagar o que ela está digitando.
@@ -52,7 +52,7 @@ function FormularioProduto({ catalogo, linhas, produtoId, aoVoltar, aoSalvar, ao
   const trava = useRef(false)
   const montado = useRef(true)
   const camera = useRef<HTMLInputElement>(null), arquivo = useRef<HTMLInputElement>(null)
-  const categoriaCampo = useId(), minimoCampo = useId()
+  const categoriaCampo = useId(), minimoCampo = useId(), classificacaoCampo = useId()
   const categorias = [...new Map([...categoriasLocais, ...catalogo.categorias].map((item) => [item.id, item])).values()]
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR') || a.id.localeCompare(b.id))
   const custoDaCompra = linha?.custoDaCompra ?? false
@@ -124,7 +124,7 @@ function FormularioProduto({ catalogo, linhas, produtoId, aoVoltar, aoSalvar, ao
   return <main className="tela">
     <Topo titulo={original ? P.editar : P.cadastro} aoVoltar={() => { if (!trava.current) aoVoltar() }} />
     <IndicadorDeEnvio />
-    {original && <Botao tipo="secundario" className="mt-3" desabilitado={ocupado} aoTocar={aoEstoque}>{PALAVRAS_DO_ESTOQUE.ver}</Botao>}
+    {original && aoEstoque && <Botao tipo="secundario" className="mt-3" desabilitado={ocupado} aoTocar={aoEstoque}>{PALAVRAS_DO_ESTOQUE.ver}</Botao>}
     <p className="text-sm text-suave">{P.opcionais}</p>
     <fieldset className="min-w-0 border-0 p-0" disabled={ocupado}>
       <Campo rotulo={P.nome} valor={rascunho.nome} aoMudar={(nome) => mudar({ nome })} />
@@ -151,6 +151,14 @@ function FormularioProduto({ catalogo, linhas, produtoId, aoVoltar, aoSalvar, ao
       {preparando && <p role="status">{P.preparando}</p>}
       {erroFoto && <p role="alert" className="text-atraso">{erroFoto}</p>}
       <Campo rotulo={P.marca} valor={rascunho.marca} aoMudar={(marca) => mudar({ marca })} />
+      <Rotulo para={classificacaoCampo}>{P.classificacao}</Rotulo>
+      <select id={classificacaoCampo} className={CLASSES_DE_CAMPO} value={rascunho.classificacao} onChange={(evento) => mudar({ classificacao: evento.target.value })}>
+        <option value="">{P.semClassificacao}</option>
+        <option value="feminino">{P.feminino}</option>
+        <option value="masculino">{P.masculino}</option>
+        <option value="unissex">{P.unissex}</option>
+        <option value="nao-se-aplica">{P.naoSeAplica}</option>
+      </select>
       <Campo rotulo={P.codigo} valor={rascunho.codigoCatalogo} aoMudar={(codigoCatalogo) => mudar({ codigoCatalogo })} />
       {custoDaCompra ? <section className="mt-5 rounded-xl border border-borda bg-papel p-3" aria-label={P.custoCompra}>
         <p className="m-0">{P.custoCompra}: <strong>{linha?.custo === undefined ? P.desconhecido : emReais(linha.custo)}</strong></p>

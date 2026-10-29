@@ -5,12 +5,21 @@ import { quantidadeValida, type ResultadoEstoque } from './regras-estoque.ts'
 /** Categoria criada no aparelho; nomes iguais não tornam duas identidades a mesma (D-058). */
 export type Categoria = { readonly id: Id; readonly nome: string }
 
+/** Valores opcionais aprovados em D-074; ausência não significa não se aplica. */
+export type ClassificacaoProduto = 'feminino' | 'masculino' | 'unissex' | 'nao-se-aplica'
+
+/** Confere o conjunto fechado sem deduzir classificação pelo nome/categoria (D-074). */
+export function classificacaoProdutoValida(valor: unknown): valor is ClassificacaoProduto {
+  return valor === 'feminino' || valor === 'masculino' || valor === 'unissex' || valor === 'nao-se-aplica'
+}
+
 /** Cadastro vencedor por LWW, inteiro; custo manual não é sobrescrito pela compra (Q48A). */
 export type Produto = {
   readonly id: Id
   readonly nome: string
   readonly categoriaId: Id
   readonly marca?: string
+  readonly classificacao?: ClassificacaoProduto
   readonly codigoCatalogo?: string
   readonly fotoId?: Id
   readonly custoManual?: Centavos
@@ -50,6 +59,7 @@ export function novoProduto(entrada: Produto, categorias: readonly Categoria[]):
   if (!entrada.nome.trim()) return { ok: false, motivo: 'nome-obrigatorio' }
   if (!entrada.categoriaId) return { ok: false, motivo: 'categoria-obrigatoria' }
   if (!categorias.some((categoria) => categoria.id === entrada.categoriaId)) return { ok: false, motivo: 'categoria-inexistente' }
+  if (entrada.classificacao !== undefined && !classificacaoProdutoValida(entrada.classificacao)) return { ok: false, motivo: 'classificacao-invalida' }
   if (entrada.custoManual !== undefined && (typeof entrada.custoManual !== 'bigint' || entrada.custoManual < 0n)) {
     return { ok: false, motivo: 'custo-invalido' }
   }

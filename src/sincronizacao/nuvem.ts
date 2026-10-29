@@ -55,6 +55,10 @@ export type LinhaRecebida = Readonly<Record<string, unknown>>
 export type Nuvem = {
   /** Identidade da sessão e destino fornecido na composição; nunca exporta tokens. */
   readonly identidade?: () => Promise<VinculoConta | null>
+  readonly identidadeLoja?: {
+    readonly enviar: (linha: LinhaRecebida) => Promise<Resposta<void>>
+    readonly buscar: (desde: string | null) => Promise<Resposta<readonly LinhaRecebida[]>>
+  }
   readonly fotos?: NuvemFotos
   readonly temSessao: () => Promise<boolean>
   /** Avisa quando a sessão muda (entrou, saiu, renovou). Devolve a função que cancela. */
@@ -156,6 +160,22 @@ export function criarNuvemSupabase(supabase: SupabaseClient, destino?: string): 
       const { data } = await supabase.auth.getSession()
       return data.session ? { contaId: data.session.user.id, destino: new URL(destino).origin } : null
     } : undefined,
+    identidadeLoja: {
+      enviar: async (linha) => {
+        const insercao = await supabase.from('identidades_loja').insert(linha)
+        if (!insercao.error) return { ok: true, valor: undefined }
+        if (insercao.error.code !== '23505') return { ok: false, falha: classificar(insercao.error) }
+        const { error } = await supabase.from('identidades_loja').update({ id: linha['id'], identidade: linha['identidade'],
+          atualizado_em: linha['atualizado_em'] }).eq('chave', 'loja')
+        return error ? { ok: false, falha: classificar(error) } : { ok: true, valor: undefined }
+      },
+      buscar: async (desde) => {
+        let consulta = supabase.from('identidades_loja').select('chave, id, identidade, atualizado_em, recebido_em').eq('chave', 'loja')
+        if (desde !== null) consulta = consulta.gte('recebido_em', desde)
+        const { data, error } = await consulta
+        return error ? { ok: false, falha: classificar(error) } : { ok: true, valor: (data ?? []).map(comoLinha) }
+      },
+    },
     fotos: criarNuvemFotos(supabase),
     temSessao: async () => {
       const { data } = await supabase.auth.getSession()

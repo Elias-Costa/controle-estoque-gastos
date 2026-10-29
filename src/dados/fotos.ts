@@ -2,6 +2,7 @@ import type { Id } from '../dominio/ficha.ts'
 import { conteudoDoEfeito } from '../dominio/regras-estoque.ts'
 import type { BancoLocal, ProdutoLocal } from './banco.ts'
 import { uuidv7 } from './identidade.ts'
+import { produtoRecebido } from './receber-produto.ts'
 import type { EnvioProdutoFoto, ProtecaoFoto, ProtecaoFotoLocal } from './tipos-fotos.ts'
 
 /** Chave composta apenas de identidades geradas em clientes; geração antiga não libera a nova. */
@@ -67,7 +68,7 @@ export function criarRepositorioFotos(banco: BancoLocal) {
       const copiado = origem && 'conteudo' in origem && origem.conteudo === conteudoDoEfeito(local)
       const remotoVence = !local || local.atualizadoEm < produto.atualizadoEm || (restaurando && copiado && local.atualizadoEm === produto.atualizadoEm)
       if (remotoVence) {
-        await banco.produtos.put(produto)
+        await banco.produtos.put(restaurando && copiado ? produto : produtoRecebido(local, produto))
         if (restaurando) {
           const fila = await banco.fila.where('registroId').equals(produto.id).and((i) => i.tabela === 'produtos').first()
           if (fila) await banco.fila.delete(fila.ordem)
@@ -76,6 +77,7 @@ export function criarRepositorioFotos(banco: BancoLocal) {
           }
         }
       }
+      else await banco.produtos.put(produtoRecebido(local, produto))
       if (!protecao) return
       if (protecao.fotoId !== produto.fotoId) throw new Error('Proteção não corresponde à intenção do cadastro')
       await guardarProtecao(protecao)

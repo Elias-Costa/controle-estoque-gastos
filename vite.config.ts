@@ -85,7 +85,8 @@ export default defineConfig(() => ({
       },
       // As imagens de abertura do iPhone só o iOS busca, na instalação: fora do precache,
       // que é o que o app carrega em toda instalação e a cada versão nova.
-      workbox: { globIgnores: ['abertura/**'] },
+      // E-28C: a fonte do PDF também precisa existir na primeira geração offline.
+      workbox: { globIgnores: ['abertura/**'], globPatterns: ['**/*.{js,wasm,css,html,ico,png,svg,ttf,txt}'] },
     }),
     ...(process.env.LAN && !httpsLocal ? [basicSsl()] : []),
   ],

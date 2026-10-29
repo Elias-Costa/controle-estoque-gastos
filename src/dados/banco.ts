@@ -36,6 +36,7 @@
  */
 
 import Dexie, { type DexieOptions, type Table } from 'dexie'
+import type { PreferenciaIdentidadeLoja } from './identidade-loja.ts'
 import type { Cliente, Id, Lancamento } from '../dominio/ficha.ts'
 import type { MovimentoEstoque } from '../dominio/estoque.ts'
 import type { Categoria, Produto } from '../dominio/produtos.ts'
@@ -81,10 +82,14 @@ export const NOME_DO_BANCO = 'controle-fiado'
 export type TabelaSincronizada = 'clientes' | 'lancamentos'
 
 /** F2 usa a mesma FIFO; seu transporte conjunto entra em E-21, nunca pela rota financeira F1. */
-export type TabelaDaFila = TabelaSincronizada | 'categorias' | 'produtos' | 'operacoes' | 'encerramentos' | 'fotos' | 'operacoesCaixa' | 'modelos'
+export type TabelaDaFila = TabelaSincronizada | 'categorias' | 'produtos' | 'operacoes' | 'encerramentos' | 'fotos' | 'operacoesCaixa' | 'modelos' | 'identidadeLoja'
 
 /** Cadastro completo sujeito a LWW por registro, separado da referência derivada de compras. */
-export type ProdutoLocal = Produto & { readonly atualizadoEm: string }
+export type ProdutoLocal = Produto & {
+  readonly atualizadoEm: string
+  /** D-075: linha/captura antiga sem conhecimento do campo não pede remoção ao retomar. */
+  readonly classificacaoConhecida?: true
+}
 
 /** O servidor pode já ter aceitado a mesma confirmação sob outro id; preservar o vínculo local. */
 export type EncerramentoLocal = EncerramentoTentativa & { readonly remotoId?: Id }
@@ -137,7 +142,7 @@ export type NovoItemDaFila = Omit<ItemDaFila, 'ordem'>
 
 /** Uma linha da tabela `sincronizacao`: o cursor de download de cada tabela (D-042). */
 export type CursorDeDownload = {
-  readonly chave: TabelaSincronizada | 'categorias' | 'produtos' | 'estoque' | 'caixa'
+  readonly chave: TabelaSincronizada | 'categorias' | 'produtos' | 'estoque' | 'caixa' | 'identidadeLoja'
   /** Carimbo ISO com margem em F1/cadastros; estoque e caixa usam contador textual de commit. */
   readonly valor: string
 }
@@ -206,6 +211,12 @@ export const ESQUEMA_V6 = {
 /** E-36/D-072: somente preferência de mensagens, preservando todas as versões publicadas. */
 export const ESQUEMA_V7 = { ...ESQUEMA_V6, modelos: 'chave' } as const
 
+/** D-076: v5–v7 reservadas à F3; nova preferência é aditiva na v8. */
+export const ESQUEMA_V8 = { ...ESQUEMA_V4, identidadesLoja: 'chave' } as const
+
+/** E-28D/D-076: união explícita também cria F3 em quem já abriu F2.1/v8. */
+export const ESQUEMA_V9 = { ...ESQUEMA_V7, identidadesLoja: 'chave' } as const
+
 /**
  * A base local. `dependencias` existe para os testes injetarem um IndexedDB de mentira
  * isolado por teste (`fake-indexeddb`); em produção ninguém passa nada e o Dexie usa o do
@@ -213,6 +224,7 @@ export const ESQUEMA_V7 = { ...ESQUEMA_V6, modelos: 'chave' } as const
  * `as` e sem `!` (AGENTS.md §4).
  */
 export class BancoLocal extends Dexie {
+  readonly identidadesLoja: Table<PreferenciaIdentidadeLoja, string, PreferenciaIdentidadeLoja>
   readonly clientes: Table<ClienteLocal, Id, ClienteLocal>
   readonly lancamentos: Table<Lancamento, Id, Lancamento>
   readonly fila: Table<ItemDaFila, number, NovoItemDaFila>
@@ -247,6 +259,9 @@ export class BancoLocal extends Dexie {
     this.version(5).stores(ESQUEMA_V5)
     this.version(6).stores(ESQUEMA_V6)
     this.version(7).stores(ESQUEMA_V7)
+    this.version(8).stores(ESQUEMA_V8)
+    this.version(9).stores(ESQUEMA_V9)
+    this.identidadesLoja = this.table('identidadesLoja')
     this.clientes = this.table('clientes')
     this.lancamentos = this.table('lancamentos')
     this.fila = this.table('fila')

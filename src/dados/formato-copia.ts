@@ -10,6 +10,7 @@ import type { GrupoCaixa, OperacaoCaixaLocal, VersaoCaixa } from './tipos-caixa.
 import { LIMITE_FOTO_BYTES, LIMITE_MINIATURA_BYTES, type EnvioProdutoFoto, type EstadoFotos, type FotoLocal, type ProtecaoFotoLocal, type UsoFotoLocal } from './tipos-fotos.ts'
 import { LIMITES_COPIA, TABELAS_COPIA, type DadosCopia, type EvidenciaCopia, type TabelaCopia, type VinculoConta } from './tipos-copia.ts'
 import { preferenciaModelosValida } from './modelos-whatsapp.ts'
+import { preferenciaIdentidadeValida } from './identidade-loja.ts'
 
 /** Recusa de arquivo/preparação: códigos ficam na borda; a tela apresenta palavras próprias. */
 export class ErroCopia extends Error {
@@ -46,7 +47,8 @@ function campos(v: unknown, obrigatorios: Record<string, Guarda>, opcionais: Rec
 const ref = (v: unknown) => campos(v, { id, revisao: positivo })
 const problema = (v: unknown) => campos(v, { codigo: texto, mensagem: texto, em: instante }, { constraint: texto })
 const parcela = (v: unknown) => campos(v, { id, vencimento: dia, valor: centavos })
-const item = (v: unknown) => campos(v, { descricao: preenchido, preco: centavos },
+// D-078 conserva o histórico sem descrição; a guarda de escrita continua no domínio.
+const item = (v: unknown) => campos(v, { descricao: texto, preco: centavos },
   { id, produtoId: id, quantidade: positivo, precoUnitario: centavos }) && objetoCopia(v) &&
   (v['id'] === undefined ? v['produtoId'] === undefined && v['quantidade'] === undefined && v['precoUnitario'] === undefined
     : positivo(v['quantidade']) && centavos(v['precoUnitario']) && typeof v['preco'] === 'bigint' && typeof v['precoUnitario'] === 'bigint' &&
@@ -75,7 +77,8 @@ function lancamento(v: unknown): v is Lancamento {
 function categoria(v: unknown): v is Categoria { return campos(v, { id, nome: preenchido }) }
 function produto(v: unknown): v is ProdutoLocal {
   return campos(v, { id, nome: preenchido, categoriaId: id, atualizadoEm: instante },
-    { marca: texto, codigoCatalogo: texto, fotoId: id, custoManual: centavos, precoVenda: centavos, estoqueMinimo: inteiro })
+    { marca: texto, codigoCatalogo: texto, fotoId: id, custoManual: centavos, precoVenda: centavos, estoqueMinimo: inteiro,
+      classificacao: escolha('feminino', 'masculino', 'unissex', 'nao-se-aplica'), classificacaoConhecida: escolha(true) })
 }
 function movimento(v: unknown): v is MovimentoEstoque {
   if (!objetoCopia(v)) return false
@@ -135,10 +138,10 @@ function versaoCaixa(v: unknown): v is VersaoCaixa {
     objetoCopia(v) && grupoCaixa(v['grupo']) && v['operacaoId'] === v['grupo'].operacao.id
 }
 function fila(v: unknown): v is ItemDaFila {
-  return campos(v, { ordem: positivo, tabela: escolha('clientes', 'lancamentos', 'categorias', 'produtos', 'operacoes', 'encerramentos', 'fotos', 'operacoesCaixa', 'modelos'), registroId: id, criadoEm: instante }, { versao: inteiro, problema })
+  return campos(v, { ordem: positivo, tabela: escolha('clientes', 'lancamentos', 'categorias', 'produtos', 'operacoes', 'encerramentos', 'fotos', 'operacoesCaixa', 'modelos', 'identidadeLoja'), registroId: id, criadoEm: instante }, { versao: inteiro, problema })
 }
 function cursor(v: unknown): v is CursorDeDownload {
-  return campos(v, { chave: escolha('clientes', 'lancamentos', 'categorias', 'produtos', 'estoque', 'caixa'), valor: texto }) && objetoCopia(v) &&
+  return campos(v, { chave: escolha('clientes', 'lancamentos', 'categorias', 'produtos', 'estoque', 'caixa', 'identidadeLoja'), valor: texto }) && objetoCopia(v) &&
     (v['chave'] === 'estoque' || v['chave'] === 'caixa' ? typeof v['valor'] === 'string' && /^\d+$/.test(v['valor']) : instante(v['valor']))
 }
 function relogio(v: unknown): v is RelogioEstoque { return campos(v, { chave: escolha('cadastro'), ultimo: centavos }) }
@@ -165,8 +168,8 @@ function lerLista<T>(v: unknown, guarda: (linha: unknown) => linha is T): T[] {
   exigirCopia(Array.isArray(v))
   return v.map((linha: unknown) => { exigirCopia(guarda(linha)); return linha })
 }
-/** Decodifica explicitamente todas as tabelas v6; campos extras/segredos não passam. */
-export function dadosDaCopia(v: unknown): DadosCopia {
+/** Campos fechados por formato; leitores antigos não aceitam extensões de pacotes novos. */
+export function dadosDaCopia(v: unknown, formato: 1 | 2 | 3 = 3): DadosCopia {
   exigirCopia(objetoCopia(v) && Object.keys(v).length === TABELAS_COPIA.length && Object.keys(v).every((k) => TABELAS_COPIA.some((t) => t === k)))
   const dados: DadosCopia = { clientes: lerLista(v['clientes'], cliente), lancamentos: lerLista(v['lancamentos'], lancamento),
     fila: lerLista(v['fila'], fila), sincronizacao: lerLista(v['sincronizacao'], cursor), categorias: lerLista(v['categorias'], categoria),
@@ -175,8 +178,17 @@ export function dadosDaCopia(v: unknown): DadosCopia {
     fotos: lerLista(v['fotos'], foto), protecoesFotos: lerLista(v['protecoesFotos'], protecao), enviosProdutoFoto: lerLista(v['enviosProdutoFoto'], envio),
     usosFotos: lerLista(v['usosFotos'], uso), estadoFotos: lerLista(v['estadoFotos'], estadoFoto), fatosCaixa: lerLista(v['fatosCaixa'], fato),
     operacoesCaixa: lerLista(v['operacoesCaixa'], opCaixa), versoesCaixa: lerLista(v['versoesCaixa'], versaoCaixa), evidenciasCopia: lerLista(v['evidenciasCopia'], evidencia),
-    modelos: lerLista(v['modelos'], preferenciaModelosValida) }
-  exigirCopia(dados.modelos.length <= 1)
+    modelos: lerLista(v['modelos'], preferenciaModelosValida),
+    identidadesLoja: lerLista(v['identidadesLoja'], preferenciaIdentidadeValida) }
+  exigirCopia(dados.modelos.length <= 1 && dados.identidadesLoja.length <= 1)
+  if (formato < 3) {
+    exigirCopia(dados.identidadesLoja.length === 0 && !dados.fila.some((f) => f.tabela === 'identidadeLoja') &&
+      !dados.sincronizacao.some((c) => c.chave === 'identidadeLoja'))
+    for (const p of [...dados.produtos, ...dados.enviosProdutoFoto.map((e) => e.cadastro)]) {
+      exigirCopia(!Object.hasOwn(p, 'classificacao') && !Object.hasOwn(p, 'classificacaoConhecida'))
+    }
+  }
+  if (formato === 1) exigirCopia(dados.modelos.length === 0 && !dados.fila.some((f) => f.tabela === 'modelos'))
   validarVinculosCopia(dados)
   return dados
 }
@@ -249,7 +261,8 @@ export function validarVinculosCopia(d: DadosCopia): void {
   const ponteiros = new Set<string>()
   for (const f of d.fila) {
     exigirCopia(!ponteiros.has(`${f.tabela}/${f.registroId}`)); ponteiros.add(`${f.tabela}/${f.registroId}`)
-    exigirCopia(d[f.tabela].some((r) => 'id' in r && r.id === f.registroId) ||
+    const tabela = f.tabela === 'identidadeLoja' ? 'identidadesLoja' : f.tabela
+    exigirCopia(d[tabela].some((r) => 'id' in r && r.id === f.registroId) ||
       (f.tabela === 'operacoesCaixa' && d.versoesCaixa.some((v) => v.operacaoId === f.registroId && !!v.foraDaProjecao)) ||
       (f.tabela === 'operacoes' && d.versoesEstoque.some((v) => v.operacaoId === f.registroId)))
   }

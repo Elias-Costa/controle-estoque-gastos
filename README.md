@@ -5,7 +5,7 @@
 ## Funcionalidades
 
 - **Clientes e fichas:** cadastro e atualização de dados, consulta de saldos, histórico de movimentações e desativação ou reativação de fichas.
-- **Vendas:** registro de vendas à vista ou fiado, com descrição dos itens, preços editáveis e desconto opcional.
+- **Vendas:** registro de vendas à vista ou fiado, com descrição obrigatória dos itens, preços editáveis e desconto opcional.
 - **Parcelamento:** divisão em até seis parcelas, com valores e datas de vencimento ajustáveis.
 - **Recebimentos:** registro de pagamentos totais ou parciais, com abatimento automático das parcelas em aberto, da mais antiga para a mais recente.
 - **Cobrança:** consulta de clientes com saldo pendente, priorização por atraso e mensagens de cobrança ou recibo preparadas para envio manual pelo WhatsApp.
@@ -17,10 +17,13 @@
 
 Vendas e recebimentos podem ser registrados sem acesso à internet. As operações ficam no aparelho e são sincronizadas quando a conexão e o acesso à conta estão disponíveis. O aplicativo pode ser instalado na tela de início do celular e utilizado também no computador.
 
+Quando uma venda antiga tiver sido recusada por faltar a descrição de um item, o aviso oferece **Completar o que foi vendido**. A pessoa informa somente os nomes faltantes e confirma **Salvar e tentar enviar**. IDs, valores, datas e parcelas são preservados; o salvamento funciona offline e o envio espera a conexão. A opção só aparece quando o app confirma essa condição específica. Outros problemas continuam com a opção de relato ao mantenedor.
+
 ## Cópia em arquivo
 
 Na tela inicial, abra **Cópia das anotações**, toque em **Preparar cópia completa** e depois
-em **Salvar arquivo**. O ZIP reúne fichas, estoque, caixa, fotos, textos do WhatsApp, histórico e pendências;
+em **Salvar arquivo**. O ZIP reúne fichas, estoque, caixa, fotos, classificação dos produtos,
+identificação/logo da loja, textos do WhatsApp, histórico e pendências;
 as três consultas CSV podem ser abertas separadamente. Guarde o arquivo em local privado:
 ele contém nomes, telefones e valores, sem senha adicional. Uma preparação interrompida
 pode ser retomada nessa tela. Fotos sem original local exigem internet para completar.
@@ -57,9 +60,12 @@ A cópia usa zip.js 2.24.0; o aviso BSD-3-Clause acompanha o app em
 
 ## Estado atual
 
-Fichas e estoque estão em uso real, com entrega confirmada pelo mantenedor. Gastos, caixa
-mensal, cópia completa e modelos de WhatsApp estão em desenvolvimento na F3, sem publicação confirmada.
-Indicadores do negócio continuam previstos para a fase seguinte.
+Fichas, fiado e controle de estoque estão em uso real. A divulgação de produtos disponíveis
+por PDF para compartilhamento manual no WhatsApp foi entregue e conferida no aparelho.
+A extensão inclui classificação opcional dos produtos
+e filtros por categoria, marca e sexo. O PDF usa nome/descrição editáveis e logo opcional da
+loja, salvos offline e recuperáveis pela mesma conta. Gastos, cópia completa e modelos editáveis de mensagens
+estão em desenvolvimento separado; indicadores do negócio continuam previstos para fase futura.
 
 ## Verificação
 
@@ -82,9 +88,35 @@ suítes nem resets. `TESTE_NOME` é um filtro opcional de integração para diag
 removê-lo para executar o portão completo. Antes da publicação de caixa/F3, o mantenedor roda
 `bun run migrar` em produção: o runner aplica somente pendentes, em ordem, incluindo
 `0008_caixa` e `0009_modelos-whatsapp`, preservando os dados existentes. Modelos acrescentam
-v7 local aditiva e a 0009 deve preceder o app que os sincroniza. Só depois promove para
+v7 e a união v9 conserva tanto bases F3/v7 quanto F2.1/v8. Este checkout contém os pares
+0001–0012; 0010/0011/0012 pertencem à melhoria já entregue. O runner também encontra
+0008/0009 ausentes mesmo depois dessas migrations, sem downgrade. Todas precisam preceder
+o app F3; esta reintegração não publica a fase. Só depois dos critérios da F3 promove para
 `main`, que publica pelo deploy existente. Não reverter migrations nem limpar dados para
-atualizar o app; conferir carimbo, fichas e envios pendentes na abertura seguinte.
+atualizar o app; conferir carimbo, fichas, estoque, fotos e envios pendentes na abertura seguinte.
+
+## Contato privado para relatar problema de envio
+
+O número do mantenedor não pertence ao código, aos testes nem a variáveis VITE. Após
+aplicar 0012, o mantenedor configura o contato no SQL Editor do Supabase de produção,
+substituindo o marcador pelo número completo com país e DDD, apenas dígitos:
+
+```sql
+insert into public.contato_suporte(chave, telefone)
+values ('mantenedor', '<numero_com_pais_e_ddd>')
+on conflict (chave) do update set telefone = excluded.telefone;
+```
+
+A tabela é inacessível aos papéis do app. Só a RPC `obter_contato_suporte` pode devolver
+o número a uma sessão autenticada, e o aplicativo a chama somente ao tocar em “Relatar
+problema”. Sem cache do contato no aparelho; a busca exige conexão. O WhatsApp abre com
+o diagnóstico pronto e a pessoa confirma o envio. Abrir a conversa não marca a anotação
+como enviada nem resolve sua recusa.
+
+As suítes de integração/navegador usam temporariamente um contato fictício nos ambientes
+de teste validados e restauram a configuração anterior no encerramento, inclusive após
+falha do teste. Se a conexão impedir a restauração, o comando falha e essa configuração
+de teste precisa ser recuperada antes de outra rodada. Não configuram nem testam produção.
 
 ## Android pelo Wi-Fi nos testes
 

@@ -36,7 +36,8 @@ import { criarRepositorioEstoque } from '../dados/repositorio-estoque.ts'
 import { criarRepositorioCaixa } from '../dados/repositorio-caixa.ts'
 import { conteudoDoEfeito } from '../dominio/regras-estoque.ts'
 import { clienteDaNuvem, clienteParaNuvem, lancamentoDaNuvem, lancamentoParaNuvem, normalizarCarimbo } from './borda.ts'
-import { categoriaDaNuvem, documentoEstoque, produtoDaNuvem, recepcaoDaNuvem } from './borda-estoque.ts'
+import { categoriaDaNuvem, documentoEstoque, documentoProduto, produtoDaNuvem, recepcaoDaNuvem } from './borda-estoque.ts'
+import { produtoRecebido } from '../dados/receber-produto.ts'
 import { LINHAS_POR_PAGINA, type Falha, type LinhaRecebida, type Nuvem, type Resposta } from './nuvem.ts'
 import { aplicarRecepcaoEstoque } from './recepcao-estoque.ts'
 import { aplicarRecepcaoCaixa } from './recepcao-caixa.ts'
@@ -46,6 +47,8 @@ import { vincularContaCopia } from '../dados/repositorio-copia.ts'
 import { criarRepositorioModelos } from '../dados/repositorio-modelos.ts'
 import { modelosDaNuvem, modelosParaNuvem } from './borda-modelos.ts'
 import { aplicarModelos } from './recepcao-modelos.ts'
+import { criarRepositorioIdentidadeLoja } from '../dados/repositorio-identidade-loja.ts'
+import { aplicarIdentidadeLoja, identidadeDaNuvem, identidadeParaNuvem } from './identidade-loja.ts'
 
 /** O que o indicador mostra (RF-25) e o que o mantenedor lê no console. */
 export type EstadoDaSincronizacao = {
@@ -129,6 +132,7 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
   const { banco, nuvem } = dependencias
   const estoque = criarRepositorioEstoque(banco)
   const caixa = criarRepositorioCaixa(banco)
+  const identidadeLoja = criarRepositorioIdentidadeLoja(banco)
   const fotos = nuvem?.fotos ? criarSincronizacaoFotos(banco, nuvem, nuvem.fotos) : null
   const agora = dependencias.agora ?? (() => new Date())
   const agendar = dependencias.agendar ?? agendarPadrao
@@ -205,7 +209,7 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
     if (item.tabela === 'produtos') {
       const produto = await banco.produtos.get(item.registroId)
       if (!produto) throw new Error('Fila sem produto')
-      return fotos ? fotos.enviarProduto(produto) : nuvemLigada.enviarProduto(documentoEstoque(produto))
+      return fotos ? fotos.enviarProduto(produto) : nuvemLigada.enviarProduto(documentoProduto(produto))
     }
     if (item.tabela === 'encerramentos') {
       const encerramento = await banco.encerramentos.get(item.registroId)
@@ -258,6 +262,16 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
         if (resposta.ok) await caixa.responderEnvio(envio)
         else if (resposta.falha.tipo !== 'recusa') return resposta.falha.tipo
         else if (resposta.falha.codigo !== CHAVE_ESTRANGEIRA) await caixa.responderEnvio(envio, problemaDaFalha(resposta.falha))
+        continue
+      }
+      if (item.tabela === 'identidadeLoja') {
+        if (!nuvemLigada.identidadeLoja) continue
+        const envio = await identidadeLoja.capturarEnvio(item.registroId)
+        if (!envio) continue
+        const resposta = await nuvemLigada.identidadeLoja.enviar(identidadeParaNuvem(envio.preferencia))
+        if (resposta.ok) await identidadeLoja.responderEnvio(envio)
+        else if (resposta.falha.tipo !== 'recusa') return resposta.falha.tipo
+        else await identidadeLoja.responderEnvio(envio, problemaDaFalha(resposta.falha))
         continue
       }
       if (item.tabela === 'operacoes') {
@@ -398,13 +412,38 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
     const produtos = await baixarTabela('produtos', (desde) => fotos ? fotos.buscarProdutos(desde) : nuvemLigada.buscarProdutos(desde), 'recebido_em', async (linha) => {
       if (fotos) return fotos.receberProduto(linha)
       const produto = produtoDaNuvem(linha)
-      await banco.transaction('rw', banco.produtos, banco.categorias, async () => {
+      await banco.transaction('rw', banco.produtos, banco.categorias, banco.fila, banco.controleCopia, banco.enviosProdutoFoto, async () => {
         if (!await banco.categorias.get(produto.categoriaId)) throw new Error('Produto remoto sem categoria')
         const local = await banco.produtos.get(produto.id)
-        if (!local || local.atualizadoEm < produto.atualizadoEm) await banco.produtos.put(produto)
+        const restaurando = !!await banco.controleCopia.get('restauracao')
+        const origem = await banco.controleCopia.get(`registro:produtos/${produto.id}`)
+        const copiado = origem && 'conteudo' in origem && origem.conteudo === conteudoDoEfeito(local)
+        const remotoVence = !local || local.atualizadoEm < produto.atualizadoEm || (restaurando && copiado && local.atualizadoEm === produto.atualizadoEm)
+        await banco.produtos.put(restaurando && copiado && remotoVence ? produto : produtoRecebido(local, produto))
+        if (restaurando && remotoVence) {
+          const fila = await banco.fila.where('registroId').equals(produto.id).and((i) => i.tabela === 'produtos').first()
+          if (fila) await banco.fila.delete(fila.ordem)
+          for (const envio of await banco.enviosProdutoFoto.where('produtoId').equals(produto.id).toArray()) {
+            if (envio.cadastro.atualizadoEm <= produto.atualizadoEm) await banco.enviosProdutoFoto.delete(envio.id)
+          }
+        }
       })
     })
     if (produtos !== 'ok') return produtos
+    if (nuvemLigada.identidadeLoja) {
+      const cursor = (await banco.sincronizacao.get('identidadeLoja'))?.valor ?? null
+      const resposta = await nuvemLigada.identidadeLoja.buscar(cursor === null ? null : comMargem(cursor))
+      if (!resposta.ok) return resposta.falha.tipo === 'sessao' ? 'sessao' : 'rede'
+      if (resposta.valor.length > 1) throw new Error('Mais de uma identificação na conta')
+      const preferencias = resposta.valor.map((linha) => ({ preferencia: identidadeDaNuvem(linha),
+        recebidoEm: normalizarCarimbo('identidade.recebido_em', linha['recebido_em']) }))
+      await banco.transaction('rw', banco.identidadesLoja, banco.fila, banco.sincronizacao, banco.controleCopia, async () => {
+        for (const { preferencia, recebidoEm } of preferencias) {
+          await aplicarIdentidadeLoja(banco, preferencia)
+          if (cursor === null || recebidoEm > cursor) await banco.sincronizacao.put({ chave: 'identidadeLoja', valor: recebidoEm })
+        }
+      })
+    }
     for (;;) {
       const cursor = (await banco.sincronizacao.get('estoque'))?.valor ?? '0'
       const resposta = await nuvemLigada.buscarEstoque(cursor, LINHAS_POR_PAGINA)

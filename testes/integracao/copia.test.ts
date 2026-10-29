@@ -19,11 +19,18 @@ import { hashDaFoto } from '../../src/plataforma/fotos.ts'
 import { saldo } from '../../src/dominio/ficha.ts'
 import { projetarEstoque } from '../../src/dominio/estoque.ts'
 import { projetarCaixa } from '../../src/dominio/caixa.ts'
+import { criarRepositorioIdentidadeLoja } from '../../src/dados/repositorio-identidade-loja.ts'
+import { criarRepositorioModelos } from '../../src/dados/repositorio-modelos.ts'
+import { MODELOS_ORIGINAIS } from '../../src/dados/modelos-whatsapp.ts'
+import { pacoteSemModelos } from '../apoio-modelos.ts'
+import { criarRepositorioFotos } from '../../src/dados/fotos.ts'
+import { documentoProduto } from '../../src/sincronizacao/borda-estoque.ts'
 
 const LIGADA = process.env.INTEGRACAO === '1'
 if (LIGADA) exigirDestinoDeTeste()
 const bancos: BancoLocal[] = [], clientes: SupabaseClient[] = []
 const DIA = '2026-10-24', GRANDE = 9007199254740993n
+const LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aN1cAAAAASUVORK5CYII='
 function ok<T>(r: { ok: true; valor: T } | { ok: false; motivo: string }): T { if (!r.ok) throw new Error(r.motivo); return r.valor }
 function aparelho() { const b = new BancoLocal(uuidv7(), { indexedDB: new IDBFactory(), IDBKeyRange }); bancos.push(b); return b }
 async function ambiente() {
@@ -48,11 +55,14 @@ describe.skipIf(!LIGADA)('E-35 arquivo → base vazia → nuvem real da mesma co
     const categoria = ok(await estoque.cadastrarCategoria('Categoria da cópia'))
     const binario = new Uint8Array(await Bun.file('testes/arquivos/foto-teste.jpeg').arrayBuffer())
     const miniatura = new Uint8Array(await Bun.file('testes/arquivos/foto-teste-miniatura.jpeg').arrayBuffer())
-    const produto = ok(await estoque.cadastrarProduto({ nome: 'Produto da cópia', categoriaId: categoria.id },
+    const produto = ok(await estoque.cadastrarProduto({ nome: 'Produto da cópia', categoriaId: categoria.id, classificacao: 'unissex' },
       { binario, miniatura, sha256: await hashDaFoto(binario), largura: 768, altura: 1024 }))
     const compra = ok(await estoque.registrarMovimento({ tipo: 'compra', produtoId: produto.id, data: DIA, quantidade: 7, custoUnitario: GRANDE }))
     const caixa = criarOperacoesCaixa(criarRepositorioCaixa(a))
     const gasto = ok(await caixa.registrar({ tipo: 'despesa', data: DIA, valor: 10000n, categoria: 'Negócio', classificacao: 'negocio', mercadoria: false }))
+    const identidade = criarRepositorioIdentidadeLoja(a, () => '2026-10-29T12:00:00.000Z')
+    await identidade.salvar({ nome: 'Identidade da cópia', descricao: '', logo: LOGO }, undefined)
+    await criarRepositorioModelos(a).salvar(MODELOS_ORIGINAIS, undefined)
     const primeira = await ciclo(a, { ...nuvem, enviarLancamento: async (l) => {
       const r = await nuvem.enviarLancamento(l)
       if (r.ok && l.id === venda.id) return { ok: false, falha: { tipo: 'rede', mensagem: 'resposta perdida após commit real' } }
@@ -61,6 +71,8 @@ describe.skipIf(!LIGADA)('E-35 arquivo → base vazia → nuvem real da mesma co
     expect(primeira.ultimaFalha).toBe('rede')
     const copia = await criarServicoCopia(a, nuvem).exportar()
     expect((await ciclo(a, nuvem)).ultimaFalha).toBeNull()
+    await identidade.salvar({ nome: 'Identidade mais nova com relógio igual', descricao: 'Servidor', logo: LOGO }, await identidade.ler())
+    ok(await estoque.alterarProduto({ ...produto, classificacao: undefined }))
     const cadastro = await a.clientes.get(c.id); if (!cadastro) throw new Error('Cadastro ausente')
     await repo.gravarCliente({ ...cadastro, nome: 'Nome mais novo na conta' })
     const movimento = compra.movimentos[0]; if (!movimento) throw new Error('Compra ausente')
@@ -72,13 +84,21 @@ describe.skipIf(!LIGADA)('E-35 arquivo → base vazia → nuvem real da mesma co
     const antes = await cliente.from('lancamentos').select('id')
     const b = aparelho(), servico = criarServicoCopia(b, nuvem), reserva = await servico.reservarImportacao()
     await servico.importar(copia.arquivo, reserva)
-    let reenviosF1 = 0, reenviosGrupo = 0, reenviosCaixa = 0
+    let reenviosF1 = 0, reenviosGrupo = 0, reenviosCaixa = 0, reenviosIdentidade = 0
+    const transporteIdentidade = nuvem.identidadeLoja; if (!transporteIdentidade) throw new Error('sem identidade')
     const observada: Nuvem = { ...nuvem,
       enviarLancamento: async (l) => { reenviosF1++; return nuvem.enviarLancamento(l) },
       enviarGrupo: async (...args) => { reenviosGrupo++; return nuvem.enviarGrupo(...args) },
-      enviarCaixa: async (g) => { reenviosCaixa++; return nuvem.enviarCaixa(g) } }
+      enviarCaixa: async (g) => { reenviosCaixa++; return nuvem.enviarCaixa(g) },
+      identidadeLoja: { ...transporteIdentidade, enviar: async (p) => { reenviosIdentidade++; return transporteIdentidade.enviar(p) } } }
     expect((await ciclo(b, observada)).ultimaFalha).toBeNull()
     expect(reenviosF1).toBe(0); expect(reenviosGrupo).toBe(0); expect(reenviosCaixa).toBe(0)
+    expect(reenviosIdentidade).toBe(0)
+    expect(await b.identidadesLoja.toArray()).toEqual(await a.identidadesLoja.toArray())
+    expect((await b.identidadesLoja.get('loja'))?.identidade.logo).toBe(LOGO)
+    expect(await b.modelos.toArray()).toEqual(await a.modelos.toArray())
+    expect(await b.produtos.get(produto.id)).toMatchObject({ classificacaoConhecida: true })
+    expect((await b.produtos.get(produto.id))?.classificacao).toBeUndefined()
     expect((await b.clientes.get(c.id))?.nome).toBe('Nome mais novo na conta')
     expect(saldo(await criarRepositorioLocal(b).lerFicha(c.id))).toBe(GRANDE)
     expect(projetarEstoque(await b.movimentos.toArray(), produto.id)).toMatchObject({ ok: true, valor: { fisico: 9 } })
@@ -139,6 +159,51 @@ describe.skipIf(!LIGADA)('E-35 arquivo → base vazia → nuvem real da mesma co
     expect(await b.fila.where('registroId').equals(tentativa.operacao.id).count()).toBe(1)
     const novaCopia = await criarServicoCopia(b, nuvem).exportar()
     expect(novaCopia.arquivo.size).toBeGreaterThan(0)
+  }, 120_000)
+
+  test('leitor antigo recebe identidade da conta; cópia nova reenvia remoção e captura legada sem fotos nem duplicação', async () => {
+    const { nuvem, cliente } = await ambiente(), a = aparelho(), repo = criarRepositorioLocal(a)
+    const c = ok(await cadastrarCliente(repo, { nome: 'Arquivo anterior à melhoria' }))
+    ok(await lancarVendaFiado(repo, { clienteId: c.id, data: DIA, itens: [{ descricao: 'Antes da melhoria', preco: GRANDE }], parcelas: [{ vencimento: DIA, valor: GRANDE }] }))
+    const original = await criarServicoCopia(a, nuvem).exportar(), antigo = await pacoteSemModelos(original.arquivo, true)
+    const estoque = criarOperacoesEstoque(criarRepositorioEstoque(a))
+    const categoria = ok(await estoque.cadastrarCategoria('Sem foto E-28D'))
+    const produto = ok(await estoque.cadastrarProduto({ nome: 'Sem foto E-28D', categoriaId: categoria.id, classificacao: 'unissex' }))
+    await criarRepositorioIdentidadeLoja(a).salvar({ nome: 'Identidade da conta para arquivo antigo', descricao: '', logo: LOGO }, undefined)
+    await criarRepositorioModelos(a).salvar(MODELOS_ORIGINAIS, undefined)
+    expect((await ciclo(a, nuvem)).ultimaFalha).toBeNull()
+    const b = aparelho(), servicoB = criarServicoCopia(b, nuvem)
+    await servicoB.importar(antigo, await servicoB.reservarImportacao())
+    expect(await b.identidadesLoja.count()).toBe(0); expect(await b.modelos.count()).toBe(0)
+    const { fotos: _fotos, ...semFotos } = nuvem
+    expect((await ciclo(b, semFotos)).ultimaFalha).toBeNull()
+    expect(await b.identidadesLoja.toArray()).toEqual(await a.identidadesLoja.toArray())
+    expect(await b.modelos.toArray()).toEqual(await a.modelos.toArray())
+    expect(await b.fila.count()).toBe(0)
+    const cadastro = await b.produtos.get(produto.id); if (!cadastro) throw new Error('sem produto')
+    const { classificacao: _classificacao, classificacaoConhecida: _conhecida, ...legado } = cadastro
+    const captura = await criarRepositorioFotos(b).capturarProduto(legado)
+    const operacoes = criarOperacoesEstoque(criarRepositorioEstoque(b))
+    ok(await operacoes.alterarProduto({ ...cadastro, classificacao: undefined }))
+    const preferencia = criarRepositorioIdentidadeLoja(b)
+    await preferencia.salvar({ nome: 'Identidade pendente da cópia nova', descricao: '', logo: LOGO }, await preferencia.ler())
+    const nova = await servicoB.exportar(), destino = aparelho(), servico = criarServicoCopia(destino, semFotos)
+    await servico.importar(nova.arquivo, await servico.reservarImportacao())
+    const capturaRestaurada = await destino.enviosProdutoFoto.get(captura.id)
+    if (!capturaRestaurada) throw new Error('captura perdida')
+    expect(Object.hasOwn(documentoProduto(capturaRestaurada.cadastro), 'classificacao')).toBe(false)
+    let identidadesEnviadas = 0, produtosEnviados = 0
+    const transporte = semFotos.identidadeLoja; if (!transporte) throw new Error('sem identidade')
+    const observada: Nuvem = { ...semFotos,
+      identidadeLoja: { ...transporte, enviar: async (p) => { identidadesEnviadas++; return transporte.enviar(p) } },
+      enviarProduto: async (p) => { produtosEnviados++; return semFotos.enviarProduto(p) } }
+    expect((await ciclo(destino, observada)).ultimaFalha).toBeNull()
+    expect((await ciclo(destino, observada)).ultimaFalha).toBeNull()
+    expect(identidadesEnviadas).toBe(1); expect(produtosEnviados).toBe(1)
+    expect(await destino.fila.count()).toBe(0)
+    expect((await cliente.from('produtos').select('classificacao').eq('id', produto.id)).data).toEqual([{ classificacao: null }])
+    expect((await destino.identidadesLoja.get('loja'))?.identidade.nome).toBe('Identidade pendente da cópia nova')
+    expect(saldo(await destino.lancamentos.toArray())).toBe(GRANDE)
   }, 120_000)
 
   test('colisão F1 preserva tentativa do arquivo e usa aceite, sem sobrescrita remota', async () => {

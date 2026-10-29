@@ -1,6 +1,6 @@
 import type { ParcelaNova } from '../dados/operacoes.ts'
 import { emReais, lerDinheiro, repartir, somar, type Centavos } from '../dominio/dinheiro.ts'
-import type { Dia, FormaDePagamento, ItemVenda, Parcela, Venda } from '../dominio/ficha.ts'
+import { descricaoDoItemPreenchida, type Dia, type FormaDePagamento, type ItemVenda, type Parcela, type Venda } from '../dominio/ficha.ts'
 import { mesesDepois } from './datas.ts'
 
 /**
@@ -57,6 +57,7 @@ export type ParcelaMontada = {
 export type Guarda =
   | 'sem-valor'
   | 'falta-preco'
+  | 'falta-descricao'
   | 'preco-ilegivel'
   | 'desconto-ilegivel'
   | 'desconto-maior'
@@ -132,6 +133,7 @@ export function conferir(rascunho: Rascunho, hoje: Dia): Conferencia {
 
   const preenchidos = itens.filter((item) => !item.vazio)
   for (const item of preenchidos) {
+    if (!descricaoDoItemPreenchida(item.descricao)) guardas.push('falta-descricao')
     if (item.preco === null) guardas.push(item.semPreco ? 'falta-preco' : 'preco-ilegivel')
   }
   const itensDaVenda: ItemVenda[] = preenchidos.flatMap((item) => (item.preco === null ? [] : [{ descricao: item.descricao, preco: item.preco }]))

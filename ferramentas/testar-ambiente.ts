@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { exigirDestinoDeTeste } from '../nuvem/ambiente-de-teste.ts'
 import { PROJETO_DE_HOMOLOGACAO } from '../nuvem/destinos-de-teste.ts'
 import { criarContaFicticia } from './conta-ficticia.ts'
+import { comContatoFicticio } from './contato-ficticio.ts'
 
 // D-050: o local não herda credenciais de produção, mesmo que o shell já as tenha carregado.
 const CAMPOS = ['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY', 'SUPABASE_DB_URL', 'SUPABASE_TESTE_EMAIL', 'SUPABASE_TESTE_SENHA']
@@ -135,13 +136,13 @@ async function principal(): Promise<void> {
   await executar(['run', 'typecheck'])
   if (acao === 'integracao') {
     process.env.INTEGRACAO = '1'
-    await executar(['test', '--timeout', '60000', 'testes/integracao',
-      ...(process.env.TESTE_NOME ? ['--test-name-pattern', process.env.TESTE_NOME] : [])])
+    await comContatoFicticio(() => executar(['test', '--timeout', '60000', 'testes/integracao',
+      ...(process.env.TESTE_NOME ? ['--test-name-pattern', process.env.TESTE_NOME] : [])]))
     return
   }
   process.env.VITE_LABORATORIO = '1'
   await executar(['x', '--no-install', 'vite', 'build', '--outDir', 'dist-laboratorio'])
-  if (acao === 'navegador') await executar(['x', '--no-install', 'playwright', 'test'])
+  if (acao === 'navegador') await comContatoFicticio(() => executar(['x', '--no-install', 'playwright', 'test']))
 }
 
 if (import.meta.main) {
