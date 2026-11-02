@@ -1,4 +1,5 @@
 import { RodapeDeAcoes } from './rodape-de-acoes.tsx'
+import { AvisosDoFormulario } from './avisos-do-formulario.tsx'
 import { useEffect, useState } from 'react'
 import { repositorio } from '../dados/instancia.ts'
 import { corrigirSaldoAnterior, lancarSaldoAnterior } from '../dados/operacoes.ts'
@@ -9,7 +10,7 @@ import { Campo } from './Campo.tsx'
 import { CampoDeDinheiro } from './CampoDeDinheiro.tsx'
 import { hoje } from './datas.ts'
 import { PALAVRAS } from './palavras-da-ficha.ts'
-import { fraseDaRecusa } from './palavras-da-venda.ts'
+import { fraseDaRecusa, PALAVRAS_DA_VENDA } from './palavras-da-venda.ts'
 import { fraseDaGuardaDoSaldoAnterior, PALAVRAS_DO_SALDO_ANTERIOR, tituloDoSaldoAnterior } from './palavras-do-saldo-anterior.ts'
 import { Parcelas } from './Parcelas.tsx'
 import { parcelasCorrigidas, type EdicaoDeParcela } from './rascunho-da-venda.ts'
@@ -110,7 +111,7 @@ function Formulario({
   const completo: RascunhoDoSaldoAnterior = { ...rascunho, venceEm: venceEmEditado ?? rascunho.desde }
   const conferencia = conferirSaldoAnterior(completo, dia)
   const frases = conferencia.guardas
-    .map((guarda) => fraseDaGuardaDoSaldoAnterior(guarda, somar(conferencia.parcelas.map((parcela) => parcela.valor)), conferencia.valor))
+    .map((guarda) => guarda === 'parcelas-nao-fecham' ? PALAVRAS_DA_VENDA.conferirParcelas : fraseDaGuardaDoSaldoAnterior(guarda, somar(conferencia.parcelas.map((parcela) => parcela.valor)), conferencia.valor))
     .filter((frase): frase is string => frase !== null)
   const podeGravar = conferencia.guardas.length === 0 && !gravando
 
@@ -167,18 +168,8 @@ function Formulario({
         aoMudar={mudar}
       />
 
-      {(frases.length > 0 || erro !== null) && (
-        <div className="mt-4">
-          {frases.map((frase) => (
-            <p key={frase} className="m-0 font-semibold text-atraso">
-              {frase}
-            </p>
-          ))}
-          {erro !== null && <p className="m-0 font-semibold text-atraso">{erro}</p>}
-        </div>
-      )}
-
       <RodapeDeAcoes>
+        <AvisosDoFormulario frases={frases} erro={erro} />
         <Botao tipo="principal" aoTocar={() => void gravar()} desabilitado={!podeGravar}>
           {PALAVRAS_DO_SALDO_ANTERIOR.pronto}
         </Botao>
@@ -213,6 +204,8 @@ export function CamposDoSaldoAnterior({
   aoMudar: (mudanca: Partial<RascunhoDoSaldoAnterior>) => void
 }) {
   const temValor = conferencia.valor > 0n
+  const guardaDasParcelas = conferencia.guardas.find(g => g === 'parcela-ilegivel' || g === 'parcelas-nao-fecham')
+  const avisoDasParcelas = guardaDasParcelas ? fraseDaGuardaDoSaldoAnterior(guardaDasParcelas, somar(conferencia.parcelas.map(p => p.valor)), conferencia.valor) ?? undefined : undefined
 
   function mudarParcela(posicao: number, mudanca: EdicaoDeParcela): void {
     const edicoes = Array.from({ length: rascunho.vezes }, (_, i) => rascunho.edicoes[i] ?? {})
@@ -232,6 +225,7 @@ export function CamposDoSaldoAnterior({
             parcelas={conferencia.parcelas}
             edicoes={rascunho.edicoes}
             lista={rascunho.vezes > 1 && conferencia.parcelas.length > 0}
+            aviso={avisoDasParcelas}
             // Mudar o número de vezes recomeça a divisão do zero (D-045): as edições anteriores não fazem sentido em outra contagem.
             aoMudarVezes={(vezes) => aoMudar({ vezes, edicoes: [] })}
             aoMudarParcela={mudarParcela}

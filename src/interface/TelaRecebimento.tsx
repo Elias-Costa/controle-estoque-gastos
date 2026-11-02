@@ -1,4 +1,5 @@
 import { RodapeDeAcoes } from './rodape-de-acoes.tsx'
+import { AvisosDoFormulario } from './avisos-do-formulario.tsx'
 import { useEffect, useState } from 'react'
 import { repositorio } from '../dados/instancia.ts'
 import { corrigirLancamento, receber } from '../dados/operacoes.ts'
@@ -202,18 +203,8 @@ function Formulario({
         </button>
       )}
 
-      {(frases.length > 0 || erro !== null) && (
-        <div className="mt-4">
-          {frases.map((frase) => (
-            <p key={frase} className="m-0 font-semibold text-atraso">
-              {frase}
-            </p>
-          ))}
-          {erro !== null && <p className="m-0 font-semibold text-atraso">{erro}</p>}
-        </div>
-      )}
-
       <RodapeDeAcoes>
+        <AvisosDoFormulario frases={frases} erro={erro} />
         <Botao tipo="principal" aoTocar={() => void gravar()} desabilitado={!podeGravar}>
           {PALAVRAS_DO_RECEBIMENTO.confirmar}
         </Botao>

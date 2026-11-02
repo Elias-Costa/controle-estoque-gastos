@@ -5,9 +5,11 @@ import { cadastrarCliente, lancarSaldoAnterior } from '../dados/operacoes.ts'
 import { somar } from '../dominio/dinheiro.ts'
 import type { Dia, Id } from '../dominio/ficha.ts'
 import { Botao } from './Botao.tsx'
+import { AvisosDoFormulario } from './avisos-do-formulario.tsx'
 import { Campo } from './Campo.tsx'
 import { hoje } from './datas.ts'
 import { PALAVRAS } from './palavras-da-ficha.ts'
+import { PALAVRAS_DA_VENDA } from './palavras-da-venda.ts'
 import { fraseDaGuardaDoSaldoAnterior } from './palavras-do-saldo-anterior.ts'
 import { conferirSaldoAnterior, type RascunhoDoSaldoAnterior } from './rascunho-do-saldo-anterior.ts'
 import { MAXIMO_DE_VEZES } from './Opcoes.tsx'
@@ -64,7 +66,7 @@ export function TelaCadastro({
   // Sem valor (ou zero) é "não deve nada": cadastro sem saldo anterior, permitido. Qualquer outra guarda trava.
   const temSaldoAnterior = !conferencia.guardas.includes('sem-valor')
   const frases = conferencia.guardas
-    .map((guarda) => fraseDaGuardaDoSaldoAnterior(guarda, somar(conferencia.parcelas.map((parcela) => parcela.valor)), conferencia.valor))
+    .map((guarda) => guarda === 'parcelas-nao-fecham' ? PALAVRAS_DA_VENDA.conferirParcelas : fraseDaGuardaDoSaldoAnterior(guarda, somar(conferencia.parcelas.map((parcela) => parcela.valor)), conferencia.valor))
     .filter((frase): frase is string => frase !== null)
   const podeGravar = nome.trim() !== '' && (!temSaldoAnterior || conferencia.guardas.length === 0) && !gravando
 
@@ -112,25 +114,15 @@ export function TelaCadastro({
     <main className="tela">
       <Topo titulo={PALAVRAS.cadastro.titulo} aoVoltar={aoVoltar} />
 
-      <Campo rotulo={PALAVRAS.cadastro.nome} valor={nome} aoMudar={setNome} autoFoco />
+      <Campo rotulo={PALAVRAS.cadastro.nome} valor={nome} aoMudar={setNome} autoFoco obrigatorio orientacao={PALAVRAS.cadastro.nomeObrigatorio} />
       <Campo rotulo={PALAVRAS.cadastro.telefone} valor={telefone} aoMudar={setTelefone} tipo="tel" />
       <Campo rotulo={PALAVRAS.cadastro.apelido} valor={apelido} aoMudar={setApelido} exemplo={PALAVRAS.cadastro.apelidoExemplo} />
       <Campo rotulo={PALAVRAS.cadastro.observacao} valor={observacao} aoMudar={setObservacao} multilinha />
 
       <CamposDoSaldoAnterior rotuloDoValor={PALAVRAS.cadastro.jaMeDeve} rascunho={rascunho} conferencia={conferencia} maximoDeVezes={MAXIMO_DE_VEZES} aoMudar={mudarSaldo} />
 
-      {(frases.length > 0 || erro !== null) && (
-        <div className="mt-4">
-          {frases.map((frase) => (
-            <p key={frase} className="m-0 font-semibold text-atraso">
-              {frase}
-            </p>
-          ))}
-          {erro !== null && <p className="m-0 font-semibold text-atraso">{erro}</p>}
-        </div>
-      )}
-
       <RodapeDeAcoes>
+        <AvisosDoFormulario frases={nome.trim() === '' ? [PALAVRAS.cadastro.faltaONome, ...frases] : frases} erro={erro} />
         <Botao tipo="principal" aoTocar={() => void gravar()} desabilitado={!podeGravar}>
           {PALAVRAS.cadastro.pronto}
         </Botao>

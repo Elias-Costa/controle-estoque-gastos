@@ -21,6 +21,8 @@ export function CampoDeDinheiro({
   aoMudar,
   selecionarAoFocar = false,
   permitirZero = false,
+  descritoPor,
+  invalido,
 }: {
   rotulo: string
   texto: string
@@ -29,6 +31,8 @@ export function CampoDeDinheiro({
   selecionarAoFocar?: boolean
   /** Cadastro de produto aceita zero conhecido/gratuito, diferente do campo vazio (D-055). */
   permitirZero?: boolean
+  descritoPor?: string
+  invalido?: boolean
 }) {
   const id = useId()
   return (
@@ -43,6 +47,8 @@ export function CampoDeDinheiro({
           aoMudar={aoMudar}
           selecionarAoFocar={selecionarAoFocar}
           permitirZero={permitirZero}
+          descritoPor={descritoPor}
+          invalido={invalido}
         />
       </div>
     </>
@@ -65,6 +71,8 @@ export function EntradaDeDinheiro({
   rotuloAcessivel,
   selecionarAoFocar = false,
   permitirZero = false,
+  descritoPor,
+  invalido,
 }: {
   texto: string
   aoMudar: (texto: string) => void
@@ -74,6 +82,8 @@ export function EntradaDeDinheiro({
   rotuloAcessivel?: string
   selecionarAoFocar?: boolean
   permitirZero?: boolean
+  descritoPor?: string
+  invalido?: boolean
 }) {
   function caretNoFim(evento: MouseEvent<HTMLInputElement>): void {
     const campo = evento.currentTarget
@@ -89,6 +99,8 @@ export function EntradaDeDinheiro({
       autoComplete="off"
       placeholder={exemplo}
       aria-label={rotuloAcessivel}
+      aria-describedby={descritoPor}
+      aria-invalid={invalido || undefined}
       value={texto}
       onChange={(evento) => {
         const tipoEntrada = 'inputType' in evento.nativeEvent ? evento.nativeEvent.inputType : ''

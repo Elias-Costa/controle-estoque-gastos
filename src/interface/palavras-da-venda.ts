@@ -33,6 +33,8 @@ export const PALAVRAS_DA_VENDA = {
   dinheiro: 'Dinheiro',
   emQuantasVezes: 'Em quantas vezes',
   mudarParcelas: 'Mudar datas ou valores',
+  /** Resumo proposto em UX-02; a conta completa fica junto das parcelas. */
+  conferirParcelas: 'Confira as parcelas.',
   quandoFoi: 'Quando foi',
   hoje: 'Hoje',
   ontem: 'Ontem',

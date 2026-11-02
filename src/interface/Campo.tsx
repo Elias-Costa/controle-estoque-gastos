@@ -39,6 +39,10 @@ export function Campo({
   exemplo,
   autoFoco = false,
   multilinha = false,
+  orientacao,
+  descritoPor,
+  invalido,
+  obrigatorio = false,
 }: {
   rotulo: string
   valor: string
@@ -47,14 +51,23 @@ export function Campo({
   exemplo?: string
   autoFoco?: boolean
   multilinha?: boolean
+  orientacao?: string
+  descritoPor?: string
+  invalido?: boolean
+  obrigatorio?: boolean
 }) {
   const id = useId()
+  const orientacaoId = `${id}-orientacao`
+  const descricao = [orientacao ? orientacaoId : undefined, descritoPor].filter(Boolean).join(' ') || undefined
   return (
     <>
       <Rotulo para={id}>{rotulo}</Rotulo>
       {multilinha ? (
         <textarea
           id={id}
+          aria-describedby={descricao}
+          aria-invalid={invalido || undefined}
+          required={obrigatorio}
           className={`${CLASSES_DE_CAMPO} py-3`}
           rows={2}
           value={valor}
@@ -63,6 +76,9 @@ export function Campo({
       ) : (
         <input
           id={id}
+          aria-describedby={descricao}
+          aria-invalid={invalido || undefined}
+          required={obrigatorio}
           className={CLASSES_DE_CAMPO}
           type={TIPO_DO_INPUT[tipo]}
           inputMode={tipo === 'tel' ? 'tel' : tipo === 'email' ? 'email' : undefined}
@@ -74,6 +90,7 @@ export function Campo({
           autoFocus={autoFoco}
         />
       )}
+      {orientacao && <p id={orientacaoId} className={`mt-1 mb-0 text-[1rem] ${invalido ? 'font-semibold text-atraso' : 'text-suave'}`}>{orientacao}</p>}
     </>
   )
 }

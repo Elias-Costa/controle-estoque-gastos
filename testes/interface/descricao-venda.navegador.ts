@@ -29,7 +29,7 @@ for (const c of [{ nome: '320 ampliado', largura: 320, ampliado: true, tema: 'li
     await page.getByRole('button', { name: 'Pronto', exact: true }).click()
     await page.getByRole('button', { name: 'Vender fiado', exact: true }).click()
     await page.getByLabel('Preço unitário 1', { exact: true }).fill('1000')
-    await expect(page.getByText('Informe o que foi vendido em cada item', { exact: true })).toBeVisible()
+    await expect(page.getByLabel('Item 1', { exact: true })).toHaveAccessibleDescription('Informe o que foi vendido em cada item')
     await expect(page.getByRole('button', { name: 'Pronto', exact: true })).toBeDisabled()
     await page.getByLabel('Item 1', { exact: true }).fill('   ')
     await expect(page.getByRole('button', { name: 'Pronto', exact: true })).toBeDisabled()

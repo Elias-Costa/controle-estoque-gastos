@@ -26,6 +26,8 @@ export const PALAVRAS = {
   oQueAconteceu: 'O que aconteceu',
   nadaAnotado: 'Nada anotado ainda',
   voltar: 'Voltar',
+  /** Proposta de orientação de UX-02; não foi observada com a usuária. */
+  conferirPreenchimento: 'Confira o preenchimento para continuar.',
   /** A base local não respondeu (EL-06): dito com palavras dela, sem tela de erro técnica. */
   naoDeuParaAbrir: 'Não deu para abrir as fichinhas. Feche o aplicativo e abra de novo.',
   /** O que foi desfeito fica sob um toque (D-050, item 1); "Esconder" é o mesmo lugar, invertido. */
@@ -39,6 +41,8 @@ export const PALAVRAS = {
   cadastro: {
     titulo: 'Nova fichinha',
     nome: 'Nome',
+    /** Proposta de UX-02 que explicita RF-01, sem criar outra exigência. */
+    nomeObrigatorio: 'Só o nome é obrigatório.',
     telefone: 'Telefone',
     apelido: 'Apelido',
     apelidoExemplo: 'do salão, vizinha do 302',

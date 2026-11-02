@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import type { CatalogoProdutos, EstadoLocalEstoque } from '../dados/repositorio-estoque.ts'
 import { emReais } from '../dominio/dinheiro.ts'
 import { Botao } from './Botao.tsx'
@@ -6,6 +6,7 @@ import { CLASSES_DE_CAMPO, CLASSES_DE_CAMPO_COMPACTO } from './Campo.tsx'
 import { EntradaDeDinheiro } from './CampoDeDinheiro.tsx'
 import { lerProdutos, rotuloDaCategoria } from './leitura-de-produtos.ts'
 import { MiniaturaProduto } from './miniatura-produto.tsx'
+import { fraseDaGuarda } from './palavras-da-venda.ts'
 import { conferirVendaComEstoque, disponibilidade, selecionarProduto, type ItemComEstoque, type RascunhoComEstoque } from './venda-com-estoque.ts'
 
 /** Itens livres ou do catálogo; a escolha não exige cadastro nem rede (RF-03/04/25). */
@@ -15,6 +16,7 @@ export function ItensDaVenda({ rascunho, estado, catalogo, aoMudar, correcao = f
 }) {
   const [escolhendo, setEscolhendo] = useState<number | null>(null)
   const [busca, setBusca] = useState('')
+  const id = useId()
   const conferencia = conferirVendaComEstoque(rascunho, estado, rascunho.data)
   function mudar(posicao: number, mudanca: Partial<ItemComEstoque>) {
     aoMudar(rascunho.itens.map((item, i) => i === posicao ? { ...item, ...mudanca } : item))
@@ -23,13 +25,23 @@ export function ItensDaVenda({ rascunho, estado, catalogo, aoMudar, correcao = f
     [produto.nome, produto.marca, produto.codigoCatalogo, categoria.nome].some((s) => s?.toLocaleLowerCase('pt-BR').includes(busca.trim().toLocaleLowerCase('pt-BR'))))
   return <>
     <ul className="m-0 mt-2 list-none p-0" aria-label="Itens da venda">
-      {rascunho.itens.map((item, i) => <li key={i} className="mb-4 border-b border-borda pb-3" data-item-venda={i}>
+      {rascunho.itens.map((item, i) => {
+        // A conferência existente decide se a linha está vazia; a tela só associa suas guardas (D-078).
+        const lido = conferencia.itens[i]
+        const descricao = lido && !lido.vazio && lido.descricao === '' ? fraseDaGuarda('falta-descricao', conferencia.total, conferencia.total) : null
+        const preco = lido && !lido.vazio && lido.preco === null ? fraseDaGuarda(lido.semPreco ? 'falta-preco' : 'preco-ilegivel', conferencia.total, conferencia.total) : null
+        const descricaoId = `${id}-descricao-${i}`, precoId = `${id}-preco-${i}`
+        return <li key={i} className="mb-4 border-b border-borda pb-3" data-item-venda={i}>
         <div className="flex flex-wrap gap-2">
           <input className={`${CLASSES_DE_CAMPO} min-w-0 flex-1 basis-36`} type="text" autoComplete="off" placeholder="O que levou" aria-label={`Item ${i + 1}`} autoFocus={!correcao && i === 0}
+            aria-describedby={descricao ? descricaoId : undefined} aria-invalid={descricao ? true : undefined}
             value={item.descricao} onChange={(e) => mudar(i, { descricao: e.target.value })} />
           <EntradaDeDinheiro className={`${CLASSES_DE_CAMPO_COMPACTO} w-[6.5rem] flex-none text-right tabular-nums`}
-            texto={item.precoTexto} aoMudar={(precoTexto) => mudar(i, { precoTexto })} exemplo="0,00" rotuloAcessivel={`Preço unitário ${i + 1}`} permitirZero />
+            texto={item.precoTexto} aoMudar={(precoTexto) => mudar(i, { precoTexto })} exemplo="0,00" rotuloAcessivel={`Preço unitário ${i + 1}`} permitirZero
+            descritoPor={preco ? precoId : undefined} invalido={!!preco} />
         </div>
+        {descricao && <p id={descricaoId} className="my-1 text-[1rem] font-semibold text-atraso">{descricao}</p>}
+        {preco && <p id={precoId} className="my-1 text-[1rem] font-semibold text-atraso">{preco}</p>}
         {!legada && <button type="button" className="min-h-11 border-0 bg-transparent px-0 text-left text-acento underline"
           onClick={() => { setEscolhendo(i); setBusca('') }}>{item.produtoId ? 'Mudar produto' : 'Escolher produto'}</button>}
         {item.produtoId && <button type="button" className="ml-3 min-h-11 border-0 bg-transparent px-0 text-acento underline"
@@ -42,7 +54,7 @@ export function ItensDaVenda({ rascunho, estado, catalogo, aoMudar, correcao = f
         </div>}
         {item.produtoId && <p className="my-1 text-sm text-suave">Disponível: {disponibilidade(estado, item.produtoId).disponivel}
           {!correcao && ` · A entregar: ${conferencia.linhas[i]?.pendente ?? 0}`}</p>}
-      </li>)}
+      </li>})}
     </ul>
     {(!correcao || legada) && <Botao tipo="secundario" aoTocar={() => aoMudar([...rascunho.itens, { descricao: '', precoTexto: '' }])}>+ Mais um</Botao>}
     {escolhendo !== null && <section aria-label="Escolher produto" className="my-4 rounded-xl border border-borda bg-papel p-3">

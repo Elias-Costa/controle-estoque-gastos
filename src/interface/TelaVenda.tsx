@@ -1,4 +1,5 @@
 import { RodapeDeAcoes } from './rodape-de-acoes.tsx'
+import { AvisosDoFormulario } from './avisos-do-formulario.tsx'
 import { useEffect, useState } from 'react'
 import { repositorio, repositorioEstoque, operacoesEstoque } from '../dados/instancia.ts'
 import type { CatalogoProdutos, EstadoLocalEstoque } from '../dados/repositorio-estoque.ts'
@@ -152,9 +153,11 @@ function Formulario({
   const data: Dia = diaDoQuando(quando, dia)
   const conferencia = conferirVendaComEstoque({ ...rascunho, data }, estado, dia)
   const frases = conferencia.guardas
-    .map((guarda) => fraseDaGuarda(guarda, somaDasParcelas(conferencia.parcelas), conferencia.total))
+    .map((guarda) => guarda === 'parcelas-nao-fecham' ? PALAVRAS_DA_VENDA.conferirParcelas : fraseDaGuarda(guarda, somaDasParcelas(conferencia.parcelas), conferencia.total))
     .filter((frase): frase is string => frase !== null)
   const podeGravar = conferencia.guardas.length === 0 && !conferencia.erro && !gravando && cliente.desativadoEm === undefined
+  const guardaDasParcelas = conferencia.guardas.find(g => g === 'parcela-ilegivel' || g === 'parcelas-nao-fecham')
+  const avisoDasParcelas = guardaDasParcelas ? fraseDaGuarda(guardaDasParcelas, somaDasParcelas(conferencia.parcelas), conferencia.total) ?? undefined : undefined
   const originalF2 = original !== undefined && ehVendaEstoque(original)
   const entregas = originalF2 ? [...new Set(original.itens.flatMap((i) => i.produtoId ? [i.produtoId] : []))].flatMap((id) => {
     const p = projetarEstoque(estado.movimentos, id)
@@ -299,6 +302,7 @@ function Formulario({
           parcelas={conferencia.parcelas}
           edicoes={rascunho.edicoes}
           lista={conferencia.total > 0n}
+          aviso={avisoDasParcelas}
           // Mudar o número de vezes recomeça a divisão do zero (D-045): as edições anteriores não fazem sentido em outra contagem.
           aoMudarVezes={(vezes) => mudar({ vezes, edicoes: [] })}
           aoMudarParcela={mudarParcela}
@@ -307,19 +311,8 @@ function Formulario({
 
       <QuandoFoi rotulo={PALAVRAS_DA_VENDA.quandoFoi} quando={quando} hoje={dia} aoMudar={setQuando} />
 
-      {(frases.length > 0 || conferencia.erro || erro !== null) && (
-        <div className="mt-4">
-          {frases.map((frase) => (
-            <p key={frase} className="m-0 font-semibold text-atraso">
-              {frase}
-            </p>
-          ))}
-          {erro !== null && <p className="m-0 font-semibold text-atraso">{erro}</p>}
-          {conferencia.erro && <p className="m-0 font-semibold text-atraso">{conferencia.erro}</p>}
-        </div>
-      )}
-
       <RodapeDeAcoes>
+        <AvisosDoFormulario frases={conferencia.erro ? [...frases, conferencia.erro] : frases} erro={erro} />
         <Botao tipo="principal" aoTocar={() => void gravar()} desabilitado={!podeGravar}>
           {PALAVRAS_DA_VENDA.pronto}
         </Botao>

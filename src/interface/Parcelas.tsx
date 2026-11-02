@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { emReais } from '../dominio/dinheiro.ts'
 import { CLASSES_DE_CAMPO, CLASSES_DE_CAMPO_COMPACTO } from './Campo.tsx'
 import { EntradaDeDinheiro } from './CampoDeDinheiro.tsx'
@@ -22,6 +22,7 @@ export function Parcelas({
   parcelas,
   edicoes,
   lista,
+  aviso,
   aoMudarVezes,
   aoMudarParcela,
 }: {
@@ -30,10 +31,12 @@ export function Parcelas({
   parcelas: readonly ParcelaMontada[]
   edicoes: readonly EdicaoDeParcela[]
   lista: boolean
+  aviso?: string
   aoMudarVezes: (vezes: number) => void
   aoMudarParcela: (posicao: number, mudanca: EdicaoDeParcela) => void
 }) {
   const [editando, setEditando] = useState(false)
+  const avisoId = useId()
   return (
     <>
       <Vezes rotulo={PALAVRAS_DA_VENDA.emQuantasVezes} maximo={maximo} valor={vezes} aoEscolher={aoMudarVezes} />
@@ -42,7 +45,7 @@ export function Parcelas({
           <ul className="m-0 mt-3 list-none p-0">
             {parcelas.map((parcela, posicao) =>
               editando ? (
-                <ParcelaEditavel key={posicao} posicao={posicao} parcela={parcela} edicao={edicoes[posicao] ?? {}} aoMudar={(mudanca) => aoMudarParcela(posicao, mudanca)} />
+                <ParcelaEditavel key={posicao} posicao={posicao} parcela={parcela} edicao={edicoes[posicao] ?? {}} descritoPor={aviso ? avisoId : undefined} aoMudar={(mudanca) => aoMudarParcela(posicao, mudanca)} />
               ) : (
                 <li key={posicao} className="flex flex-wrap justify-between gap-x-3 border-b border-borda py-2 tabular-nums">
                   <span className="text-suave">{quandoDaParcela(posicao + 1, parcela.vencimento)}</span>
@@ -51,6 +54,7 @@ export function Parcelas({
               ),
             )}
           </ul>
+          {aviso && <p id={avisoId} className="my-2 text-[1rem] font-semibold text-atraso [overflow-wrap:anywhere]">{aviso}</p>}
           {!editando && (
             <button type="button" className="mt-1 min-h-11 border-0 bg-transparent p-0 text-[1rem] text-acento underline" onClick={() => setEditando(true)}>
               {PALAVRAS_DA_VENDA.mudarParcelas}
@@ -71,31 +75,35 @@ function ParcelaEditavel({
   posicao,
   parcela,
   edicao,
+  descritoPor,
   aoMudar,
 }: {
   posicao: number
   parcela: ParcelaMontada
   edicao: EdicaoDeParcela
+  descritoPor?: string
   aoMudar: (mudanca: EdicaoDeParcela) => void
 }) {
   const ordem = `${posicao + 1}ª`
   return (
     <li className="border-b border-borda py-2">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <span className="w-7 flex-none text-suave">{ordem}</span>
         <input
-          className={`${CLASSES_DE_CAMPO} min-w-0 flex-1`}
+          className={`${CLASSES_DE_CAMPO} min-w-0 flex-1 basis-36`}
           type="date"
           aria-label={`${ordem} vence em`}
           value={edicao.vencimento ?? parcela.vencimento}
           onChange={(evento) => aoMudar({ vencimento: evento.target.value })}
         />
         <EntradaDeDinheiro
-          className={`${CLASSES_DE_CAMPO_COMPACTO} w-[7rem] flex-none text-right tabular-nums`}
+          className={`${CLASSES_DE_CAMPO_COMPACTO} w-[7rem] max-w-full flex-none text-right tabular-nums`}
           texto={edicao.valorTexto ?? ''}
           aoMudar={(valorTexto) => aoMudar({ valorTexto })}
           exemplo={textoDeCentavos(parcela.valor)}
           rotuloAcessivel={`${ordem} valor`}
+          descritoPor={descritoPor}
+          invalido={parcela.ilegivel}
         />
       </div>
     </li>
