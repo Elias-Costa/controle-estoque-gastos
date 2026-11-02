@@ -2,7 +2,7 @@ import { useId, useState } from 'react'
 import type { CatalogoProdutos, EstadoLocalEstoque } from '../dados/repositorio-estoque.ts'
 import { emReais } from '../dominio/dinheiro.ts'
 import { Botao } from './Botao.tsx'
-import { CLASSES_DE_CAMPO, CLASSES_DE_CAMPO_COMPACTO } from './Campo.tsx'
+import { CLASSES_DE_CAMPO, CLASSES_DE_CAMPO_COMPACTO, Rotulo } from './Campo.tsx'
 import { EntradaDeDinheiro } from './CampoDeDinheiro.tsx'
 import { lerProdutos, rotuloDaCategoria } from './leitura-de-produtos.ts'
 import { MiniaturaProduto } from './miniatura-produto.tsx'
@@ -31,14 +31,21 @@ export function ItensDaVenda({ rascunho, estado, catalogo, aoMudar, correcao = f
         const descricao = lido && !lido.vazio && lido.descricao === '' ? fraseDaGuarda('falta-descricao', conferencia.total, conferencia.total) : null
         const preco = lido && !lido.vazio && lido.preco === null ? fraseDaGuarda(lido.semPreco ? 'falta-preco' : 'preco-ilegivel', conferencia.total, conferencia.total) : null
         const descricaoId = `${id}-descricao-${i}`, precoId = `${id}-preco-${i}`
+        const itemId = `${id}-item-${i}`, valorId = `${id}-valor-${i}`
         return <li key={i} className="mb-4 border-b border-borda pb-3" data-item-venda={i}>
         <div className="flex flex-wrap gap-2">
-          <input className={`${CLASSES_DE_CAMPO} min-w-0 flex-1 basis-36`} type="text" autoComplete="off" placeholder="O que levou" aria-label={`Item ${i + 1}`} autoFocus={!correcao && i === 0}
-            aria-describedby={descricao ? descricaoId : undefined} aria-invalid={descricao ? true : undefined}
-            value={item.descricao} onChange={(e) => mudar(i, { descricao: e.target.value })} />
-          <EntradaDeDinheiro className={`${CLASSES_DE_CAMPO_COMPACTO} w-[6.5rem] flex-none text-right tabular-nums`}
-            texto={item.precoTexto} aoMudar={(precoTexto) => mudar(i, { precoTexto })} exemplo="0,00" rotuloAcessivel={`Preço unitário ${i + 1}`} permitirZero
-            descritoPor={preco ? precoId : undefined} invalido={!!preco} />
+          <div className="flex min-w-0 flex-1 basis-36 flex-col justify-end">
+            <Rotulo para={itemId}>{`Item ${i + 1}`}</Rotulo>
+            <input id={itemId} className={CLASSES_DE_CAMPO} type="text" autoComplete="off" placeholder="O que levou" autoFocus={!correcao && i === 0}
+              aria-describedby={descricao ? descricaoId : undefined} aria-invalid={descricao ? true : undefined}
+              value={item.descricao} onChange={(e) => mudar(i, { descricao: e.target.value })} />
+          </div>
+          <div className="flex w-[6.5rem] max-w-full flex-none flex-col justify-end">
+            <Rotulo para={valorId}>{`Preço unitário ${i + 1}`}</Rotulo>
+            <EntradaDeDinheiro id={valorId} className={`${CLASSES_DE_CAMPO_COMPACTO} w-full text-right tabular-nums`}
+              texto={item.precoTexto} aoMudar={(precoTexto) => mudar(i, { precoTexto })} exemplo="0,00" permitirZero
+              descritoPor={preco ? precoId : undefined} invalido={!!preco} />
+          </div>
         </div>
         {descricao && <p id={descricaoId} className="my-1 text-[1rem] font-semibold text-atraso">{descricao}</p>}
         {preco && <p id={precoId} className="my-1 text-[1rem] font-semibold text-atraso">{preco}</p>}
@@ -47,9 +54,9 @@ export function ItensDaVenda({ rascunho, estado, catalogo, aoMudar, correcao = f
         {item.produtoId && <button type="button" className="ml-3 min-h-11 border-0 bg-transparent px-0 text-acento underline"
           onClick={() => mudar(i, { produtoId: undefined, entregueTexto: undefined })}>É avulso</button>}
         {!legada && (item.produtoId || correcao) && <div className="flex flex-wrap gap-3">
-          <label className="min-w-0 flex-1">Quantidade<input aria-label={`Quantidade ${i + 1}`} className={CLASSES_DE_CAMPO} inputMode="numeric"
+          <label className="min-w-0 flex-1 basis-36">Quantidade<input aria-label={`Quantidade ${i + 1}`} className={CLASSES_DE_CAMPO} inputMode="numeric"
             value={item.quantidadeTexto ?? '1'} onChange={(e) => mudar(i, { quantidadeTexto: e.target.value })} /></label>
-          {item.produtoId && !correcao && <label className="min-w-0 flex-1">Entregue agora<input aria-label={`Entregue agora ${i + 1}`} className={CLASSES_DE_CAMPO} inputMode="numeric"
+          {item.produtoId && !correcao && <label className="min-w-0 flex-1 basis-36">Entregue agora<input aria-label={`Entregue agora ${i + 1}`} className={CLASSES_DE_CAMPO} inputMode="numeric"
             value={item.entregueTexto ?? String(conferencia.linhas[i]?.entregue ?? 0)} onChange={(e) => mudar(i, { entregueTexto: e.target.value })} /></label>}
         </div>}
         {item.produtoId && <p className="my-1 text-sm text-suave">Disponível: {disponibilidade(estado, item.produtoId).disponivel}
