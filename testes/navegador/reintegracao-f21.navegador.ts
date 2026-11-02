@@ -1,18 +1,18 @@
 import { expect, test } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
-import { ESQUEMA_V7, ESQUEMA_V8 } from '../../src/dados/banco.ts'
+import { ESQUEMA_V7, ESQUEMA_V8, ESQUEMA_V9 } from '../../src/dados/banco.ts'
 import { abrirApp, recarregar } from './apoio.ts'
 
-for (const versao of [7, 8] as const) test(`E-28D IndexedDB real v${versao} → v9 conserva anotações/foto/fila e reabre offline`, async ({ page, context }, info) => {
-  const esquema = versao === 7 ? ESQUEMA_V7 : ESQUEMA_V8
-  // Mesma origem sem executar o app: a base antiga nasce antes da primeira abertura da v9.
+for (const versao of [7, 8, 9] as const) test(`E-38 IndexedDB real v${versao} → v10 conserva anotações/foto/fila e reabre offline`, async ({ page, context }, info) => {
+  const esquema = versao === 7 ? ESQUEMA_V7 : versao === 8 ? ESQUEMA_V8 : ESQUEMA_V9
+  // Mesma origem sem executar o app: a base antiga nasce antes da primeira abertura da v10.
   await page.goto('/licencas/zip-js.txt')
   const bytes = [...await readFile('testes/arquivos/foto-teste.jpeg')]
   const anterior = await page.evaluate(async ({ esquema, versao, bytes }) => {
     const id = () => crypto.randomUUID(), clienteId = id(), produtoId = id(), categoriaId = id(), fotoId = id()
     const T = '2026-10-29T12:00:00.000Z'
     const produto = { id: produtoId, nome: 'Produto anterior à união', categoriaId, fotoId, atualizadoEm: T, custoManual: 9007199254740993n,
-      ...(versao === 8 ? { classificacao: 'unissex', classificacaoConhecida: true } : {}) }
+      ...(versao >= 8 ? { classificacao: 'unissex', classificacaoConhecida: true } : {}) }
     const venda = { id: id(), clienteId, tipo: 'venda', pagamento: 'fiado', data: '2026-10-29', itens: [{ descricao: 'Item anterior à união', preco: 9007199254740993n }],
       desconto: 0n, parcelas: [{ id: id(), vencimento: '2026-11-29', valor: 9007199254740993n }] }
     const identidade = { chave: 'loja', id: id(), atualizadoEm: T, identidade: { nome: 'Loja anterior à união', descricao: 'Preservar' } }
@@ -24,10 +24,10 @@ for (const versao of [7, 8] as const) test(`E-28D IndexedDB real v${versao} → 
       fotos: [{ id: fotoId, copiaId: id(), produtoId, cadastroEm: T, geracaoEnvio: id(), sha256: '0'.repeat(64),
         bytes: bytes.length, largura: 256, altura: 256, situacao: 'pendente', binario: new Uint8Array(bytes) }],
       enviosProdutoFoto: [{ id: id(), produtoId, cadastro: produto }],
-      ...(versao === 8 ? { identidadesLoja: [identidade] } : {
+      ...(versao >= 8 ? { identidadesLoja: [identidade] } : {}), ...(versao !== 8 ? {
         fatosCaixa: [{ id: id(), revisao: 1, tipo: 'despesa', data: '2026-10-29', valor: 9007199254740993n, categoria: 'Anterior', classificacao: 'pessoal', mercadoria: false }],
         lotesCopia: [{ id: 'estagio/clientes/000000000', operacaoId: 'estagio', tabela: 'clientes', linhas: [{ id: clienteId, nome: 'Retrato preservado' }] }],
-      }) }
+      } : {}) }
     const banco = await new Promise<IDBDatabase>((resolve, reject) => {
       // Dexie 4.4.5 usa versão nativa ×10; conferido no código instalado e medido nesta prova.
       const abertura = indexedDB.open('controle-fiado', versao * 10)
@@ -66,9 +66,9 @@ for (const versao of [7, 8] as const) test(`E-28D IndexedDB real v${versao} → 
     if (reabrir) await recarregar(page)
     const atual = await conferir()
     expect(JSON.parse(atual.linhas)).toEqual(JSON.parse(anterior.linhas))
-    expect(atual.versao).toBe(9); expect(atual.saldo).toBe('9007199254740993'); expect(atual.foto).toBe(true)
+    expect(atual.versao).toBe(10); expect(atual.saldo).toBe('9007199254740993'); expect(atual.foto).toBe(true)
     expect(atual.produto).toBe('Produto anterior à união')
-    for (const tabela of ['fatosCaixa', 'modelos', 'controleCopia', 'identidadesLoja']) expect(atual.tabelas).toContain(tabela)
+    for (const tabela of ['fatosCaixa', 'modelos', 'controleCopia', 'identidadesLoja', 'inscricoesLembretes', 'observacoesLembretes']) expect(atual.tabelas).toContain(tabela)
   }
-  await page.screenshot({ path: info.outputPath(`upgrade-v${versao}-v9-offline.png`), fullPage: true })
+  await page.screenshot({ path: info.outputPath(`upgrade-v${versao}-v10-offline.png`), fullPage: true })
 })

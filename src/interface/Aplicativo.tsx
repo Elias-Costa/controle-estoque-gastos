@@ -107,8 +107,10 @@ export function Aplicativo() {
           aoVerDevedoras={() => setRota({ tela: 'devedoras' })}
           aoEntrar={() => setRota({ tela: 'entrar' })}
           aoVerProdutos={() => setRota({ tela: 'produtos' })}
+          aoVerMinimo={() => setRota({ tela: 'minimo' })}
           aoConferir={() => setRota({ tela: 'conferencias' })}
           aoVerCaixa={() => setRota({ tela: 'caixa' })}
+          aoVerCaixaDoMes={(mes) => { setMesCaixa(mes); setCorteCaixa('tudo'); setRota({ tela: 'caixa' }) }}
           aoCopia={() => setRota({ tela: 'copia' })}
           aoModelos={() => setRota({ tela: 'modelos' })}
         />

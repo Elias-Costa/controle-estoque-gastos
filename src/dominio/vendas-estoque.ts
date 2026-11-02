@@ -2,8 +2,8 @@ import { multiplicar, type Centavos } from './dinheiro.ts'
 import { descricaoDoItemPreenchida, parcelas, totalDaVenda, validar, type Dia, type Ficha, type Id, type ItemVenda, type Lancamento, type VendaAVista, type VendaFiado } from './ficha.ts'
 import { corrigir, corrigirCliente, estornar } from './lancamentos.ts'
 import { custoDoProduto, type Produto } from './produtos.ts'
-import { baseConhecida, chaveDoEfeito, corrigirMovimento, projetarEstoque, referenciaDoEfeito, registrarMovimentos,
-  type AnulacaoEstoque, type EntregaEstoque, type MovimentoEstoque, type ReferenciaEfeito, type RetornoEstoque } from './estoque.ts'
+import { baseConhecida, chaveDoEfeito, corrigirMovimento, projetarEstoque, projetarEstoques, referenciaDoEfeito, registrarMovimentos,
+  type AnulacaoEstoque, type EntregaEstoque, type MovimentoEstoque, type ProjecaoEstoque, type ReferenciaEfeito, type RetornoEstoque } from './estoque.ts'
 import { conteudoDoEfeito, quantidadeValida, type ResultadoEstoque } from './regras-estoque.ts'
 
 /** Identidade lógica sobrevive às ocorrências históricas; o preço legado é quantidade × unitário. */
@@ -109,9 +109,13 @@ export function situacaoDoItem(item: ItemVendido, historico: readonly MovimentoE
   if (!item.produtoId) return { ok: true, valor: { entregue: 0, retornado: 0, pendente: 0, excesso: 0, podeRetornar: 0 } }
   const projecao = projetarEstoque(historico, item.produtoId)
   if (!projecao.ok) return projecao
+  return situacaoComEstoque(item, projecao.valor, cancelado)
+}
+
+function situacaoComEstoque(item: ItemVendido, projecao: ProjecaoEstoque, cancelado: boolean): ReturnType<typeof situacaoDoItem> {
   let entregue = 0
   let retornado = 0
-  for (const movimento of projecao.valor.movimentosVigentes) {
+  for (const movimento of projecao.movimentosVigentes) {
     if (movimento.tipo === 'entrega' && movimento.itemId === item.id) entregue += movimento.quantidade
     if (movimento.tipo === 'retorno' && movimento.itemId === item.id) retornado += movimento.quantidade
   }
@@ -139,6 +143,31 @@ export function prometidoDoProduto(lancamentos: readonly Lancamento[], historico
     }
   }
   return quantidadeValida(prometido) ? { ok: true, valor: prometido } : { ok: false, motivo: 'quantidade-invalida' }
+}
+
+/** D-079: mesmas regras unitárias, com uma projeção global e uma passagem pelo financeiro. */
+export function projetarCompromissos(lancamentos: readonly Lancamento[], historico: readonly MovimentoEstoque[], produtos: readonly Id[]):
+  ResultadoEstoque<ReadonlyMap<Id, { readonly estoque: ProjecaoEstoque; readonly prometido: number }>> {
+  const estoques = projetarEstoques(historico, produtos)
+  if (!estoques.ok) return estoques
+  const resultado = new Map([...estoques.valor].map(([id, estoque]) => [id, { estoque, prometido: 0 }]))
+  const vistos = new Map(produtos.map((id) => [id, new Set<Id>()]))
+  const estornadas = new Set(lancamentos.filter((l) => l.tipo === 'estorno').map((l) => l.estornaId))
+  for (const venda of lancamentos) {
+    if (venda.tipo !== 'venda' || estornadas.has(venda.id)) continue
+    for (const item of venda.itens) {
+      if (!item.produtoId || item.id === undefined || item.quantidade === undefined || item.precoUnitario === undefined) continue
+      const atual = resultado.get(item.produtoId), conhecidos = vistos.get(item.produtoId)
+      if (!atual || !conhecidos) continue
+      if (conhecidos.has(item.id)) return { ok: false, motivo: 'item-invalido' }
+      conhecidos.add(item.id)
+      const situacao = situacaoComEstoque({ ...item, id: item.id, quantidade: item.quantidade, precoUnitario: item.precoUnitario }, atual.estoque, false)
+      if (!situacao.ok) return situacao
+      resultado.set(item.produtoId, { estoque: atual.estoque, prometido: atual.prometido + situacao.valor.pendente })
+    }
+  }
+  if ([...resultado.values()].some((r) => !quantidadeValida(r.prometido))) return { ok: false, motivo: 'quantidade-invalida' }
+  return { ok: true, valor: resultado }
 }
 
 /** Venda e entregas imediatas formam um grupo; avulso não produz movimento. */

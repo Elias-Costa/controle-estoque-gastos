@@ -100,16 +100,16 @@ export function Lista({ resumos, vazia, aoAbrir }: { resumos: ResumoDaFicha[]; v
           <li key={resumo.cliente.id}>
             <button
               type="button"
-              className="mb-2 flex min-h-[60px] w-full items-center justify-between gap-3 rounded-xl border border-borda bg-papel px-3.5 py-3 text-left text-tinta"
+              className="mb-2 flex min-h-[60px] w-full flex-wrap items-center justify-between gap-3 rounded-xl border border-borda bg-papel px-3.5 py-3 text-left text-tinta"
               onClick={() => aoAbrir(resumo.cliente.id)}
             >
-              <span className="min-w-0 font-semibold [overflow-wrap:anywhere]">
+              <span className="min-w-0 flex-[1_1_12ch] font-semibold [overflow-wrap:anywhere]">
                 {resumo.cliente.nome}
                 {resumo.cliente.apelido !== undefined && resumo.cliente.apelido !== '' && (
                   <span className="block truncate text-[0.85rem] font-normal text-suave">{resumo.cliente.apelido}</span>
                 )}
               </span>
-              <span className={`flex-none text-right whitespace-nowrap tabular-nums ${atrasada ? 'text-atraso' : ''}`}>
+              <span className={`ml-auto flex-none text-right whitespace-nowrap tabular-nums ${atrasada ? 'text-atraso' : ''}`}>
                 {quantoDeve(resumo.saldo)}
                 {atrasada && <span className="block text-[0.8rem]">{avisoDeAtraso(resumo.diasDeAtraso)}</span>}
               </span>

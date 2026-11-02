@@ -108,8 +108,15 @@ function organizar(historico: readonly MovimentoEstoque[]): ResultadoEstoque<{
   return { ok: true, valor: { todos, atuais } }
 }
 
-/** Deriva físico, compras e contagens afetadas de todas as revisões conhecidas (Q39). */
-export function projetarEstoque(historico: readonly MovimentoEstoque[], produtoId: Id): ResultadoEstoque<ProjecaoEstoque> {
+type BaseProjecaoEstoque = {
+  readonly atuais: ReadonlyMap<Id, MovimentoEstoque>
+  readonly anulados: ReadonlySet<string>
+  readonly conhece: (movimento: ReferenciaEfeito, alvo: ReferenciaEfeito) => boolean
+}
+
+// D-079: a mesma validação global serve às leituras unitária e em lote. Não particionar
+// antes de validar: isso esconderia referências inválidas entre produtos na evidência.
+function prepararProjecaoEstoque(historico: readonly MovimentoEstoque[]): ResultadoEstoque<BaseProjecaoEstoque> {
   const organizacao = organizar(historico)
   if (!organizacao.ok) return organizacao
   const { todos, atuais } = organizacao.valor
@@ -165,6 +172,11 @@ export function projetarEstoque(historico: readonly MovimentoEstoque[], produtoI
     if (anulados.has(chave)) return { ok: false, motivo: 'ja-anulado' }
     anulados.add(chave)
   }
+  return { ok: true, valor: { atuais, anulados, conhece } }
+}
+
+function projetarBaseEstoque(base: BaseProjecaoEstoque, produtoId: Id): ResultadoEstoque<ProjecaoEstoque> {
+  const { atuais, anulados, conhece } = base
   const movimentos = [...atuais.values()].filter((movimento) => movimento.produtoId === produtoId)
   const ativos = movimentos.filter((movimento) => !anulados.has(chaveDoEfeito(movimento)))
   const contagens = ativos.filter((movimento): movimento is ContagemEstoque => movimento.tipo === 'contagem')
@@ -202,6 +214,26 @@ export function projetarEstoque(historico: readonly MovimentoEstoque[], produtoI
       data: compra.data, ordemCadastro: compra.ordemCadastro, custoUnitario: compra.custoUnitario }))
   return { ok: true, valor: { fisico, movimentosVigentes: vigentes, comprasVigentes,
     contagensAfetadas: contagens.filter((contagem) => afetadas.has(chaveDoEfeito(contagem))).map(referenciaDoEfeito) } }
+}
+
+/** Deriva físico, compras e contagens afetadas de todas as revisões conhecidas (Q39). */
+export function projetarEstoque(historico: readonly MovimentoEstoque[], produtoId: Id): ResultadoEstoque<ProjecaoEstoque> {
+  const base = prepararProjecaoEstoque(historico)
+  return base.ok ? projetarBaseEstoque(base.valor, produtoId) : base
+}
+
+/** D-079: valida a fotografia global uma vez, preservando a projeção unitária por produto. */
+export function projetarEstoques(historico: readonly MovimentoEstoque[], produtos: readonly Id[]): ResultadoEstoque<ReadonlyMap<Id, ProjecaoEstoque>> {
+  const resultados = new Map<Id, ProjecaoEstoque>()
+  if (produtos.length === 0) return { ok: true, valor: resultados }
+  const base = prepararProjecaoEstoque(historico)
+  if (!base.ok) return base
+  for (const produtoId of produtos) {
+    const resultado = projetarBaseEstoque(base.valor, produtoId)
+    if (!resultado.ok) return resultado
+    resultados.set(produtoId, resultado.valor)
+  }
+  return { ok: true, valor: resultados }
 }
 
 /** Confere o conjunto todo; recusa não devolve meio lote e reenvio idêntico não soma novamente. */

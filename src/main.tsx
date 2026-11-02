@@ -3,7 +3,8 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import { banco } from './dados/instancia'
 import { Aplicativo } from './interface/Aplicativo'
-import { sincronizacao } from './sincronizacao/instancia'
+import { conta, lembretes, sincronizacao } from './sincronizacao/instancia'
+import { AvisoDoLembrete } from './interface/lembretes.tsx'
 import { pedirVerificacaoDeVersao } from './plataforma/atualizacao'
 import { pedirPersistencia } from './plataforma/persistencia'
 
@@ -24,6 +25,13 @@ pedirPersistencia()
 // e falha de rede não vira tela (EL-06). Sem configuração da nuvem, o motor só conta a fila.
 sincronizacao.acordar()
 
+// D-079: canal próprio; vender/receber nunca aguardam inscrição ou provedor de push.
+void lembretes.acordar(true)
+window.addEventListener('online', () => { void lembretes.acordar(true) })
+window.addEventListener('focus', () => { void lembretes.acordar(true) })
+setInterval(() => { void lembretes.acordar() }, 60_000)
+conta.assinar(() => { void lembretes.acordar(true) })
+
 // O laboratório de E-08 (D-043): a prova de offline lança vendas e lê a ficha por ele, por
 // fora das telas. Só no build de laboratório (`bun run build:laboratorio`): em produção
 // a variável não existe, o ramo é morto e o chunk nem é emitido.
@@ -36,6 +44,7 @@ if (!raiz) throw new Error('Elemento #root não encontrado em index.html')
 
 createRoot(raiz).render(
   <StrictMode>
+    <AvisoDoLembrete />
     <Aplicativo />
   </StrictMode>,
 )

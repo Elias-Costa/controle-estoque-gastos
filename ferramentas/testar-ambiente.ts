@@ -101,7 +101,7 @@ async function configurarHomologacao(): Promise<void> {
 async function principal(): Promise<void> {
   const ambiente = process.argv[2]
   const acao = process.argv[3]
-  if (!['local', 'homologacao'].includes(ambiente ?? '') || !['iniciar', 'parar', 'migrar', 'reverter', 'integracao', 'navegador', 'build'].includes(acao ?? '')) {
+  if (!['local', 'homologacao'].includes(ambiente ?? '') || !['iniciar', 'parar', 'migrar', 'reverter', 'integracao', 'navegador', 'build', 'lembretes-preparar', 'lembretes-segredos', 'lembretes-agendar'].includes(acao ?? '')) {
     throw new Error('Use local ou homologacao e uma ação: iniciar, parar, migrar, reverter, integracao, navegador ou build.')
   }
   process.env.AMBIENTE_DE_TESTE = ambiente
@@ -129,6 +129,11 @@ async function principal(): Promise<void> {
   // Integração e navegador sempre recebem todas as migrations do mesmo runner, sem reset.
   await executar(['run', 'nuvem/migrar.ts'])
   if (acao === 'migrar') return
+  if (acao?.startsWith('lembretes-')) {
+    await executar(['run', 'typecheck'])
+    await executar(['run', 'nuvem/lembretes/configurar.ts', acao.slice('lembretes-'.length)])
+    return
+  }
   if (acao === 'integracao' || acao === 'navegador') {
     process.env.SUPABASE_TESTE_EMAIL = await criarContaFicticia()
     console.log('Conta fictícia exclusiva desta rodada; dados anteriores preservados.')

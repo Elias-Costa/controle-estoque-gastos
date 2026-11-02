@@ -12,6 +12,7 @@ import { BotaoEntrar } from './TelaEntrar.tsx'
 import { PALAVRAS_DOS_PRODUTOS } from './palavras-dos-produtos.ts'
 import { AvisoConferencias } from './tela-conferencias.tsx'
 import { PALAVRAS_DO_CAIXA } from './palavras-do-caixa.ts'
+import { Lembretes } from './lembretes.tsx'
 
 /**
  * A tela inicial (E-09): a lista de fichinhas com busca — quem deve e quanto (RF-01, RF-10 em
@@ -36,8 +37,10 @@ export function TelaInicial({
   aoVerDevedoras,
   aoEntrar,
   aoVerProdutos,
+  aoVerMinimo,
   aoConferir,
   aoVerCaixa,
+  aoVerCaixaDoMes,
   aoCopia,
   aoModelos,
 }: {
@@ -49,8 +52,10 @@ export function TelaInicial({
   aoVerDevedoras: () => void
   aoEntrar: () => void
   aoVerProdutos: () => void
+  aoVerMinimo: () => void
   aoConferir: () => void
   aoVerCaixa: () => void
+  aoVerCaixaDoMes: (mes: string) => void
   aoCopia: () => void
   aoModelos: () => void
 }) {
@@ -74,6 +79,8 @@ export function TelaInicial({
           {PALAVRAS_DO_CAIXA.titulo} <span aria-hidden="true">&rsaquo;</span>
         </button>
       </header>
+
+      <Lembretes aoAbrirFicha={aoAbrirFicha} aoVerMinimo={aoVerMinimo} aoVerCaixa={aoVerCaixaDoMes} />
 
       <ListaDeFichas busca={busca} aoBuscar={aoBuscar} aoAbrir={aoAbrirFicha} chave="inicio" comDesativadas />
 

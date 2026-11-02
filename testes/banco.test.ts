@@ -77,9 +77,9 @@ describe('esquema local (D-020, D-040)', () => {
   test('a versão declarada é a última publicada, e cada tabela bate com o literal publicado', async () => {
     const banco = abrir()
     await banco.open()
-    const ultima = 9
+    const ultima = 10
     expect(banco.verno).toBe(ultima)
-    const publicado = { ...ESQUEMAS_PUBLICADOS[7], identidadesLoja: 'chave' }
+    const publicado = { ...ESQUEMAS_PUBLICADOS[7], identidadesLoja: 'chave', inscricoesLembretes: 'chave', observacoesLembretes: 'chave' }
     if (publicado === undefined) throw new Error('sem esquema publicado')
     expect(banco.tables.map((tabela) => tabela.name).sort()).toEqual(Object.keys(publicado).sort())
     for (const [tabela, spec] of Object.entries(publicado)) {
@@ -146,7 +146,7 @@ describe('esquema local (D-020, D-040)', () => {
     // `versao`, e o código lê as duas formas.
     const atual = abrir(nome, indexedDB)
     await atual.open()
-    expect(atual.verno).toBe(9)
+    expect(atual.verno).toBe(10)
     const cliente: Cliente | undefined = await atual.clientes.get('c1')
     expect(cliente).toEqual(vera)
     const lida = await atual.lancamentos.get('v1')

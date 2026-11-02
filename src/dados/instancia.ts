@@ -13,6 +13,7 @@
  */
 
 import { BancoLocal } from './banco.ts'
+import { criarRepositorioLembretes } from './repositorio-lembretes.ts'
 import { criarRepositorioLocal } from './repositorio.ts'
 import { criarRepositorioEstoque } from './repositorio-estoque.ts'
 import { criarOperacoesEstoque } from './operacoes-estoque.ts'
@@ -81,3 +82,6 @@ export const leituraProblemasDeEnvio = criarLeituraProblemasDeEnvio(banco)
 export const correcaoDescricaoEnvio = criarCorrecaoDescricaoEnvio(banco, () => {
   for (const ouvinte of ouvintes) ouvinte()
 })
+
+/** Reserva e inscrição próprias deste aparelho, independentes da FIFO financeira (D-079). */
+export const repositorioLembretes = criarRepositorioLembretes(banco)

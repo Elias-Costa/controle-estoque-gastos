@@ -49,7 +49,7 @@ export async function criarArquivoCopia(estagio: EstagioCopia, dados: DadosCopia
       if (foto.miniatura) await adicionar(`miniaturas/${foto.id}.jpeg`, new Blob([new Uint8Array(foto.miniatura)]))
     }
     for (const [nome, conteudo] of Object.entries(consultasDaCopia(dados))) await adicionar(nome, new Blob([conteudo], { type: 'text/csv;charset=utf-8' }))
-    const manifesto = textoJson({ formato: 3, esquema: 9, id: estagio.id, vinculo: estagio.vinculo,
+    const manifesto = textoJson({ formato: 4, esquema: 10, id: estagio.id, vinculo: estagio.vinculo,
       capturadoEm: estagio.capturadoEm, quantidades: Object.fromEntries(TABELAS_COPIA.map((t) => [t, dados[t].length])), arquivos })
     exigirCopia(manifesto.size <= L.manifesto && bytes + manifesto.size <= L.arquivo, 'limite')
     await escritor.add('manifesto.json', new BlobReader(manifesto))
@@ -89,7 +89,7 @@ export async function lerArquivoCopia(arquivo: Blob, vinculo: VinculoConta): Pro
     const manifesto: unknown = JSON.parse(await (await ler('manifesto.json', L.manifesto)).text())
     exigirCopia(objetoCopia(manifesto) && Object.keys(manifesto).sort().join(',') === 'arquivos,capturadoEm,esquema,formato,id,quantidades,vinculo' &&
       ((manifesto['formato'] === 1 && manifesto['esquema'] === 6) || (manifesto['formato'] === 2 && manifesto['esquema'] === 7) ||
-        (manifesto['formato'] === 3 && manifesto['esquema'] === 9)) && typeof manifesto['id'] === 'string' && /^[0-9a-f-]{36}$/i.test(manifesto['id']) &&
+        (manifesto['formato'] === 3 && manifesto['esquema'] === 9) || (manifesto['formato'] === 4 && manifesto['esquema'] === 10)) && typeof manifesto['id'] === 'string' && /^[0-9a-f-]{36}$/i.test(manifesto['id']) &&
       typeof manifesto['capturadoEm'] === 'string' && !Number.isNaN(new Date(manifesto['capturadoEm']).getTime()) &&
       Array.isArray(manifesto['arquivos']) && objetoCopia(manifesto['quantidades']))
     exigirCopia(mesmoVinculo(lerVinculoCopia(manifesto['vinculo']), vinculo), 'conta')

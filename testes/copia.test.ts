@@ -78,6 +78,27 @@ async function alterar(arquivo: Blob, mudar: (nome: string, blob: Blob) => Promi
 }
 
 describe('E-35: arquivo e estágio, IndexedDB simulado; não prova aparelho', () => {
+  test('D-079: emite 4/10 e lê 3/9 completo; pares de formato/esquema trocados são recusados', async () => {
+    const b = aparelho(); await povoar(b); const p = await pacote(b)
+    const anterior = await alterar(p.arquivo, async (nome, blob) => {
+      if (nome !== 'manifesto.json') return blob
+      const m: unknown = JSON.parse(await blob.text()); exigirCopia(objetoCopia(m))
+      expect(m['formato']).toBe(4); expect(m['esquema']).toBe(10)
+      m['formato'] = 3; m['esquema'] = 9
+      return new Blob([JSON.stringify(m)])
+    })
+    expect(conteudoDoEfeito((await lerArquivoCopia(anterior, CONTA)).dados)).toBe(conteudoDoEfeito(p.dados))
+    for (const [formato, esquema] of [[4, 9], [3, 10]]) {
+      const errado = await alterar(p.arquivo, async (nome, blob) => {
+        if (nome !== 'manifesto.json') return blob
+        const m: unknown = JSON.parse(await blob.text()); exigirCopia(objetoCopia(m))
+        m['formato'] = formato; m['esquema'] = esquema
+        return new Blob([JSON.stringify(m)])
+      })
+      await expect(lerArquivoCopia(errado, CONTA)).rejects.toThrow()
+    }
+    b.close()
+  })
   test('ZIP completo abre consultas, conserva cada campo, centavos, foto e histórico', async () => {
     const b = aparelho(), ids = await povoar(b), p = await pacote(b)
     const lida = await lerArquivoCopia(p.arquivo, CONTA)
@@ -188,7 +209,7 @@ describe('E-35: arquivo e estágio, IndexedDB simulado; não prova aparelho', ()
     antiga.close()
     const b = aparelho(fabrica, nome); await b.open()
     expect(await b.clientes.get(c.id)).toEqual(c); expect(await b.fila.count()).toBe(1)
-    expect(await b.controleCopia.count()).toBe(0); expect(b.verno).toBe(9); b.close()
+    expect(await b.controleCopia.count()).toBe(0); expect(b.verno).toBe(10); b.close()
   })
   test('Q47A encerrada e recusa de caixa conservam evidência e fila sem reabrir efeitos provisórios', async () => {
     const a = aparelho(), ids = await povoar(a), repo = criarRepositorioEstoque(a), estoque = criarOperacoesEstoque(repo)

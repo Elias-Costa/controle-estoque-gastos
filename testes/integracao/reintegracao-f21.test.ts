@@ -24,7 +24,8 @@ describe.skipIf(!LIGADA)('E-28D: migrations em ordem de chegada, SQL real isolad
         const migracoes = await lerMigracoes()
         await tx.unsafe(`create schema ${prefixo}; grant usage on schema ${prefixo} to authenticated`)
         for (const m of migracoes.filter((m) => m.nome < '0008')) await tx.unsafe(realocar(m.aplicar))
-        const f21 = migracoes.filter((m) => m.nome >= '0010'), f3 = migracoes.filter((m) => m.nome >= '0008' && m.nome < '0010')
+        // A 0013 depende do caixa; não pertence ao backport independente de F2.1 (D-079).
+        const f21 = migracoes.filter((m) => m.nome >= '0010' && m.nome < '0013'), f3 = migracoes.filter((m) => m.nome >= '0008' && m.nome < '0010')
         expect(f21).toHaveLength(3); expect(f3).toHaveLength(2)
         for (const m of caminho === 'F2.1 → F3' ? f21 : f3) await tx.unsafe(realocar(m.aplicar))
         const categoriaId = uuidv7(), produtoId = uuidv7(), clienteId = uuidv7()

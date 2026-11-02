@@ -169,7 +169,7 @@ function lerLista<T>(v: unknown, guarda: (linha: unknown) => linha is T): T[] {
   return v.map((linha: unknown) => { exigirCopia(guarda(linha)); return linha })
 }
 /** Campos fechados por formato; leitores antigos não aceitam extensões de pacotes novos. */
-export function dadosDaCopia(v: unknown, formato: 1 | 2 | 3 = 3): DadosCopia {
+export function dadosDaCopia(v: unknown, formato: 1 | 2 | 3 | 4 = 4): DadosCopia {
   exigirCopia(objetoCopia(v) && Object.keys(v).length === TABELAS_COPIA.length && Object.keys(v).every((k) => TABELAS_COPIA.some((t) => t === k)))
   const dados: DadosCopia = { clientes: lerLista(v['clientes'], cliente), lancamentos: lerLista(v['lancamentos'], lancamento),
     fila: lerLista(v['fila'], fila), sincronizacao: lerLista(v['sincronizacao'], cursor), categorias: lerLista(v['categorias'], categoria),

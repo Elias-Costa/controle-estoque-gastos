@@ -45,17 +45,17 @@ export default defineConfig(() => ({
       /**
        * `prompt`, e não `autoUpdate`, por decisão explícita — D-032.
        *
-       * `autoUpdate` gera um `sw.js` com `skipWaiting()` e `clientsClaim()`: a versão
-       * nova assume o controle por cima da sessão viva. Com `prompt`, o build de
-       * 2026-09-05 não tem `clientsClaim()` e o `skipWaiting()` que resta só roda se um
-       * cliente postar `{ type: 'SKIP_WAITING' }` — coisa que nada neste projeto faz.
-       * A versão nova fica em espera e assume na abertura seguinte, que é o que D-032
-       * escolheu. Conferido no artefato; ver `src/plataforma/atualizacao.ts`.
+       * E-38/D-079 usa `sw.ts` próprio via injectManifest. Ele preserva precache e
+       * navegação offline, sem skipWaiting/clientsClaim: a versão nova fica em espera.
+       * O comportamento do antigo generateSW está nos fatos históricos de E-01.
        *
        * Não usamos o aviso do `virtual:pwa-register`: D-032 recusou perguntar a ela.
        * O que pede a checagem na abertura é `src/plataforma/atualizacao.ts`.
        */
       registerType: 'prompt',
+      strategies: 'injectManifest',
+      srcDir: 'src/plataforma',
+      filename: 'sw.ts',
       /**
        * Service worker também em desenvolvimento, para conferir registro e modo
        * standalone sem build a cada rodada. **Não serve para teste offline:** E-00
@@ -86,7 +86,7 @@ export default defineConfig(() => ({
       // As imagens de abertura do iPhone só o iOS busca, na instalação: fora do precache,
       // que é o que o app carrega em toda instalação e a cada versão nova.
       // E-28C: a fonte do PDF também precisa existir na primeira geração offline.
-      workbox: { globIgnores: ['abertura/**'], globPatterns: ['**/*.{js,wasm,css,html,ico,png,svg,ttf,txt}'] },
+      injectManifest: { globIgnores: ['abertura/**'], globPatterns: ['**/*.{js,wasm,css,html,ico,png,svg,ttf,txt}'] },
     }),
     ...(process.env.LAN && !httpsLocal ? [basicSsl()] : []),
   ],

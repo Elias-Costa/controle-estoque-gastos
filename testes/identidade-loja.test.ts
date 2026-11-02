@@ -37,7 +37,7 @@ test('v4 preenchida recebe a união: financeiro, fila recusada, captura e bytes 
     enviosProdutoFoto: { id: 'e', produtoId: 'p', cadastro: { id: 'p', nome: 'Produto legado' } } }
   for (const [tabela, linha] of Object.entries(dados)) await antigo.table(tabela).put(linha)
   antigo.close(); const atual = abrir(fabrica, nome); await atual.open()
-  expect(atual.verno).toBe(9)
+  expect(atual.verno).toBe(10)
   for (const [tabela, linha] of Object.entries(dados)) expect(await atual.table(tabela).toArray()).toEqual([linha])
   expect(await atual.identidadesLoja.count()).toBe(0)
 })

@@ -105,7 +105,7 @@ describe('E-28D: união e cópia fechada, IndexedDB simulado; sem prova de apare
       antes.set(tabela.name, await tabela.toArray())
     }
     antigo.close(); const atual = abrir(fabrica, nome); await atual.open()
-    expect(atual.verno).toBe(9)
+    expect(atual.verno).toBe(10)
     for (const [tabela, linhas] of antes) expect(await atual.table(tabela).toArray()).toEqual(linhas)
     expect(await atual.identidadesLoja.count()).toBe(versao === 8 ? 1 : 0)
     expect(await atual.modelos.count()).toBe(versao === 7 ? 1 : 0)

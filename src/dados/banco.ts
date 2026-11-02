@@ -36,6 +36,7 @@
  */
 
 import Dexie, { type DexieOptions, type Table } from 'dexie'
+import type { InscricaoLocal, ObservacaoLocalLembretes } from './tipos-lembretes.ts'
 import type { PreferenciaIdentidadeLoja } from './identidade-loja.ts'
 import type { Cliente, Id, Lancamento } from '../dominio/ficha.ts'
 import type { MovimentoEstoque } from '../dominio/estoque.ts'
@@ -217,6 +218,9 @@ export const ESQUEMA_V8 = { ...ESQUEMA_V4, identidadesLoja: 'chave' } as const
 /** E-28D/D-076: união explícita também cria F3 em quem já abriu F2.1/v8. */
 export const ESQUEMA_V9 = { ...ESQUEMA_V7, identidadesLoja: 'chave' } as const
 
+/** D-079: somente metadados próprios da instalação, excluídos da cópia de negócio. */
+export const ESQUEMA_V10 = { ...ESQUEMA_V9, inscricoesLembretes: 'chave', observacoesLembretes: 'chave' } as const
+
 /**
  * A base local. `dependencias` existe para os testes injetarem um IndexedDB de mentira
  * isolado por teste (`fake-indexeddb`); em produção ninguém passa nada e o Dexie usa o do
@@ -224,6 +228,8 @@ export const ESQUEMA_V9 = { ...ESQUEMA_V7, identidadesLoja: 'chave' } as const
  * `as` e sem `!` (AGENTS.md §4).
  */
 export class BancoLocal extends Dexie {
+  readonly inscricoesLembretes: Table<InscricaoLocal, string>
+  readonly observacoesLembretes: Table<ObservacaoLocalLembretes, string>
   readonly identidadesLoja: Table<PreferenciaIdentidadeLoja, string, PreferenciaIdentidadeLoja>
   readonly clientes: Table<ClienteLocal, Id, ClienteLocal>
   readonly lancamentos: Table<Lancamento, Id, Lancamento>
@@ -261,6 +267,9 @@ export class BancoLocal extends Dexie {
     this.version(7).stores(ESQUEMA_V7)
     this.version(8).stores(ESQUEMA_V8)
     this.version(9).stores(ESQUEMA_V9)
+    this.version(10).stores(ESQUEMA_V10)
+    this.inscricoesLembretes = this.table('inscricoesLembretes')
+    this.observacoesLembretes = this.table('observacoesLembretes')
     this.identidadesLoja = this.table('identidadesLoja')
     this.clientes = this.table('clientes')
     this.lancamentos = this.table('lancamentos')

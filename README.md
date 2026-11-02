@@ -64,8 +64,9 @@ Fichas, fiado e controle de estoque estão em uso real. A divulgação de produt
 por PDF para compartilhamento manual no WhatsApp foi entregue e conferida no aparelho.
 A extensão inclui classificação opcional dos produtos
 e filtros por categoria, marca e sexo. O PDF usa nome/descrição editáveis e logo opcional da
-loja, salvos offline e recuperáveis pela mesma conta. Gastos, cópia completa e modelos editáveis de mensagens
-estão em desenvolvimento separado; indicadores do negócio continuam previstos para fase futura.
+loja, salvos offline e recuperáveis pela mesma conta. Gastos, cópia completa, modelos editáveis
+e lembretes estão implementados na candidata de F3 e aguardam publicação e confirmação
+da entrega; indicadores do negócio continuam previstos para fase futura.
 
 ## Verificação
 
@@ -89,11 +90,83 @@ removê-lo para executar o portão completo. Antes da publicação de caixa/F3, 
 `bun run migrar` em produção: o runner aplica somente pendentes, em ordem, incluindo
 `0008_caixa` e `0009_modelos-whatsapp`, preservando os dados existentes. Modelos acrescentam
 v7 e a união v9 conserva tanto bases F3/v7 quanto F2.1/v8. Este checkout contém os pares
-0001–0012; 0010/0011/0012 pertencem à melhoria já entregue. O runner também encontra
+0001–0013; 0010/0011/0012 pertencem à melhoria já entregue e 0013 acrescenta lembretes.
+O runner também encontra
 0008/0009 ausentes mesmo depois dessas migrations, sem downgrade. Todas precisam preceder
 o app F3; esta reintegração não publica a fase. Só depois dos critérios da F3 promove para
 `main`, que publica pelo deploy existente. Não reverter migrations nem limpar dados para
 atualizar o app; conferir carimbo, fichas, estoque, fotos e envios pendentes na abertura seguinte.
+
+## Lembretes homologados (F3)
+
+O checkout usa banco v10 e cópia 4/esquema 10, com leitores 1/6, 2/7 e 3/9. Os lembretes
+da inicial usam anotações locais e continuam disponíveis sem permissão de notificação.
+Inscrição e consentimento pertencem à instalação e ficam fora da cópia em arquivo.
+Chegada do push e abertura pelo toque confirmadas no Android em 02/11/2026, na homologação.
+Push depende da configuração abaixo. Nesta entrega dos lembretes não haverá prova no iPhone;
+iOS permanece sem comprovação. F3 ainda não foi publicada.
+
+Preparação em **local/homologação**, nessa ordem, sem usar produção:
+
+```bash
+bun run lembretes:edge
+bun run lembretes:preparar:local
+bun run lembretes:preparar:homologacao
+```
+
+O primeiro comando gera `dist/lembretes/index.js`, sem segredos. Publicar esse conteúdo
+como função **`enviar-lembretes`** no projeto separado, com `verify_jwt=false` somente nela;
+o handler autentica token próprio antes de acessar dados. CLI continua exclusiva dos
+serviços locais; publicação hospedada é pelo painel/plugin. A 0013 deve preceder a função.
+No local, servir o bundle exige ativar temporariamente o Edge e fornecer os segredos ao
+processo; o roteiro e o instrumento sem arquivo de segredos ficam em
+`docs/ensaios/e38/LEIA-ME.md`. A configuração normal conserva Edge desabilitado.
+
+O preparo em local/homologação guarda material de teste no Vault e a chave pública no esquema
+interno, sem imprimir a privada/token nem criar job. Repetir conserva as mesmas chaves;
+divergência de configuração existente recusa rotação automática. Somente o mantenedor,
+em terminal interativo e sem redirecionamento, usa `bun run lembretes:segredos:local` ou
+`bun run lembretes:segredos:homologacao` para configurar no Edge os três valores mostrados:
+`LEMBRETES_TOKEN_SHA256`, `LEMBRETES_VAPID_CONTATO`, `LEMBRETES_VAPID_CHAVES`.
+No campo de valor do painel, colar somente o trecho depois de `NOME=`: o hash sem
+aspas, o contato como URL e as chaves como JSON começando por `{`. Salvar os segredos
+e publicar novamente a função para conferir a configuração carregada.
+Não colar esses valores em chat, fonte, `.env*`, arquivo de cópia ou log. A credencial
+administrativa do Edge é a fornecida pelo ambiente Supabase, nunca enviada ao navegador do app.
+
+Depois da função e dos segredos, executar `bun run lembretes:agendar:local` e, depois,
+`bun run lembretes:agendar:homologacao`. Esses comandos exigem 401 sem token, 400 com
+corpo inválido e verificação autenticada saudável
+antes de criar/conferir o job. Tentativas às 9h, 9h15 e 9h30 de Fortaleza, sem garantir
+entrega nesse horário; após envio incerto não reenviam aquele destino no dia. Job/segredos
+não são semeadura nem parte da migration e não expiram automaticamente. A publicação
+em produção continua na entrega de F3; nenhum desses comandos seleciona produção.
+
+Na entrega de F3, depois de `bun run migrar`, os comandos próprios abaixo exigem o
+projeto público de produção confirmado pelo mantenedor (D-081). Usar a configuração
+de produção já administrada por ele, em terminal sem variáveis de teste/laboratório.
+Eles não selecionam homologação nem aplicam migrations; Vault precisa estar disponível.
+
+```bash
+bun run lembretes:preparar:producao --projeto=awmesexptpalzonbucwc
+bun run lembretes:segredos:producao --projeto=awmesexptpalzonbucwc
+```
+
+O mantenedor copia os três valores somente para os segredos Edge **desse mesmo projeto**,
+sem redirecionar a saída. Publicar/configurar a função `enviar-lembretes` com o bundle e
+`verify_jwt=false` somente nela, preservando o token próprio. Depois:
+
+```bash
+bun run lembretes:agendar:producao --projeto=awmesexptpalzonbucwc
+```
+
+A guarda compara argumento, API e banco antes de conectar; recusa projetos diferentes
+e mantém a restrição das suítes. O agendamento conserva os negativos/saúde e não substitui
+job divergente. O bundle Edge em `dist/lembretes/index.js` é para o painel: gerar com
+`lembretes:edge` quando for copiar; um novo `bun run build` o remove de `dist`, deixando
+somente o app para publicação estática. Executar as etapas nessa ordem, conferir o
+registro das migrations e guardar commit/carimbo da entrega. F3 ainda aguarda publicação
+e confirmação dos dados no aparelho pelo mantenedor.
 
 ## Contato privado para relatar problema de envio
 

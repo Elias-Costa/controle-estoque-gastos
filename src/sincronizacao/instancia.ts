@@ -13,7 +13,9 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { aoEnfileirar, banco } from '../dados/instancia.ts'
+import { aoEnfileirar, banco, repositorioLembretes } from '../dados/instancia.ts'
+import { criarPushDoNavegador } from '../plataforma/push.ts'
+import { criarServicoLembretes } from './lembretes.ts'
 import { criarConta, type Conta } from './conta.ts'
 import { criarClienteSupabase, criarNuvemSupabase, type Nuvem } from './nuvem.ts'
 import { iniciarSincronizacao } from './sincronizacao.ts'
@@ -49,3 +51,19 @@ export const sincronizacao = iniciarSincronizacao({ banco, nuvem: nuvemDoApp })
 export const copia = criarServicoCopia(banco, nuvemDoApp, () => sincronizacao.acordar())
 
 aoEnfileirar(() => sincronizacao.acordar())
+
+/** D-079: chamadas autenticadas sem acrescentar trabalho à fila do negócio. */
+export const lembretes = criarServicoLembretes(repositorioLembretes, criarPushDoNavegador(), supabaseDoApp && nuvemDoApp ? {
+  identidade: () => nuvemDoApp?.identidade?.() ?? Promise.resolve(null),
+  async chavePublica() {
+    const { data, error } = await supabaseDoApp.rpc('obter_configuracao_lembretes')
+    if (error) throw new Error('Avisos indisponíveis')
+    if (data !== null && (typeof data !== 'string' || !/^[A-Za-z0-9_-]{87}$/.test(data))) throw new Error('Configuração inválida')
+    return data
+  },
+  async registrar(pedido) {
+    const { data, error } = await supabaseDoApp.rpc('registrar_inscricao_lembretes', { pedido })
+    if (error) throw new Error('Avisos indisponíveis')
+    return data
+  },
+} : null)
