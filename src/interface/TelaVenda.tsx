@@ -253,9 +253,9 @@ function Formulario({
 
       {descontoAberto && <CampoDeDinheiro rotulo={PALAVRAS_DA_VENDA.desconto} texto={rascunho.descontoTexto} aoMudar={(descontoTexto) => mudar({ descontoTexto })} />}
 
-      <p className="mt-3 mb-0 flex items-baseline justify-between gap-3 border-t border-borda pt-3 text-[1.25rem]">
+      <p className="mt-3 mb-0 flex flex-wrap items-baseline justify-between gap-3 border-t border-borda pt-3 text-[1.25rem]">
         <span>{PALAVRAS_DA_VENDA.total}</span>
-        <span className="text-right tabular-nums">
+        <span className="ml-auto min-w-0 max-w-full text-right tabular-nums [overflow-wrap:anywhere]">
           {conferencia.desconto > 0n && (
             <span className="mr-2 text-[1rem] text-suave">
               {emReais(conferencia.somaDosItens)} &minus; {emReais(conferencia.desconto)} =

@@ -169,7 +169,7 @@ export function TelaFicha({
 function CartaoDeSaldo({ resumo, cobravel }: { resumo: ResumoDaFicha; cobravel: boolean }) {
   const vencida = resumo.proxima?.vencida === true
   return (
-    <div className="rounded-2xl border border-borda bg-papel px-[1.125rem] pt-4 pb-[1.125rem]">
+    <div className="rounded-2xl border border-borda bg-papel px-[1.125rem] pt-4 pb-[1.125rem] [overflow-wrap:anywhere]">
       <p className="m-0 text-[0.95rem] text-suave">{PALAVRAS.deve}</p>
       <p className="m-0 mt-0.5 text-[2.75rem] leading-[1.05] font-bold tabular-nums">
         {resumo.saldo === 0n ? PALAVRAS.nada : emReais(resumo.saldo)}
@@ -224,11 +224,11 @@ function Linhas({ linhas, aoAbrir }: { linhas: LinhaDaFicha[]; aoAbrir: ((lancam
         const apagado = linha.tipo === 'pagamento' ? 'text-suave' : ''
         const riscado = linha.estornado ? 'line-through text-suave' : ''
         const conteudo = (
-          <>
+          <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-1 [overflow-wrap:anywhere]">
             <span className="w-[4.25rem] flex-none text-suave tabular-nums">{diaCurto(linha.data)}</span>
-            <span className={`flex-1 ${destaque}`}>{linha.descricao}</span>
-            <span className={`flex-none whitespace-nowrap tabular-nums ${destaque}`}>{emReais(linha.valor)}</span>
-          </>
+            <span className={`min-w-0 flex-[1_1_12ch] ${destaque}`}>{linha.descricao}</span>
+            <span className={`ml-auto max-w-full text-right tabular-nums ${destaque}`}>{emReais(linha.valor)}</span>
+          </span>
         )
         const classes = `flex w-full items-center justify-between gap-3 border-b border-borda py-3 ${apagado} ${riscado}`
         const lancamentoId = linha.lancamentoId

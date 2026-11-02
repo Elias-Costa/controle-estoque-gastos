@@ -109,7 +109,7 @@ export function Lista({ resumos, vazia, aoAbrir }: { resumos: ResumoDaFicha[]; v
                   <span className="block truncate text-[0.85rem] font-normal text-suave">{resumo.cliente.apelido}</span>
                 )}
               </span>
-              <span className={`ml-auto flex-none text-right whitespace-nowrap tabular-nums ${atrasada ? 'text-atraso' : ''}`}>
+              <span className={`ml-auto min-w-0 max-w-full text-right tabular-nums [overflow-wrap:anywhere] ${atrasada ? 'text-atraso' : ''}`}>
                 {quantoDeve(resumo.saldo)}
                 {atrasada && <span className="block text-[0.8rem]">{avisoDeAtraso(resumo.diasDeAtraso)}</span>}
               </span>

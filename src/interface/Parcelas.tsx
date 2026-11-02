@@ -44,9 +44,9 @@ export function Parcelas({
               editando ? (
                 <ParcelaEditavel key={posicao} posicao={posicao} parcela={parcela} edicao={edicoes[posicao] ?? {}} aoMudar={(mudanca) => aoMudarParcela(posicao, mudanca)} />
               ) : (
-                <li key={posicao} className="flex justify-between border-b border-borda py-2 tabular-nums">
+                <li key={posicao} className="flex flex-wrap justify-between gap-x-3 border-b border-borda py-2 tabular-nums">
                   <span className="text-suave">{quandoDaParcela(posicao + 1, parcela.vencimento)}</span>
-                  <span className={parcela.editada ? 'font-semibold' : ''}>{emReais(parcela.valor)}</span>
+                  <span className={`ml-auto min-w-0 max-w-full text-right [overflow-wrap:anywhere] ${parcela.editada ? 'font-semibold' : ''}`}>{emReais(parcela.valor)}</span>
                 </li>
               ),
             )}
