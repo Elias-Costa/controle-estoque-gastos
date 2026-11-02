@@ -311,12 +311,13 @@ describe.skipIf(!LIGADA)('caixa no Postgres E-32', () => {
       const tabelas = ['clientes','lancamentos','categorias','produtos','operacoes_estoque','movimentos_estoque','encerramentos_estoque',
         'fotos_interno.fotos','fotos_interno.copias','fotos_interno.protecoes']
       const fotografar = async (sp: SQL): Promise<unknown[]> => {
-        const resultado: unknown[] = []
-        for (const tabela of tabelas) {
+        // Mesmo conteúdo integral, comparado por SHA-256 no Postgres. Uma instrução evita
+        // transferir todo o histórico seis vezes e mantém uma fotografia MVCC consistente.
+        const partes = tabelas.map((tabela) => {
           const nome = tabela.includes('.') ? tabela : `public.${tabela}`
-          resultado.push(await sp.unsafe(`select coalesce(jsonb_agg(to_jsonb(t) order by to_jsonb(t)::text),'[]') foto from ${nome} t`))
-        }
-        return resultado
+          return `'${tabela}',(select encode(sha256(convert_to(coalesce(jsonb_agg(to_jsonb(t) order by to_jsonb(t)::text),'[]')::text,'UTF8')),'hex') from ${nome} t)`
+        })
+        return sp.unsafe(`select jsonb_build_object(${partes.join(',')}) foto`)
       }
       const antes = await fotografar(tx)
       // O banco de ensaio acumulou caixa: exercitar também o caminho vazio sem excluir
@@ -360,8 +361,10 @@ describe.skipIf(!LIGADA)('caixa no Postgres E-32', () => {
     })
   })
 
-  test('duas conexões: primeiro commit vence correção/estorno, rollback libera e reenvio conserva posição', async () => {
-    for (const [inversa,sqlDireto] of [[false,false],[true,false],[false,true],[true,true]]) {
+  // Cada disputa tem seu próprio limite; latência hospedada não soma seis cenários
+  // sob um único relógio. A prova de bloqueio no Postgres continua em disputar.
+  test.each([[false,false],[true,false],[false,true],[true,true]])(
+    'duas conexões: primeiro commit vence correção/estorno (inversa=%s, SQL direto=%s)', async (inversa, sqlDireto) => {
       const conta = uuidv7(), original = movimento(), g = grupo('registro', [original])
       await sql.begin(async (tx) => { await assumir(tx, conta); await aceitar(tx, g) })
       const c1 = corrigir(original), c2 = corrigir(original, 'estorno')
@@ -371,10 +374,11 @@ describe.skipIf(!LIGADA)('caixa no Postgres E-32', () => {
         await assumir(tx, conta)
         expect((await baixar(tx)).map((r) => r['grupo'])).toEqual([g,primeiro])
       })
-    }
+    })
+
+  test.each([true,false])('duas conexões: reenvio conserva posição (rollback=%s)', async (rollback) => {
     const conta = uuidv7(), g = grupo()
-    expect(await disputar(conta, g, g, true)).toBe('aceita')
-    expect(await disputar(conta, g, g)).toBe('aceita')
+    expect(await disputar(conta, g, g, rollback)).toBe('aceita')
   })
 
   test('RPC/PostgREST real: resposta perdida, centavos textuais, recusa definitiva e grupo inteiro', async () => {
