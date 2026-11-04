@@ -53,6 +53,8 @@ export const PALAVRAS = {
     pronto: 'Pronto',
     faltaONome: 'Falta o nome',
     naoDeu: 'Não deu para anotar. Tente de novo.',
+    /** Proposta de V-01: distingue cadastro confirmado de saldo ainda não anotado. */
+    saldoNaoAnotado: 'A fichinha já foi criada, mas o saldo anterior não foi anotado. Confira os dados e tente de novo.',
   },
   /** "Mudar dados" (D-050, item 8): os mesmos campos do cadastro, e "Desativar a fichinha" no fim — só de fichinha ativa. */
   dados: {

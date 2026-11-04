@@ -1,9 +1,9 @@
 import { RodapeDeAcoes } from './rodape-de-acoes.tsx'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { repositorio } from '../dados/instancia.ts'
-import { cadastrarCliente, lancarSaldoAnterior } from '../dados/operacoes.ts'
+import { alterarCliente, cadastrarCliente, lancarSaldoAnterior } from '../dados/operacoes.ts'
 import { somar } from '../dominio/dinheiro.ts'
-import type { Dia, Id } from '../dominio/ficha.ts'
+import type { Cliente, Dia, Id } from '../dominio/ficha.ts'
 import { Botao } from './Botao.tsx'
 import { AvisosDoFormulario } from './avisos-do-formulario.tsx'
 import { Campo } from './Campo.tsx'
@@ -60,6 +60,9 @@ export function TelaCadastro({
   const [venceEmEditado, setVenceEmEditado] = useState<Dia | null>(null)
   const [gravando, setGravando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
+  // V-01: cadastro e saldo são gravações separadas; a recuperação reutiliza o cadastro confirmado.
+  const clienteCadastrada = useRef<Cliente | null>(null)
+  const gravacao = useRef<'pronta' | 'gravando' | 'concluida'>('pronta')
 
   const rascunho: RascunhoDoSaldoAnterior = { ...saldo, venceEm: venceEmEditado ?? saldo.desde }
   const conferencia = conferirSaldoAnterior(rascunho, dia)
@@ -76,38 +79,53 @@ export function TelaCadastro({
   }
 
   async function gravar(): Promise<void> {
+    if (!podeGravar || gravacao.current !== 'pronta') return
+    gravacao.current = 'gravando'
     setGravando(true)
     setErro(null)
+    let cliente = clienteCadastrada.current
     try {
-      const cliente = await cadastrarCliente(repositorio, {
-        nome,
+      const entrada = {
+        nome: nome.trim(),
         ...(telefone.trim() !== '' && { telefone: telefone.trim() }),
         ...(apelido.trim() !== '' && { apelido: apelido.trim() }),
         ...(observacao.trim() !== '' && { observacao: observacao.trim() }),
-      })
-      if (!cliente.ok) {
-        setErro(cliente.motivo === 'nome-obrigatorio' ? PALAVRAS.cadastro.faltaONome : PALAVRAS.cadastro.naoDeu)
-        return
+      }
+      if (cliente === null || cliente.nome !== entrada.nome || cliente.telefone !== entrada.telefone || cliente.apelido !== entrada.apelido || cliente.observacao !== entrada.observacao) {
+        // RF-01/D-050: campos continuam editáveis; mudar dados não cria outra identidade.
+        const resultado = cliente === null
+          ? await cadastrarCliente(repositorio, entrada)
+          : await alterarCliente(repositorio, cliente, entrada)
+        if (!resultado.ok) {
+          setErro(resultado.motivo === 'nome-obrigatorio' ? PALAVRAS.cadastro.faltaONome : PALAVRAS.cadastro.naoDeu)
+          return
+        }
+        cliente = resultado.valor
+        clienteCadastrada.current = cliente
       }
       if (temSaldoAnterior) {
         const anterior = await lancarSaldoAnterior(repositorio, {
-          clienteId: cliente.valor.id,
+          clienteId: cliente.id,
           data: rascunho.desde,
           parcelas: conferencia.parcelas.map(({ vencimento, valor }) => ({ vencimento, valor })),
         })
-        // A cliente já está gravada; o que falhou foi o saldo. A ficha aberta mostra "Nada", e
-        // isso é visível — melhor do que um cadastro duplicado numa segunda tentativa.
-        if (!anterior.ok) setErro(PALAVRAS.cadastro.naoDeu)
-        // A data que ela digitou vale para o próximo "Outro dia" (D-049); hoje não é digitado.
-        else if (rascunho.desde !== dia) aoLembrarOutroDia(rascunho.desde)
+        if (!anterior.ok) {
+          setErro(PALAVRAS.cadastro.saldoNaoAnotado)
+          return
+        }
       }
-      aoCadastrar(cliente.valor.id)
+      // Bloqueia outro toque mesmo antes de React desmontar a tela de cadastro.
+      gravacao.current = 'concluida'
     } catch {
-      // A base local não gravou (EL-06): dito na tela, com palavras dela; nada foi perdido em silêncio.
-      setErro(PALAVRAS.cadastro.naoDeu)
+      setErro(clienteCadastrada.current === null ? PALAVRAS.cadastro.naoDeu : PALAVRAS.cadastro.saldoNaoAnotado)
+      return
     } finally {
+      if (gravacao.current === 'gravando') gravacao.current = 'pronta'
       setGravando(false)
     }
+    // Só confirmar depois das duas operações, sem confundir falha de navegação com escrita.
+    if (temSaldoAnterior && rascunho.desde !== dia) aoLembrarOutroDia(rascunho.desde)
+    aoCadastrar(cliente.id)
   }
 
   return (
