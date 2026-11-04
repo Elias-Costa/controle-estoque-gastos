@@ -106,7 +106,7 @@ export function Lista({ resumos, vazia, aoAbrir }: { resumos: ResumoDaFicha[]; v
               <span className="min-w-0 flex-[1_1_12ch] font-semibold [overflow-wrap:anywhere]">
                 {resumo.cliente.nome}
                 {resumo.cliente.apelido !== undefined && resumo.cliente.apelido !== '' && (
-                  <span className="block truncate text-[0.85rem] font-normal text-suave">{resumo.cliente.apelido}</span>
+                  <span className="block text-[0.85rem] font-normal text-suave">{resumo.cliente.apelido}</span>
                 )}
               </span>
               <span className={`ml-auto min-w-0 max-w-full text-right tabular-nums [overflow-wrap:anywhere] ${atrasada ? 'text-atraso' : ''}`}>
