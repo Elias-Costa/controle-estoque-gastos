@@ -10,6 +10,7 @@ import { chaveDoEfeito } from '../../src/dominio/estoque.ts'
 import { conteudoDoEfeito } from '../../src/dominio/regras-estoque.ts'
 import { hashDaFoto } from '../../src/plataforma/fotos.ts'
 import { criarArquivoBackup } from '../../src/plataforma/arquivo-copia.ts'
+import { indexarMaterialBackup } from '../../src/plataforma/material-backup.ts'
 
 /** Cabeçalho durável; conta/destino não são credenciais Google. */
 export type CapturaServidor = { readonly id: string; readonly capturadoEm: string; readonly dia: string; readonly vinculo: VinculoConta }
@@ -111,18 +112,7 @@ export async function dadosDaCaptura(c: CapturaServidor, f: FontesBackup,
 
 /** Material canônico por fato/grupo, usado somente para conferir cobertura na retenção D-084. */
 export async function materialDaCaptura(d: DadosCopia): Promise<readonly string[]> {
-  const itens = [
-    ...d.clientes.map((v) => ['cliente', v]), ...d.categorias.map((v) => ['categoria', v]), ...d.produtos.map((v) => ['produto', v]),
-    ...[...d.lancamentos, ...d.versoesEstoque.flatMap((v) => v.grupo.lancamentos)].map((v) => ['lancamento', v]),
-    ...[...d.movimentos, ...d.versoesEstoque.flatMap((v) => v.grupo.movimentos)].map((v) => ['movimento', v]),
-    ...d.versoesEstoque.map((v) => ['grupoEstoque', v.grupo]), ...d.versoesCaixa.map((v) => ['grupoCaixa', v.grupo]),
-    ...d.encerramentos.map((v) => ['encerramento', v]), ...d.modelos.map((v) => ['modelos', v]), ...d.identidadesLoja.map((v) => ['identidade', v]),
-    ...d.fotos.map((v) => ['foto', { id: v.id, sha256: v.sha256, bytes: v.bytes, largura: v.largura, altura: v.altura }]),
-    ...d.evidenciasCopia.map((v) => ['evidencia', v]),
-  ]
-  const hashes = new Set<string>()
-  for (const item of itens) hashes.add(await hashDaFoto(new TextEncoder().encode(conteudoDoEfeito(item))))
-  return [...hashes].sort()
+  return (await indexarMaterialBackup(d)).material
 }
 
 /** Empacota a captura já conferida; miniaturas continuam responsabilidade automática da importação. */

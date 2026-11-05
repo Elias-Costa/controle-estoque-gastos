@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import { banco } from './dados/instancia'
 import { Aplicativo } from './interface/Aplicativo'
-import { conta, lembretes, sincronizacao } from './sincronizacao/instancia'
+import { backupAparelho, conta, lembretes, sincronizacao } from './sincronizacao/instancia'
 import { AvisoDoLembrete } from './interface/lembretes.tsx'
 import { pedirVerificacaoDeVersao } from './plataforma/atualizacao'
 import { pedirPersistencia } from './plataforma/persistencia'
@@ -31,6 +31,16 @@ window.addEventListener('online', () => { void lembretes.acordar(true) })
 window.addEventListener('focus', () => { void lembretes.acordar(true) })
 setInterval(() => { void lembretes.acordar() }, 60_000)
 conta.assinar(() => { void lembretes.acordar(true) })
+
+// D-084: captura diária quando o app está ativo. Nenhuma anotação espera essa rotina.
+if (backupAparelho) {
+  const acordar = () => { void backupAparelho?.acordar() }
+  acordar()
+  window.addEventListener('online', acordar)
+  document.addEventListener('visibilitychange', acordar)
+  conta.assinar(acordar)
+  setInterval(acordar, 60_000)
+}
 
 // O laboratório de E-08 (D-043): a prova de offline lança vendas e lê a ficha por ele, por
 // fora das telas. Só no build de laboratório (`bun run build:laboratorio`): em produção

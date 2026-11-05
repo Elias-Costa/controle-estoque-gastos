@@ -2,8 +2,9 @@ import type { BancoLocal } from './banco.ts'
 import { dadosDaCopia, exigirCopia, lerDadosCopia, validarVinculosCopia } from './formato-copia.ts'
 import { uuidv7 } from './identidade.ts'
 import type { FotoLocal } from './tipos-fotos.ts'
-import { tabelasDaCopia, TABELAS_COPIA, type DadosCopia, type EstagioCopia, type VinculoConta } from './tipos-copia.ts'
+import { tabelasDaCopia, TABELAS_COPIA, type BackupConfirmado, type DadosCopia, type EstagioCopia, type VinculoConta } from './tipos-copia.ts'
 import { conteudoDoEfeito } from '../dominio/regras-estoque.ts'
+import { criarRepositorioFotos } from './fotos.ts'
 
 /** Conta já estabelecida é imutável; expirar sessão não apaga nem desvincula dados (D-071). */
 export async function vincularContaCopia(banco: BancoLocal, vinculo: VinculoConta): Promise<void> {
@@ -57,7 +58,7 @@ export function criarRepositorioCopia(banco: BancoLocal, agora = () => new Date(
       return { estagio, dados: dadosDaCopia(linhas) }
     })
   }
-  async function capturar(vinculo: VinculoConta): Promise<string> {
+  async function capturar(vinculo: VinculoConta, automatico?: { aparelhoId: string; instante: Date }): Promise<string> {
     const id = uuidv7()
     await banco.transaction('rw', escopo, async () => {
       await conferirConta(vinculo)
@@ -70,12 +71,13 @@ export function criarRepositorioCopia(banco: BancoLocal, agora = () => new Date(
         const uso = uuidv7(); usos.push(uso)
         await banco.usosFotos.add({ id: uso, fotoId: foto.id })
       }
-      await banco.estagiosCopia.add({ id, tipo: 'exportacao', vinculo, capturadoEm: agora().toISOString(), pronto: false, usos })
+      await banco.estagiosCopia.add({ id, tipo: 'exportacao', vinculo, capturadoEm: (automatico?.instante ?? agora()).toISOString(),
+        pronto: false, usos, ...(automatico ? { aparelhoId: automatico.aparelhoId } : {}) })
       await guardarLotes(id, dados)
     })
     return id
   }
-  async function completarFoto(id: string, fotoId: string, binario: Uint8Array, miniatura: Uint8Array): Promise<void> {
+  async function completarFoto(id: string, fotoId: string, binario: Uint8Array, miniatura?: Uint8Array): Promise<void> {
     await banco.transaction('rw', banco.estagiosCopia, banco.lotesCopia, async () => {
       const estagio = await banco.estagiosCopia.get(id)
       exigirCopia(estagio?.tipo === 'exportacao' && !estagio.pronto, 'estagio')
@@ -84,13 +86,13 @@ export function criarRepositorioCopia(banco: BancoLocal, agora = () => new Date(
       exigirCopia(lote && lote.linhas.length === 1, 'foto')
       const original = lote.linhas[0]
       exigirCopia(typeof original === 'object' && original !== null, 'foto')
-      await banco.lotesCopia.put({ ...lote, linhas: [{ ...original, binario, miniatura }] })
+      await banco.lotesCopia.put({ ...lote, linhas: [{ ...original, binario, ...(miniatura ? { miniatura } : {}) }] })
     })
   }
   async function concluirCaptura(id: string): Promise<void> {
     await banco.transaction('rw', banco.estagiosCopia, banco.lotesCopia, async () => {
       const { estagio, dados } = await lerEstagio(id)
-      exigirCopia(estagio.tipo === 'exportacao' && fotosNecessariasCopia(dados).every((f) => !!f.binario && !!f.miniatura), 'foto')
+      exigirCopia(estagio.tipo === 'exportacao' && fotosNecessariasCopia(dados).every((f) => !!f.binario && (!!estagio.aparelhoId || !!f.miniatura)), 'foto')
       await banco.estagiosCopia.put({ ...estagio, pronto: true })
     })
   }
@@ -159,8 +161,55 @@ export function criarRepositorioCopia(banco: BancoLocal, agora = () => new Date(
       if (controle?.chave === 'restauracao' && controle.id === id && controle.fase === 'escolher') await banco.controleCopia.delete('restauracao')
     })
   }
+  async function reservarBackup(vinculo: VinculoConta, dia: string, instante: Date): Promise<string | null> {
+    return banco.transaction('rw', escopo, async () => {
+      await conferirConta(vinculo)
+      if (await banco.controleCopia.get('restauracao')) return null
+      const controle = await banco.controleCopia.get('backup-aparelho')
+      if (controle?.chave === 'backup-aparelho') {
+        if (controle.tentativa) return controle.tentativa.id
+        if (controle.concluido && controle.concluido >= dia) return null
+      }
+      // A identidade do aparelho, o estágio e o gatilho nascem juntos. Outra aba vê a mesma candidata.
+      const aparelhoId = await criarRepositorioFotos(banco).aparelhoId()
+      const id = await capturar(vinculo, { aparelhoId, instante })
+      await banco.controleCopia.put({ chave: 'backup-aparelho', tentativa: { id, dia, falhou: false } })
+      return id
+    })
+  }
+  async function marcarFalhaBackup(id: string, falhou: boolean): Promise<void> {
+    await banco.transaction('rw', banco.controleCopia, async () => {
+      const c = await banco.controleCopia.get('backup-aparelho')
+      if (c?.chave === 'backup-aparelho' && c.tentativa?.id === id && c.tentativa.falhou !== falhou) {
+        await banco.controleCopia.put({ ...c, tentativa: { ...c.tentativa, falhou } })
+      }
+    })
+  }
+  async function guardarUltimoBackup(ultima: BackupConfirmado): Promise<void> {
+    await banco.transaction('rw', banco.controleCopia, async () => {
+      const c = await banco.controleCopia.get('backup-confirmado')
+      if (c?.chave !== 'backup-confirmado' || Date.parse(c.ultima.capturadoEm) <= Date.parse(ultima.capturadoEm)) {
+        await banco.controleCopia.put({ chave: 'backup-confirmado', ultima })
+      }
+    })
+  }
+  async function concluirBackup(id: string, ultima: BackupConfirmado): Promise<void> {
+    await banco.transaction('rw', banco.controleCopia, banco.estagiosCopia, banco.lotesCopia, banco.usosFotos, async () => {
+      const c = await banco.controleCopia.get('backup-aparelho')
+      if (c?.chave !== 'backup-aparelho' || c.tentativa?.id !== id) return
+      await guardarUltimoBackup(ultima)
+      await descartar(id)
+      await banco.controleCopia.put({ chave: 'backup-aparelho', concluido: c.tentativa.dia })
+    })
+  }
+  async function lerEstadoBackup() {
+    const [c, u] = await banco.controleCopia.bulkGet(['backup-aparelho', 'backup-confirmado'])
+    return { tentativa: c?.chave === 'backup-aparelho' ? c.tentativa : undefined,
+      ultima: u?.chave === 'backup-confirmado' ? u.ultima : undefined }
+  }
   return { capturar, lerEstagio, completarFoto, concluirCaptura, reservarImportacao, prepararImportacao, publicar, descartar,
-    listar: () => banco.estagiosCopia.toArray(),
+    reservarBackup, marcarFalhaBackup, guardarUltimoBackup, concluirBackup, lerEstadoBackup,
+    listar: async () => (await banco.estagiosCopia.toArray()).filter((e) => !e.aparelhoId),
     async vinculo() { const c = await banco.controleCopia.get('conta'); return c?.chave === 'conta' ? c.vinculo : null },
     async restauracao() { const c = await banco.controleCopia.get('restauracao'); return c?.chave === 'restauracao' ? c : null },
     async conferirDados() { return banco.transaction('r', tabelasDaCopia(banco), () => lerDadosCopia(banco)) },

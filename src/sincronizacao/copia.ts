@@ -16,11 +16,10 @@ export function criarServicoCopia(banco: BancoLocal, nuvem: Nuvem | null, aoPubl
     exigirCopia(atual, 'entrar')
     return atual
   }
-  async function exportar(id?: string): Promise<{ id: string; arquivo: Blob; nome: string }> {
-    const conta = await vinculo()
-    const estagioId = id ?? await repo.capturar(conta)
+  async function prepararExportacao(estagioId: string, conta: VinculoConta, automatico: boolean) {
     const captura = await repo.lerEstagio(estagioId)
-    exigirCopia(captura.estagio.tipo === 'exportacao' && mesmoVinculo(captura.estagio.vinculo, conta), 'conta')
+    exigirCopia(captura.estagio.tipo === 'exportacao' && !!captura.estagio.aparelhoId === automatico &&
+      mesmoVinculo(captura.estagio.vinculo, conta), 'conta')
     if (!captura.estagio.pronto) {
       for (const foto of fotosNecessariasCopia(captura.dados)) {
         let binario = foto.binario
@@ -30,11 +29,19 @@ export function criarServicoCopia(banco: BancoLocal, nuvem: Nuvem | null, aoPubl
           exigirCopia(resposta.ok, 'foto'); binario = resposta.valor
         }
         exigirCopia(binario.byteLength === foto.bytes && await hashDaFoto(binario) === foto.sha256, 'foto')
-        if (!foto.binario || !foto.miniatura) await repo.completarFoto(estagioId, foto.id, binario, foto.miniatura ?? await miniaturizar(binario))
+        if (!foto.binario || (!automatico && !foto.miniatura)) {
+          const miniatura = automatico ? foto.miniatura : foto.miniatura ?? await miniaturizar(binario)
+          await repo.completarFoto(estagioId, foto.id, binario, miniatura)
+        }
       }
       await repo.concluirCaptura(estagioId)
     }
-    const completa = await repo.lerEstagio(estagioId)
+    return repo.lerEstagio(estagioId)
+  }
+  async function exportar(id?: string): Promise<{ id: string; arquivo: Blob; nome: string }> {
+    const conta = await vinculo()
+    const estagioId = id ?? await repo.capturar(conta)
+    const completa = await prepararExportacao(estagioId, conta, false)
     const { criarArquivoCopia } = await import('../plataforma/arquivo-copia.ts')
     return { id: estagioId, arquivo: await criarArquivoCopia(completa.estagio, completa.dados),
       nome: `fichinhas-${completa.estagio.capturadoEm.slice(0, 10)}.zip` }
@@ -48,6 +55,7 @@ export function criarServicoCopia(banco: BancoLocal, nuvem: Nuvem | null, aoPubl
     aoPublicar()
   }
   async function retomarImportacao(id: string): Promise<void> { await repo.publicar(id, await vinculo()); aoPublicar() }
-  return { exportar, importar, retomarImportacao, vinculo, reservarImportacao: repo.reservarImportacao,
+  return { exportar, importar, retomarImportacao, vinculo, prepararBackup: (id: string, conta: VinculoConta) => prepararExportacao(id, conta, true),
+    reservarImportacao: repo.reservarImportacao,
     descartar: repo.descartar, listar: repo.listar, restauracao: repo.restauracao }
 }

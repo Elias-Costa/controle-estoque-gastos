@@ -12,6 +12,10 @@ import type { PreferenciaIdentidadeLoja } from './identidade-loja.ts'
 export type VinculoConta = { readonly contaId: string; readonly destino: string }
 /** Origem explícita do backup automático; não contém identificação ou token do Google (D-084). */
 export type OrigemBackup = { readonly tipo: 'servidor' } | { readonly tipo: 'aparelho'; readonly aparelhoId: string }
+/** Confirmação do catálogo privado. A hora é da captura, anterior à conclusão do envio. */
+export type BackupConfirmado = { readonly origem: OrigemBackup['tipo']; readonly capturadoEm: string }
+/** Uma tentativa é retomada pelo mesmo estágio, inclusive após fechar o app. */
+export type TentativaBackup = { readonly id: string; readonly dia: string; readonly falhou: boolean }
 /** Evidência de colisão F1 durante a restauração; o aceite é a projeção corrente. */
 export type EvidenciaCopia = { readonly id: string; readonly tentativa: Lancamento; readonly aceita: Lancamento }
 /** Todas as tabelas de uso; temporários de preparação não são dados do negócio. */
@@ -38,10 +42,13 @@ export type TabelaCopia = typeof TABELAS_COPIA[number]
 /** Controle durável da conta e da barreira de primeiro envio; ausência não apaga dados existentes. */
 export type ControleCopia = { readonly chave: 'conta'; readonly vinculo: VinculoConta } |
   { readonly chave: 'restauracao'; readonly id: string; readonly fase: 'escolher' | 'reconciliar' | 'proteger' } |
+  { readonly chave: 'backup-aparelho'; readonly concluido?: string; readonly tentativa?: TentativaBackup } |
+  { readonly chave: 'backup-confirmado'; readonly ultima: BackupConfirmado } |
   { readonly chave: `registro:${string}`; readonly conteudo: string }
 /** Cabeçalho do estágio, que só publica depois de validar todos os lotes. */
 export type EstagioCopia = { readonly id: string; readonly tipo: 'exportacao' | 'importacao'; readonly vinculo: VinculoConta
-  readonly capturadoEm: string; readonly pronto: boolean; readonly publicada?: boolean; readonly usos?: readonly string[] }
+  readonly capturadoEm: string; readonly pronto: boolean; readonly publicada?: boolean; readonly usos?: readonly string[]
+  readonly aparelhoId?: string }
 /** Lotes limitam o trabalho de leitura e mantêm os bytes fora do JSON. */
 export type LoteCopia = { readonly id: string; readonly operacaoId: string; readonly tabela: TabelaCopia; readonly linhas: readonly unknown[] }
 /** Tetos aprovados D-071; exceder recusa a operação inteira, nunca trunca. */

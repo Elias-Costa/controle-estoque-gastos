@@ -248,5 +248,13 @@ negativos/saúde antes de criar o job próprio das 11h de Fortaleza. [Publicaç�
 retomada e alcance das provas](nuvem/backup/LEIA-ME.md#prepararpublicar-em-homologação).
 Para repetir download/restauração sem nova semente, usar `bun run backup:executar:homologacao`.
 Com `--captura=<UUID>`, baixa e restaura uma cópia já pronta, inclusive gerada pelo Edge,
-sem iniciar novo envio. O complemento do aparelho e a entrega permanecem BA-03/04;
-nenhum desses comandos configura produção.
+sem iniciar novo envio.
+
+Para ensaiar o complemento do aparelho, aplicar a migration 0015 pelo runner e publicar
+o bundle atualizado de `enviar-backup` em homologação. O ensaio abre o build de laboratório
+no Chromium com a conta fictícia vinculada ao Drive de teste, interrompe o envio e tenta
+retomar a mesma candidata. [Procedimento](nuvem/backup/LEIA-ME.md#complemento-do-aparelho-ba-03).
+
+```bash
+bun run backup:aparelho:homologacao
+```

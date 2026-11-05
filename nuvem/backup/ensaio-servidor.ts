@@ -127,11 +127,16 @@ export async function ensaiarBackupServidor(semear: boolean, interromper: boolea
       console.log(JSON.stringify({ etapa: 'interrupcao_controlada', ...parcial, recebidos, segredosImpressos: false }))
     }
     let resultado: ResultadoBackupServidor
+    let origem: 'servidor' | 'aparelho' = 'servidor'
     if (capturaPronta !== undefined) {
       etapa = 'captura_pronta'
       exigirCopia(!semear && !interromper && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(capturaPronta))
       const r = await rpc('consultar_upload_backup', { conta: autorizacao.contaId, captura: capturaPronta })
       exigirCopia(objetoCopia(r) && r['estado'] === 'pronta' && typeof r['arquivoId'] === 'string' && typeof r['tamanho'] === 'string')
+      const [captura] = await sql<{ origem: 'servidor' | 'aparelho' }[]>`
+        select origem from backup_interno.capturas where dono=${autorizacao.contaId}::uuid and id=${capturaPronta}::uuid and destino=${destino}`
+      exigirCopia(captura)
+      origem = captura.origem
       const bytes = Number(r['tamanho']); exigirCopia(Number.isSafeInteger(bytes) && bytes > 0)
       resultado = { estado: 'pronta', capturaId: capturaPronta, arquivoId: r['arquivoId'], bytes }
     } else {
@@ -149,7 +154,8 @@ export async function ensaiarBackupServidor(semear: boolean, interromper: boolea
     const drive = criarDriveBackup(tokens.acesso, autorizacao.contaGoogleId, destino, autorizacao.contaId)
     const arquivo = await drive.baixar(resultado.arquivoId, registro['pastaId'], resultado.capturaId)
     exigirCopia(await hashDaFoto(new Uint8Array(await arquivo.arrayBuffer())) === registro['sha256'])
-    const pasta = resolve('docs/evidencias/2026-11-05-backup-ba02-servidor'); await mkdir(pasta, { recursive: true })
+    const pasta = resolve(origem === 'servidor' ? 'docs/evidencias/2026-11-05-backup-ba02-servidor' : 'docs/evidencias/2026-11-05-backup-ba03')
+    await mkdir(pasta, { recursive: true })
     const caminho = resolve(pasta, `backup-drive-${resultado.capturaId}.zip`); await Bun.write(caminho, arquivo)
     const build = await Bun.build({ entrypoints: ['ferramentas/restaurar-backup-navegador.ts'], target: 'browser', minify: false })
     exigirCopia(build.success && build.outputs.length === 1)
@@ -157,7 +163,7 @@ export async function ensaiarBackupServidor(semear: boolean, interromper: boolea
     const servidor = Bun.serve({ hostname: '127.0.0.1', port: 0, development: false, fetch(req) {
       if (req.method !== 'GET') return new Response(null, { status: 405 })
       const rota = new URL(req.url).pathname
-      if (rota === '/') return new Response('<!doctype html><title>Ensaio de restauração BA-02</title><script type="module" src="/leitor.js"></script>', { headers: { 'content-type': 'text/html' } })
+        if (rota === '/') return new Response('<!doctype html><title>Ensaio de restauração do backup</title><script type="module" src="/leitor.js"></script>', { headers: { 'content-type': 'text/html' } })
       if (rota === '/leitor.js') return new Response(modulo, { headers: { 'content-type': 'text/javascript' } })
       if (rota === '/copia.zip') return new Response(arquivo, { headers: { 'content-type': 'application/zip', 'cache-control': 'no-store' } })
       return new Response(null, { status: 404 })
@@ -169,7 +175,9 @@ export async function ensaiarBackupServidor(semear: boolean, interromper: boolea
       const pagina = await browser.newPage()
       await pagina.goto(`http://127.0.0.1:${servidor.port}`)
       await pagina.waitForFunction(() => typeof window.restaurarBackupDeTeste === 'function')
-      const restauracao = await pagina.evaluate((v) => window.restaurarBackupDeTeste(v), { contaId: autorizacao.contaId, destino })
+      const restauracao = await pagina.evaluate((v) => window.restaurarBackupDeTeste(v.vinculo, v.origem), {
+        vinculo: { contaId: autorizacao.contaId, destino }, origem,
+      })
       console.log(JSON.stringify({ ambiente, ...resultado, ...(capturaPronta ? { somenteRestauracao: true } : { repeticaoMesmoArquivo: true }), sha256: registro['sha256'], arquivoLocal: caminho,
         restauracao, segredosImpressos: false }))
     } finally { await browser?.close(); await servidor.stop(true) }

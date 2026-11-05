@@ -1,5 +1,5 @@
 import { exigirCopia, objetoCopia } from '../../src/dados/formato-copia.ts'
-import type { CapturaServidor } from './captura.ts'
+import { sessaoDoDrive } from '../../src/plataforma/protocolo-backup.ts'
 
 /** Erro fechado: não carrega corpo HTTP, URI de upload ou token na mensagem. */
 export class FalhaDrive extends Error {
@@ -58,12 +58,6 @@ export function criarDriveBackup(acesso: string, contaGoogleId: string, destino:
     if (r.status === 404) { await r.body?.cancel(); return null }
     return conferir(await lerJson(r), id, pasta, captura)
   }
-  function uriSessao(uri: string): string {
-    const u = new URL(uri)
-    exigirCopia(u.origin === 'https://www.googleapis.com' && !u.username && !u.password && !u.hash &&
-      /^\/upload\/drive\/v3\/files(?:\/[a-zA-Z0-9_-]+)?$/.test(u.pathname) && !!u.searchParams.get('upload_id'))
-    return u.href
-  }
   function posicao(r: Response, tamanho: number): number {
     const range = r.headers.get('range')
     if (r.status === 200 || r.status === 201) return tamanho
@@ -93,22 +87,22 @@ export function criarDriveBackup(acesso: string, contaGoogleId: string, destino:
       exigirCopia(atual && !atual.apagado)
     },
     /** Cria/retoma somente a candidata identificada; a cópia anterior nunca é sobrescrita. */
-    async iniciarSessao(id: string, pasta: string, c: CapturaServidor, tamanho: number): Promise<string> {
+    async iniciarSessao(id: string, pasta: string, c: { id: string; dia: string }, tamanho: number, origem: 'servidor' | 'aparelho' = 'servidor'): Promise<string> {
       const existente = await consultar(id, pasta, c.id)
       exigirCopia(!existente?.apagado)
       const url = `https://www.googleapis.com/upload/drive/v3/files${existente ? '/' + id : ''}?uploadType=resumable&fields=id`
       const r = await pedir(url, { method: existente ? 'PATCH' : 'POST', headers: { 'content-type': 'application/json',
         'x-upload-content-type': 'application/zip', 'x-upload-content-length': String(tamanho) },
       body: JSON.stringify(existente ? { mimeType: 'application/zip' } : { id,
-        name: `fichinhas-${c.dia}-servidor-${c.id.slice(0, 8)}.zip`, mimeType: 'application/zip', parents: [pasta],
-        appProperties: { ...propriedades, captura: c.id, origem: 'servidor', dia: c.dia } }) })
+        name: `fichinhas-${c.dia}-${origem}-${c.id.slice(0, 8)}.zip`, mimeType: 'application/zip', parents: [pasta],
+        appProperties: { ...propriedades, captura: c.id, origem, dia: c.dia } }) })
       if (!r.ok) { await r.body?.cancel(); throw new FalhaDrive(r.status) }
       const uri = r.headers.get('location'); await r.body?.cancel(); exigirCopia(uri)
-      return uriSessao(uri)
+      return sessaoDoDrive(uri)
     },
     /** Pergunta a posição recebida; não presume aceite pela quantidade enviada antes da interrupção. */
     async consultarPosicao(uri: string, tamanho: number): Promise<number | null> {
-      const r = await pedir(uriSessao(uri), { method: 'PUT', headers: { 'content-range': `bytes */${tamanho}`, 'content-length': '0' } }, true)
+      const r = await pedir(sessaoDoDrive(uri), { method: 'PUT', headers: { 'content-range': `bytes */${tamanho}`, 'content-length': '0' } }, true)
       if (r.status === 404 || r.status === 410) { await r.body?.cancel(); return null }
       const recebida = posicao(r, tamanho); await r.body?.cancel(); return recebida
     },
@@ -116,7 +110,7 @@ export function criarDriveBackup(acesso: string, contaGoogleId: string, destino:
     async enviarBloco(uri: string, arquivo: Blob, inicio: number, comprimento = 4 * 1024 * 1024): Promise<number> {
       exigirCopia(Number.isSafeInteger(inicio) && inicio >= 0 && inicio < arquivo.size && comprimento > 0 && comprimento % 262144 === 0)
       const fim = Math.min(inicio + comprimento, arquivo.size)
-      const r = await pedir(uriSessao(uri), { method: 'PUT', headers: { 'content-type': 'application/zip', 'content-length': String(fim - inicio),
+      const r = await pedir(sessaoDoDrive(uri), { method: 'PUT', headers: { 'content-type': 'application/zip', 'content-length': String(fim - inicio),
         'content-range': `bytes ${inicio}-${fim - 1}/${arquivo.size}` }, body: arquivo.slice(inicio, fim) }, true)
       const recebida = posicao(r, arquivo.size); await r.body?.cancel()
       exigirCopia(recebida > inicio && recebida <= fim)

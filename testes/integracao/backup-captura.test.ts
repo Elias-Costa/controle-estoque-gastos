@@ -214,4 +214,32 @@ describe.skipIf(!LIGADA)('BA-02 captura/retencao SQL — somente dados fictício
     await recusar(tx, (sp) => sp`select public.concluir_rotacao_backup(${conta}::uuid,${c.id}::uuid,'arquivo')`, '23514')
     await recusar(tx, (sp) => pagina(sp, conta, c.id, 'inscricoes'), '23514')
   }))
+  test('BA-03 separa a candidata do Cron e limita reserva, retomada e leitura ao aparelho e conta', () => transacao(async (tx, conta) => {
+    const id = uuidv7(), aparelho = uuidv7()
+    const instante = new Date(Date.now() - 86_400_000).toISOString()
+    const sessao = 'https://www.googleapis.com/upload/drive/v3/files?upload_id=ficcao'
+    await tx`select public.reservar_pasta_backup(${conta}::uuid,${DESTINO},'pasta-ba03')`
+    const reservar = (sp: SQL, captura = id, dono = conta, hash = SHA, arquivo = 'arquivo-ba03') => sp<{ r: Record<string, unknown> }[]>`
+      select public.reservar_backup_aparelho(${dono}::uuid,${captura}::uuid,${aparelho}::uuid,${DESTINO},${instante}::timestamptz,
+        ${arquivo},'pasta-ba03','100',${hash},${sp.array([SHA], 'TEXT')},${sp.array([SHA], 'TEXT')}) r`
+    const consultar = (sp: SQL, dono = conta, dispositivo = aparelho, destino = DESTINO) => sp<{ r: unknown }[]>`
+      select public.consultar_backup_aparelho(${dono}::uuid,${id}::uuid,${dispositivo}::uuid,${destino}) r`
+    expect((await reservar(tx))[0]?.r).toMatchObject({ estado: 'enviando', arquivoId: 'arquivo-ba03', sessao: null })
+    expect((await reservar(tx, id, conta, SHA, 'id-de-outra-aba'))[0]?.r['arquivoId']).toBe('arquivo-ba03')
+    expect((await tx<{ r: unknown }[]>`select public.proxima_captura_backup(${conta}::uuid) r`)[0]?.r).toBeNull()
+    expect((await consultar(tx, uuidv7()))[0]?.r).toBeNull()
+    expect((await consultar(tx, conta, uuidv7()))[0]?.r).toBeNull()
+    expect((await consultar(tx, conta, aparelho, 'https://outro.supabase.co'))[0]?.r).toBeNull()
+    await recusar(tx, (sp) => reservar(sp, id, uuidv7()), '23514')
+    await recusar(tx, (sp) => reservar(sp, id, conta, 'b'.repeat(64)), '23514')
+    await recusar(tx, (sp) => reservar(sp, uuidv7()), '23505')
+    await recusar(tx, async (sp) => { await sp.unsafe('set local role authenticated'); await consultar(sp) }, '42501')
+    await tx`select public.trocar_sessao_backup_aparelho(${conta}::uuid,${id}::uuid,${aparelho}::uuid,${DESTINO},null,${sessao})`
+    await tx`select public.trocar_sessao_backup_aparelho(${conta}::uuid,${id}::uuid,${aparelho}::uuid,${DESTINO},null,${sessao + '-atrasada'})`
+    expect((await consultar(tx))[0]?.r).toMatchObject({ sessao })
+    expect((await tx<{ r: unknown }[]>`select public.ultimo_backup_confirmado(${conta}::uuid,${DESTINO}) r`)[0]?.r).toBeNull()
+    await tx`select public.confirmar_backup(${conta}::uuid,${id}::uuid,'arquivo-ba03','100',${SHA})`
+    expect((await consultar(tx))[0]?.r).toMatchObject({ estado: 'pronta', sessao: null })
+    expect((await tx<{ r: unknown }[]>`select public.ultimo_backup_confirmado(${conta}::uuid,${DESTINO}) r`)[0]?.r).toMatchObject({ origem: 'aparelho' })
+  }))
 })

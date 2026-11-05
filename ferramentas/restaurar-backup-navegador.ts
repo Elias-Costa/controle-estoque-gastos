@@ -4,15 +4,15 @@ import { lerDadosCopia, exigirCopia } from '../src/dados/formato-copia.ts'
 import { lerArquivoCopia } from '../src/plataforma/arquivo-copia.ts'
 import { hashDaFoto } from '../src/plataforma/fotos.ts'
 import { conteudoDoEfeito } from '../src/dominio/regras-estoque.ts'
-import { TABELAS_COPIA, type VinculoConta } from '../src/dados/tipos-copia.ts'
+import { TABELAS_COPIA, type OrigemBackup, type VinculoConta } from '../src/dados/tipos-copia.ts'
 
-declare global { interface Window { restaurarBackupDeTeste: (vinculo: VinculoConta) => Promise<Record<string, unknown>> } }
+declare global { interface Window { restaurarBackupDeTeste: (vinculo: VinculoConta, origem: OrigemBackup['tipo']) => Promise<Record<string, unknown>> } }
 
 // Instrumento em origem de loopback efêmera; não entra no app nem usa credenciais.
-window.restaurarBackupDeTeste = async (vinculo) => {
+window.restaurarBackupDeTeste = async (vinculo, origem) => {
   const arquivo = await (await fetch('/copia.zip')).blob()
   const lido = await lerArquivoCopia(arquivo, vinculo)
-  exigirCopia(lido.origem?.tipo === 'servidor')
+  exigirCopia(lido.origem?.tipo === origem)
   const nome = `ensaio-backup-${crypto.randomUUID()}`, banco = new BancoLocal(nome)
   await vincularContaCopia(banco, vinculo)
   const repo = criarRepositorioCopia(banco), reserva = await repo.reservarImportacao()

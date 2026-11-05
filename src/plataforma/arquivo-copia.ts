@@ -31,7 +31,9 @@ async function criarArquivo(estagio: EstagioCopia, dados: DadosCopia, origem?: O
   const carimbo = new Date(estagio.capturadoEm)
   // BA-02/D-084: remontar a mesma captura deve produzir os mesmos bytes para retomar o upload.
   // zip.js usa componentes locais no DOS timestamp; os componentes UTC fixam o resultado entre runtimes.
-  const dataDoZip = new Date(carimbo.getUTCFullYear(), carimbo.getUTCMonth(), carimbo.getUTCDate(), carimbo.getUTCHours(), carimbo.getUTCMinutes(), carimbo.getUTCSeconds())
+  // A captura do aparelho pode ser retomada após trocar de fuso. A data real está no manifesto.
+  const dataDoZip = origem?.tipo === 'aparelho' ? new Date(2000, 0, 1, 12)
+    : new Date(carimbo.getUTCFullYear(), carimbo.getUTCMonth(), carimbo.getUTCDate(), carimbo.getUTCHours(), carimbo.getUTCMinutes(), carimbo.getUTCSeconds())
   const escritor = new ZipWriter(new BlobWriter('application/zip'), { level: 0, useWebWorkers: false, bufferedWrite: false, extendedTimestamp: false,
     ...(origem ? { lastModDate: dataDoZip } : {}) })
   const arquivos: ArquivoListado[] = []
@@ -59,7 +61,7 @@ async function criarArquivo(estagio: EstagioCopia, dados: DadosCopia, origem?: O
     }
     for (const foto of dados.fotos) {
       if (foto.binario) await adicionar(`fotos/${foto.id}.jpeg`, new Blob([new Uint8Array(foto.binario)]))
-      if (foto.miniatura) await adicionar(`miniaturas/${foto.id}.jpeg`, new Blob([new Uint8Array(foto.miniatura)]))
+      if (!origem && foto.miniatura) await adicionar(`miniaturas/${foto.id}.jpeg`, new Blob([new Uint8Array(foto.miniatura)]))
     }
     for (const [nome, conteudo] of Object.entries(consultasDaCopia(dados))) await adicionar(nome, new Blob([conteudo], { type: 'text/csv;charset=utf-8' }))
     const manifesto = textoJson({ formato: origem ? 5 : 4, esquema: 10, ...(origem ? { origem } : {}), id: estagio.id, vinculo: estagio.vinculo,

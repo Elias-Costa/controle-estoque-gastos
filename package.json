@@ -57,6 +57,7 @@
     "backup:agendar:homologacao": "bun --no-env-file run ferramentas/testar-ambiente.ts homologacao backup-agendar",
     "backup:ensaio:homologacao": "bun --no-env-file run ferramentas/testar-ambiente.ts homologacao backup-ensaio",
     "backup:executar:homologacao": "bun --no-env-file run ferramentas/testar-ambiente.ts homologacao backup-executar",
+    "backup:aparelho:homologacao": "bun --no-env-file run ferramentas/testar-ambiente.ts homologacao provar-backup-aparelho",
     "check": "bun run typecheck && bun run lint && bun run test"
   },
   "dependencies": {

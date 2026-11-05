@@ -15,6 +15,8 @@ import { dadosDaCopia, exigirCopia, jsonDaCopia, objetoCopia } from '../src/dado
 import { LIMITES_COPIA, TABELAS_COPIA, type VinculoConta } from '../src/dados/tipos-copia.ts'
 import { criarArquivoBackup, criarArquivoCopia, lerArquivoCopia } from '../src/plataforma/arquivo-copia.ts'
 import { criarServicoCopia } from '../src/sincronizacao/copia.ts'
+import { criarBackupAparelho } from '../src/sincronizacao/backup-aparelho.ts'
+import { diaDoBackup, type PedidoBackupAparelho } from '../src/plataforma/protocolo-backup.ts'
 import { hashDaFoto } from '../src/plataforma/fotos.ts'
 import { saldo } from '../src/dominio/ficha.ts'
 import { projetarEstoque } from '../src/dominio/estoque.ts'
@@ -58,6 +60,49 @@ async function pacote(b: BancoLocal) {
   const resultado = await servico.exportar()
   return { ...resultado, dados: (await criarRepositorioCopia(b).lerEstagio(resultado.id)).dados }
 }
+
+test('BA-03 mantém a mesma captura na reabertura, deixa receber offline e só encerra após confirmação', async () => {
+  const fabrica = new IDBFactory(), nome = uuidv7(), b = aparelho(fabrica, nome)
+  const { cliente } = await povoar(b)
+  const agora = new Date('2026-11-06T02:59:59.000Z')
+  expect(diaDoBackup(agora)).toBe('2026-11-05')
+  expect(diaDoBackup(new Date('2026-11-06T03:00:00.000Z'))).toBe('2026-11-06')
+  const pedidos: Extract<PedidoBackupAparelho, { acao: 'abrir' }>[] = []
+  let ativo = true, confirmar = false
+  function motor(banco: BancoLocal) {
+    return criarBackupAparelho(banco, criarServicoCopia(banco, null), { agora: () => agora, ativo: () => ativo,
+      identidade: async () => CONTA, async pedir(pedido) {
+        if (pedido.acao === 'estado') return { estado: 'configuracao', habilitado: true, ultima: null }
+        exigirCopia(pedido.acao === 'abrir')
+        pedidos.push(pedido)
+        if (!confirmar) throw new Error('resposta perdida')
+        return { estado: 'pronta', confirmada: { origem: 'aparelho', capturadoEm: pedido.instante } }
+      } })
+  }
+  await motor(b).acordar()
+  const tentativa = await b.controleCopia.get('backup-aparelho')
+  expect(tentativa).toMatchObject({ tentativa: { id: pedidos[0]?.captura, falhou: true } })
+  expect(await criarRepositorioCopia(b).listar()).toEqual([])
+  expect(pedidos[0]?.exclusivos.length).toBeGreaterThan(0)
+  b.close()
+  const reaberto = aparelho(fabrica, nome)
+  ativo = false
+  const receberOffline = ok(await receber(criarRepositorioLocal(reaberto), { clienteId: cliente.id, data: DIA, valor: 10n, forma: 'pix' }))
+  const retomada = motor(reaberto)
+  await retomada.acordar()
+  expect(pedidos).toHaveLength(1)
+  ativo = true
+  confirmar = true
+  await retomada.acordar()
+  expect(pedidos[1]).toEqual(pedidos[0])
+  expect(await reaberto.estagiosCopia.count()).toBe(0)
+  expect(await reaberto.controleCopia.get('backup-aparelho')).toEqual({ chave: 'backup-aparelho', concluido: '2026-11-05' })
+  expect(await reaberto.controleCopia.get('backup-confirmado')).toMatchObject({ ultima: { origem: 'aparelho' } })
+  expect(await reaberto.lancamentos.get(receberOffline.recebimento.id)).toBeDefined()
+  await retomada.acordar()
+  expect(pedidos).toHaveLength(2)
+  reaberto.close()
+})
 async function alterar(arquivo: Blob, mudar: (nome: string, blob: Blob) => Promise<Blob | null>, atualizarHashes = false) {
   const leitor = new ZipReader(new BlobReader(arquivo), { useWebWorkers: false })
   const writer = new ZipWriter(new BlobWriter(), { level: 0, useWebWorkers: false, extendedTimestamp: false })
