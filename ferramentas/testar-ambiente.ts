@@ -101,7 +101,7 @@ async function configurarHomologacao(): Promise<void> {
 async function principal(): Promise<void> {
   const ambiente = process.argv[2]
   const acao = process.argv[3]
-  if (!['local', 'homologacao'].includes(ambiente ?? '') || !['iniciar', 'parar', 'migrar', 'reverter', 'integracao', 'navegador', 'build', 'lembretes-preparar', 'lembretes-segredos', 'lembretes-agendar', 'backup-google-autorizar', 'backup-google-reautorizar', 'backup-google-verificar', 'backup-preparar', 'backup-agendar', 'backup-ensaio', 'backup-executar', 'provar-backup-aparelho'].includes(acao ?? '')) {
+  if (!['local', 'homologacao'].includes(ambiente ?? '') || !['iniciar', 'parar', 'migrar', 'reverter', 'integracao', 'navegador', 'build', 'lembretes-preparar', 'lembretes-segredos', 'lembretes-agendar', 'backup-google-autorizar', 'backup-google-reautorizar', 'backup-google-verificar', 'backup-preparar', 'backup-agendar', 'backup-ensaio', 'backup-executar', 'backup-volume', 'provar-backup-aparelho'].includes(acao ?? '')) {
     throw new Error('Use local ou homologacao e uma ação: iniciar, parar, migrar, reverter, integracao, navegador ou build.')
   }
   process.env.AMBIENTE_DE_TESTE = ambiente
@@ -136,6 +136,11 @@ async function principal(): Promise<void> {
   // Integração e navegador sempre recebem todas as migrations do mesmo runner, sem reset.
   await executar(['run', 'nuvem/migrar.ts'])
   if (acao === 'migrar') return
+  if (acao === 'backup-volume') {
+    await executar(['run', 'typecheck'])
+    await executar(['run', 'nuvem/backup/volume-de-teste.ts'])
+    return
+  }
   if (acao === 'provar-backup-aparelho') {
     if (ambiente !== 'homologacao') throw new Error('O ensaio real do aparelho exige a homologação autorizada no Drive.')
     await executar(['run', 'typecheck'])
