@@ -42,7 +42,7 @@ export function criarServicoCopia(banco: BancoLocal, nuvem: Nuvem | null, aoPubl
   async function importar(arquivo: Blob, id: string): Promise<void> {
     const conta = await vinculo()
     const { lerArquivoCopia } = await import('../plataforma/arquivo-copia.ts')
-    const validada = await lerArquivoCopia(arquivo, conta)
+    const validada = await lerArquivoCopia(arquivo, conta, miniaturizar)
     await repo.prepararImportacao(id, conta, validada.capturadoEm, validada.dados)
     await repo.publicar(id, conta)
     aoPublicar()

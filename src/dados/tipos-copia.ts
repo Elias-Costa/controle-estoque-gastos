@@ -10,6 +10,8 @@ import type { PreferenciaIdentidadeLoja } from './identidade-loja.ts'
 
 /** Dono e destino da base; nunca contém credenciais (D-071, RNF-07). */
 export type VinculoConta = { readonly contaId: string; readonly destino: string }
+/** Origem explícita do backup automático; não contém identificação ou token do Google (D-084). */
+export type OrigemBackup = { readonly tipo: 'servidor' } | { readonly tipo: 'aparelho'; readonly aparelhoId: string }
 /** Evidência de colisão F1 durante a restauração; o aceite é a projeção corrente. */
 export type EvidenciaCopia = { readonly id: string; readonly tentativa: Lancamento; readonly aceita: Lancamento }
 /** Todas as tabelas de uso; temporários de preparação não são dados do negócio. */

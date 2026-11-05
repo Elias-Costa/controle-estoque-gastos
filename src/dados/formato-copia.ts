@@ -8,7 +8,7 @@ import type { GrupoEstoque } from '../dominio/vendas-estoque.ts'
 import type { FatoCaixa } from '../dominio/gastos.ts'
 import type { GrupoCaixa, OperacaoCaixaLocal, VersaoCaixa } from './tipos-caixa.ts'
 import { LIMITE_FOTO_BYTES, LIMITE_MINIATURA_BYTES, type EnvioProdutoFoto, type EstadoFotos, type FotoLocal, type ProtecaoFotoLocal, type UsoFotoLocal } from './tipos-fotos.ts'
-import { LIMITES_COPIA, TABELAS_COPIA, type DadosCopia, type EvidenciaCopia, type TabelaCopia, type VinculoConta } from './tipos-copia.ts'
+import { LIMITES_COPIA, TABELAS_COPIA, type DadosCopia, type EvidenciaCopia, type OrigemBackup, type TabelaCopia, type VinculoConta } from './tipos-copia.ts'
 import { preferenciaModelosValida } from './modelos-whatsapp.ts'
 import { preferenciaIdentidadeValida } from './identidade-loja.ts'
 
@@ -169,7 +169,7 @@ function lerLista<T>(v: unknown, guarda: (linha: unknown) => linha is T): T[] {
   return v.map((linha: unknown) => { exigirCopia(guarda(linha)); return linha })
 }
 /** Campos fechados por formato; leitores antigos não aceitam extensões de pacotes novos. */
-export function dadosDaCopia(v: unknown, formato: 1 | 2 | 3 | 4 = 4): DadosCopia {
+export function dadosDaCopia(v: unknown, formato: 1 | 2 | 3 | 4 | 5 = 4): DadosCopia {
   exigirCopia(objetoCopia(v) && Object.keys(v).length === TABELAS_COPIA.length && Object.keys(v).every((k) => TABELAS_COPIA.some((t) => t === k)))
   const dados: DadosCopia = { clientes: lerLista(v['clientes'], cliente), lancamentos: lerLista(v['lancamentos'], lancamento),
     fila: lerLista(v['fila'], fila), sincronizacao: lerLista(v['sincronizacao'], cursor), categorias: lerLista(v['categorias'], categoria),
@@ -194,6 +194,14 @@ export function dadosDaCopia(v: unknown, formato: 1 | 2 | 3 | 4 = 4): DadosCopia
 }
 /** JSON legível: apenas bigint vira texto; bytes têm arquivos próprios. */
 export function jsonDaCopia(v: unknown): string { return JSON.stringify(v, (_k, item: unknown) => typeof item === 'bigint' ? String(item) : item, 2) }
+
+/** Distingue capturas sem aceitar campos privados ou origem de aparelho sem identidade. */
+export function lerOrigemBackup(v: unknown): OrigemBackup {
+  exigirCopia(objetoCopia(v))
+  if (v['tipo'] === 'servidor') { exigirCopia(campos(v, { tipo: escolha('servidor') })); return { tipo: 'servidor' } }
+  exigirCopia(campos(v, { tipo: escolha('aparelho'), aparelhoId: id }) && typeof v['aparelhoId'] === 'string')
+  return { tipo: 'aparelho', aparelhoId: v['aparelhoId'] }
+}
 const CAMPOS_INTEIROS = new Set(['valor', 'preco', 'desconto', 'precoUnitario', 'custoManual', 'precoVenda', 'custoUnitario', 'ordemCadastro', 'ultimo'])
 /** Recupera apenas campos inteiros conhecidos; número monetário nunca vira bigint por coerção. */
 export function lerJsonDaTabela(tabela: TabelaCopia, textoJson: string): unknown {
