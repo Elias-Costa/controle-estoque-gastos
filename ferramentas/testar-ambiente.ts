@@ -87,9 +87,9 @@ async function configurarHomologacao(): Promise<void> {
     throw new Error('Homologação bloqueada: aguarda criação e confirmação do projeto pelo mantenedor em nuvem/destinos-de-teste.ts.')
   }
   // O processo filho carrega SOMENTE este arquivo. O agente não o lê ou escreve (AGENTS.md §2).
-  if (process.argv[4] !== '--configurada') {
+  if (!process.argv.slice(4).includes('--configurada')) {
     for (const campo of CAMPOS) delete process.env[campo]
-    await executar(['--env-file=.env.homologacao.local', 'run', 'ferramentas/testar-ambiente.ts', 'homologacao', process.argv[3] ?? '', '--configurada'])
+    await executar(['--env-file=.env.homologacao.local', 'run', 'ferramentas/testar-ambiente.ts', 'homologacao', process.argv[3] ?? '', '--configurada', ...process.argv.slice(4)])
     process.exit(0)
   }
   exigirDestinoDeTeste()
@@ -101,7 +101,7 @@ async function configurarHomologacao(): Promise<void> {
 async function principal(): Promise<void> {
   const ambiente = process.argv[2]
   const acao = process.argv[3]
-  if (!['local', 'homologacao'].includes(ambiente ?? '') || !['iniciar', 'parar', 'migrar', 'reverter', 'integracao', 'navegador', 'build', 'lembretes-preparar', 'lembretes-segredos', 'lembretes-agendar'].includes(acao ?? '')) {
+  if (!['local', 'homologacao'].includes(ambiente ?? '') || !['iniciar', 'parar', 'migrar', 'reverter', 'integracao', 'navegador', 'build', 'lembretes-preparar', 'lembretes-segredos', 'lembretes-agendar', 'backup-google-autorizar', 'backup-google-reautorizar', 'backup-google-verificar', 'backup-preparar', 'backup-agendar', 'backup-ensaio', 'backup-executar'].includes(acao ?? '')) {
     throw new Error('Use local ou homologacao e uma ação: iniciar, parar, migrar, reverter, integracao, navegador ou build.')
   }
   process.env.AMBIENTE_DE_TESTE = ambiente
@@ -122,6 +122,12 @@ async function principal(): Promise<void> {
     await configurarHomologacao()
   }
   console.log(`Ambiente validado: ${ambiente}.`)
+  if (acao?.startsWith('backup-google-')) {
+    await executar(['run', 'typecheck'])
+    await executar(['run', 'nuvem/backup/configurar-google.ts', acao.slice('backup-google-'.length),
+      ...process.argv.slice(4).filter((v) => v !== '--configurada')])
+    return
+  }
   if (acao === 'reverter') {
     await executar(['run', 'nuvem/migrar.ts', 'reverter'])
     return
@@ -132,6 +138,14 @@ async function principal(): Promise<void> {
   if (acao?.startsWith('lembretes-')) {
     await executar(['run', 'typecheck'])
     await executar(['run', 'nuvem/lembretes/configurar.ts', acao.slice('lembretes-'.length)])
+    return
+  }
+  if (acao?.startsWith('backup-')) {
+    await executar(['run', 'typecheck'])
+    const acaoBackup = acao.slice('backup-'.length)
+    const argumentos = process.argv.slice(4).filter((v) => acaoBackup === 'ensaio' ? ['--sem-semente', '--completar-originais-ficticios'].includes(v)
+      : acaoBackup === 'executar' && v.startsWith('--captura='))
+    await executar(['run', ['ensaio', 'executar'].includes(acaoBackup) ? 'nuvem/backup/ensaio-servidor.ts' : 'nuvem/backup/configurar.ts', acaoBackup, ...argumentos])
     return
   }
   if (acao === 'integracao' || acao === 'navegador') {

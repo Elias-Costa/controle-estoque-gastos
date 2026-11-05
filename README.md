@@ -212,3 +212,41 @@ em `https://<IPv4-do-PC>:4174`, usando build e conta de homologação. A 4175 é
 build sem nuvem. PC e Android devem estar no mesmo Wi-Fi, com as portas liberadas apenas
 na rede local. Encerrar o servidor de certificado após o download. Não compartilhar chaves
 privadas; não trocar IP, HTTPS ou porta durante uma prova de retenção local.
+
+## Configuração Google para o backup — homologação
+
+BA-02 prepara a autorização Google no servidor de teste. No terminal interativo Windows,
+com o cliente Desktop do projeto `fichinhas-backup-homologacao` fora do repositório:
+
+```powershell
+bun run backup:google:autorizar:homologacao 'C:\caminho-privado\cliente-desktop.json'
+bun run backup:google:verificar:homologacao
+```
+
+O primeiro abre o navegador e pede conferência da conta no terminal antes de guardar
+a autorização no Vault. O segundo confere renovação/conta/cota, sem enviar arquivos.
+Há variantes `:local` e `backup:google:reautorizar:<ambiente>` para repetir consentimento
+com a mesma conta/cliente. [Procedimento e limites](nuvem/backup/LEIA-ME.md).
+Esses comandos não aplicam migrations, não configuram produção e ainda não entregam
+backup automático. Não enviar JSON de credenciais ou tokens ao chat.
+
+Depois de autorizar, o caminho de servidor da BA-02 usa a migration aditiva 0014 e
+comandos restritos a teste:
+
+```bash
+bun run backup:preparar:homologacao
+bun run backup:edge
+bun run backup:ensaio:homologacao
+```
+
+O preparo imprime somente o hash público `BACKUP_TOKEN_SHA256`; o bundle sai em
+`dist/backup/index.js`. O ensaio **envia dados fictícios ao Drive autorizado** e baixa/
+restaura o ZIP no Chromium; executa o servidor em Bun, sem provar a função hospedada.
+Após publicar `enviar-backup` na homologação, com esse hash nos segredos Edge e
+verificação JWT desligada somente nela, `bun run backup:agendar:homologacao` confere
+negativos/saúde antes de criar o job próprio das 11h de Fortaleza. [Publicação,
+retomada e alcance das provas](nuvem/backup/LEIA-ME.md#prepararpublicar-em-homologação).
+Para repetir download/restauração sem nova semente, usar `bun run backup:executar:homologacao`.
+Com `--captura=<UUID>`, baixa e restaura uma cópia já pronta, inclusive gerada pelo Edge,
+sem iniciar novo envio. O complemento do aparelho e a entrega permanecem BA-03/04;
+nenhum desses comandos configura produção.

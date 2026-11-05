@@ -28,7 +28,12 @@ export async function criarArquivoBackup(estagio: EstagioCopia, dados: DadosCopi
 async function criarArquivo(estagio: EstagioCopia, dados: DadosCopia, origem?: OrigemBackup): Promise<Blob> {
   exigirCopia(estagio.pronto && estagio.tipo === 'exportacao', 'estagio')
   dadosDaCopia(dados); await conferirFotos(dados, !origem)
-  const escritor = new ZipWriter(new BlobWriter('application/zip'), { level: 0, useWebWorkers: false, bufferedWrite: false, extendedTimestamp: false })
+  const carimbo = new Date(estagio.capturadoEm)
+  // BA-02/D-084: remontar a mesma captura deve produzir os mesmos bytes para retomar o upload.
+  // zip.js usa componentes locais no DOS timestamp; os componentes UTC fixam o resultado entre runtimes.
+  const dataDoZip = new Date(carimbo.getUTCFullYear(), carimbo.getUTCMonth(), carimbo.getUTCDate(), carimbo.getUTCHours(), carimbo.getUTCMinutes(), carimbo.getUTCSeconds())
+  const escritor = new ZipWriter(new BlobWriter('application/zip'), { level: 0, useWebWorkers: false, bufferedWrite: false, extendedTimestamp: false,
+    ...(origem ? { lastModDate: dataDoZip } : {}) })
   const arquivos: ArquivoListado[] = []
   let bytes = 0, textos = 0
   async function adicionar(nome: string, blob: Blob): Promise<void> {
