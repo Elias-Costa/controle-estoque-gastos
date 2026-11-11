@@ -144,7 +144,9 @@ async function principal(): Promise<void> {
   if (acao === 'migrar') return
   if (acao === 'backup-volume') {
     await executar(['run', 'typecheck'])
-    await executar(['run', 'nuvem/backup/volume-de-teste.ts'])
+    const argumentos = process.argv.slice(4).filter((v) => v !== '--configurada')
+    if (argumentos.length > 1 || argumentos.some((v) => v !== '--variacao')) throw new Error('O único argumento da carga é --variacao.')
+    await executar(['run', 'nuvem/backup/volume-de-teste.ts', ...argumentos])
     return
   }
   if (acao === 'provar-backup-aparelho') {

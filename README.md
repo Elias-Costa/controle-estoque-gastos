@@ -262,6 +262,8 @@ bun run backup:aparelho:homologacao
 Para preparar o disparo natural das 11h de Fortaleza com o volume de BA-04, use
 `bun run backup:volume:homologacao` na conta fictícia vinculada ao Drive de teste.
 O comando `bun run backup:volume:local` confere o mesmo transporte com uma amostra.
+Depois da carga base, acrescente `--variacao` ao mesmo comando para preparar a
+prova de crescimento e troca de um original.
 [Carga e leitura da prova](nuvem/backup/LEIA-ME.md#carga-da-ba-04).
 
 Para comparar a montagem de uma captura fictícia retida antes/depois de otimização,
