@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { SQL, type TransactionSQL } from 'bun'
 import { exigirDestinoDeTeste } from '../../nuvem/ambiente-de-teste.ts'
-import { conectar } from '../../nuvem/migrar.ts'
+import { conectar, executarReversao, lerMigracoes } from '../../nuvem/migrar.ts'
 import { uuidv7 } from '../../src/dados/identidade.ts'
 
 const LIGADA = process.env.INTEGRACAO === '1'
@@ -67,9 +67,13 @@ describe.skipIf(!LIGADA)('BA-02 captura/retencao SQL — somente dados fictício
   test('reversão vazia preserva fotos/ACLs; captura/configuração existente recusa antes do DDL', () => transacao(async (tx, conta) => {
     const reverter = await Bun.file('nuvem/migracoes/0014_backup-automatico.reverter.sql').text()
     const [vazia] = await tx<{ n: number }[]>`select (select count(*) from backup_interno.capturas)::integer+(select count(*) from backup_interno.destinos)::integer n`
-    if (vazia?.n === 0) {
+    if (vazia?.n === 0 && exigirDestinoDeTeste() === 'local') {
+      // D-041: a reversão histórica também precisa respeitar a ordem das dependências.
+      const posteriores = (await lerMigracoes()).filter((m) => m.nome > '0014_backup-automatico')
+      for (const versao of posteriores.toReversed()) await executarReversao(tx, versao)
       await tx.unsafe(reverter)
       await tx.unsafe(await Bun.file('nuvem/migracoes/0014_backup-automatico.sql').text())
+      for (const versao of posteriores) await tx.unsafe(versao.aplicar)
     }
     await capturar(tx, conta)
     await recusar(tx, (sp) => sp.unsafe(reverter), '23514')

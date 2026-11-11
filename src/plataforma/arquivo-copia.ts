@@ -6,7 +6,8 @@ import { LIMITES_COPIA as L, TABELAS_COPIA, TABELAS_COPIA_V1, TABELAS_COPIA_V2, 
 import { LIMITE_MINIATURA_BYTES } from '../dados/tipos-fotos.ts'
 import { hashDaFoto, miniaturaDaFoto } from './fotos.ts'
 
-type ArquivoListado = { nome: string; bytes: number; sha256: string }
+/** Entrada cujo tamanho e hash são conferidos pelo manifesto do ZIP. */
+export type ArquivoListado = { nome: string; bytes: number; sha256: string }
 /** Fases do empacotamento, sem conteúdo do arquivo na observação (BA-04). */
 export type EtapaArquivoCopia = 'validacao_dados' | 'validacao_fotos' | 'zip_dados' | 'zip_fotos' | 'zip_consultas' | 'zip_fechamento'
 const codificador = new TextEncoder()
@@ -31,6 +32,42 @@ class PartesDoZip extends Writer<Blob> {
     this.partes = []
     return Promise.resolve(arquivo)
   }
+}
+/** O escritor é comum às cópias inteiras e aos lotes STORE do servidor (D-084). */
+export function escritorDaCopia(dataDoZip?: Date): ZipWriter<Blob> {
+  return new ZipWriter(new PartesDoZip(), { level: 0, useWebWorkers: false, bufferedWrite: false, extendedTimestamp: false,
+    ...(dataDoZip ? { lastModDate: dataDoZip } : {}) })
+}
+/** zip.js usa componentes locais no DOS timestamp. Fixar componentes UTC conserva os bytes em outros fusos. */
+export function dataInternaDaCopia(capturadoEm?: string): Date {
+  if (!capturadoEm) return new Date(2000, 0, 1, 12)
+  const carimbo = new Date(capturadoEm)
+  return new Date(carimbo.getUTCFullYear(), carimbo.getUTCMonth(), carimbo.getUTCDate(), carimbo.getUTCHours(), carimbo.getUTCMinutes(), carimbo.getUTCSeconds())
+}
+/** Serializa os mesmos lotes JSON em qualquer executor. O binário de foto tem entrada própria. */
+export function* entradasDeDadosCopia(dados: DadosCopia): Generator<{ nome: string; blob: Blob }> {
+  for (const tabela of TABELAS_COPIA) {
+    const linhas: readonly unknown[] = tabela === 'fotos' ? dados.fotos.map(({ binario: _b, miniatura: _m, ...foto }) => foto) : dados[tabela]
+    let lote: string[] = [], tamanho = 2, numero = 0
+    function entrada() {
+      // Mesma indentação de jsonDaCopia(linhas), reaproveitando a serialização que dimensiona o lote.
+      const texto = lote.length ? `[\n${lote.join(',\n')}\n]` : '[]'
+      return { nome: `dados/${tabela}/${String(numero++).padStart(6, '0')}.json`, blob: new Blob([texto], { type: 'application/json' }) }
+    }
+    for (const linha of linhas) {
+      const json = jsonDaCopia(linha), comprimento = codificador.encode(json).byteLength + 16
+      exigirCopia(comprimento <= L.lote - 2, 'limite')
+      if (tamanho + comprimento > L.lote) { yield entrada(); lote = []; tamanho = 2 }
+      lote.push(`  ${json.replaceAll('\n', '\n  ')}`); tamanho += comprimento
+    }
+    if (lote.length || numero === 0) yield entrada()
+  }
+}
+/** Manifesto do mesmo retrato, depois de reunir e conferir todas as entradas. */
+export function manifestoDaCopia(estagio: Pick<EstagioCopia, 'id' | 'vinculo' | 'capturadoEm'>,
+  quantidades: Readonly<Record<string, number>>, arquivos: readonly ArquivoListado[], origem?: OrigemBackup): Blob {
+  return textoJson({ formato: origem ? 5 : 4, esquema: 10, ...(origem ? { origem } : {}), id: estagio.id, vinculo: estagio.vinculo,
+    capturadoEm: estagio.capturadoEm, quantidades, arquivos })
 }
 async function hashBlob(blob: Blob): Promise<string> {
   // Blob já é imutável; o buffer lido para o hash não precisa de outra cópia defensiva.
@@ -63,14 +100,9 @@ async function criarArquivo(estagio: EstagioCopia, dados: DadosCopia, origem?: O
   for (const foto of fotosNecessariasCopia(dados)) {
     exigirCopia(foto.binario && (origem || foto.miniatura) && foto.binario.byteLength === foto.bytes, 'foto')
   }
-  const carimbo = new Date(estagio.capturadoEm)
   // BA-02/D-084: remontar a mesma captura deve produzir os mesmos bytes para retomar o upload.
-  // zip.js usa componentes locais no DOS timestamp; os componentes UTC fixam o resultado entre runtimes.
   // A captura do aparelho pode ser retomada após trocar de fuso. A data real está no manifesto.
-  const dataDoZip = origem?.tipo === 'aparelho' ? new Date(2000, 0, 1, 12)
-    : new Date(carimbo.getUTCFullYear(), carimbo.getUTCMonth(), carimbo.getUTCDate(), carimbo.getUTCHours(), carimbo.getUTCMinutes(), carimbo.getUTCSeconds())
-  const escritor = new ZipWriter(new PartesDoZip(), { level: 0, useWebWorkers: false, bufferedWrite: false, extendedTimestamp: false,
-    ...(origem ? { lastModDate: dataDoZip } : {}) })
+  const escritor = escritorDaCopia(origem ? dataInternaDaCopia(origem.tipo === 'servidor' ? estagio.capturadoEm : undefined) : undefined)
   const arquivos: ArquivoListado[] = []
   let bytes = 0, textos = 0
   async function adicionar(nome: string, blob: Blob, hashConferido?: string): Promise<void> {
@@ -83,23 +115,7 @@ async function criarArquivo(estagio: EstagioCopia, dados: DadosCopia, origem?: O
   }
   try {
     aoAvancar?.('zip_dados')
-    for (const tabela of TABELAS_COPIA) {
-      const linhas: readonly unknown[] = tabela === 'fotos' ? dados.fotos.map(({ binario: _b, miniatura: _m, ...foto }) => foto) : dados[tabela]
-      let lote: string[] = [], tamanho = 2, numero = 0
-      async function gravar() {
-        // Mesma indentação de jsonDaCopia(linhas), reaproveitando a serialização que dimensiona o lote.
-        const texto = lote.length ? `[\n${lote.join(',\n')}\n]` : '[]'
-        await adicionar(`dados/${tabela}/${String(numero++).padStart(6, '0')}.json`, new Blob([texto], { type: 'application/json' }))
-        lote = []; tamanho = 2
-      }
-      for (const linha of linhas) {
-        const json = jsonDaCopia(linha), comprimento = codificador.encode(json).byteLength + 16
-        exigirCopia(comprimento <= L.lote - 2, 'limite')
-        if (tamanho + comprimento > L.lote) await gravar()
-        lote.push(`  ${json.replaceAll('\n', '\n  ')}`); tamanho += comprimento
-      }
-      if (lote.length || numero === 0) await gravar()
-    }
+    for (const { nome, blob } of entradasDeDadosCopia(dados)) await adicionar(nome, blob)
     aoAvancar?.('zip_fotos')
     for (const foto of dados.fotos) {
       if (foto.binario) {
@@ -113,8 +129,7 @@ async function criarArquivo(estagio: EstagioCopia, dados: DadosCopia, origem?: O
     aoAvancar?.('zip_consultas')
     for (const [nome, conteudo] of Object.entries(consultasDaCopia(dados))) await adicionar(nome, new Blob([conteudo], { type: 'text/csv;charset=utf-8' }))
     aoAvancar?.('zip_fechamento')
-    const manifesto = textoJson({ formato: origem ? 5 : 4, esquema: 10, ...(origem ? { origem } : {}), id: estagio.id, vinculo: estagio.vinculo,
-      capturadoEm: estagio.capturadoEm, quantidades: Object.fromEntries(TABELAS_COPIA.map((t) => [t, dados[t].length])), arquivos })
+    const manifesto = manifestoDaCopia(estagio, Object.fromEntries(TABELAS_COPIA.map((t) => [t, dados[t].length])), arquivos, origem)
     exigirCopia(manifesto.size <= L.manifesto && bytes + manifesto.size <= L.arquivo, 'limite')
     await escritor.add('manifesto.json', new BlobReader(manifesto))
     const resultado = await escritor.close()

@@ -107,11 +107,13 @@ export function criarDriveBackup(acesso: string, contaGoogleId: string, destino:
       const recebida = posicao(r, tamanho); await r.body?.cancel(); return recebida
     },
     /** Blocos de 256 KiB, exceto o último; retorno é a posição efetivamente informada pelo Drive. */
-    async enviarBloco(uri: string, arquivo: Blob, inicio: number, comprimento = 4 * 1024 * 1024): Promise<number> {
+    async enviarBloco(uri: string, arquivo: { size: number; slice(inicio: number, fim: number): Blob | Promise<Blob> }, inicio: number,
+      comprimento = 4 * 1024 * 1024): Promise<number> {
       exigirCopia(Number.isSafeInteger(inicio) && inicio >= 0 && inicio < arquivo.size && comprimento > 0 && comprimento % 262144 === 0)
       const fim = Math.min(inicio + comprimento, arquivo.size)
+      const bloco = await arquivo.slice(inicio, fim); exigirCopia(bloco.size === fim - inicio)
       const r = await pedir(sessaoDoDrive(uri), { method: 'PUT', headers: { 'content-type': 'application/zip', 'content-length': String(fim - inicio),
-        'content-range': `bytes ${inicio}-${fim - 1}/${arquivo.size}` }, body: arquivo.slice(inicio, fim) }, true)
+        'content-range': `bytes ${inicio}-${fim - 1}/${arquivo.size}` }, body: bloco }, true)
       const recebida = posicao(r, arquivo.size); await r.body?.cancel()
       exigirCopia(recebida > inicio && recebida <= fim)
       return recebida

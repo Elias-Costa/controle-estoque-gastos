@@ -1,18 +1,28 @@
 import { createHash } from 'node:crypto'
-import { carregarFontesBackup, dadosDaCaptura, lerCapturaServidor, materialDaCaptura, pacoteDaCaptura, type RpcBackup } from './captura.ts'
+import { carregarFontesBackup, dadosDaCaptura, lerCapturaServidor, materialDaCaptura, pacoteDaCaptura, type CapturaServidor, type RpcBackup } from './captura.ts'
 import { lerAutorizacaoGoogle } from './cofre-google.ts'
 import { consultarContaDrive, renovarTokensGoogle } from './google.ts'
 import { criarDriveBackup } from './drive.ts'
 import { exigirCopia, objetoCopia } from '../../src/dados/formato-copia.ts'
 import type { EtapaArquivoCopia } from '../../src/plataforma/arquivo-copia.ts'
+import { executarPreparo } from './retomavel.ts'
+import type { ArmazemDeLotes } from './lotes.ts'
+
+const BLOCOS_POR_PASSO = 6
 
 /** Etapas técnicas do executor, sem carregar conteúdo privado. */
 export type EtapaBackupServidor = EtapaArquivoCopia | 'autorizacao' | 'captura' | 'leitura' | 'reconstrucao' | 'originais' | 'material' | 'montagem' | 'hash' | 'pasta' | 'sessao' | 'envio' | 'conferencia' | 'retencao'
+  | 'preparo_dados' | 'preparo_fotos' | 'reuso_fotos' | 'fechar_lotes' | 'limpar_partes'
 /** A observação de etapa não recebe dados, token, caminho ou capacidade de upload. */
 export type PortasBackupServidor = { readonly rpc: RpcBackup; readonly destino: string; readonly baixarOriginal: (ref: Readonly<Record<string, unknown>>) => Promise<Uint8Array>
-  readonly aoAvancar?: (etapa: EtapaBackupServidor) => void }
+  readonly aoAvancar?: (etapa: EtapaBackupServidor) => void; readonly partes?: ArmazemDeLotes; readonly encadearPreparo?: boolean
+  readonly aoConsultarPosicao?: (bytesAceitos: number) => void }
 /** Resultado sem credenciais/capacidades de upload; pronta exige conferência do arquivo salvo. */
 export type ResultadoBackupServidor = { readonly estado: 'pronta' | 'pendente'; readonly capturaId: string; readonly arquivoId?: string; readonly bytes?: number }
+/** ZIP verificável antes do envio, em Blob ou pela leitura dos intervalos de partes duráveis. */
+export type PacoteParaEnvio = { arquivo: { size: number; slice(inicio: number, fim: number): Blob | Promise<Blob> }; sha256: string; material: readonly string[] }
+/** Recibo interno de avanço. O handler continua devolvendo só o resultado da candidata. */
+export type PassoDoEnvio = { resultado: ResultadoBackupServidor; enviados: number }
 
 function registro(v: unknown): Record<string, unknown> { exigirCopia(objetoCopia(v)); return v }
 function texto(v: unknown): string { exigirCopia(typeof v === 'string' && v.length > 0); return v }
@@ -24,13 +34,6 @@ export async function executarBackupServidor(portas: PortasBackupServidor, agora
   const autorizacao = lerAutorizacaoGoogle(await rpc('obter_autorizacao_backup', {}))
   exigirCopia(autorizacao.destino === portas.destino, 'conta')
   const conta = autorizacao.contaId, vinculo = { contaId: conta, destino: autorizacao.destino }
-  const tokens = await renovarTokensGoogle(autorizacao.cliente, autorizacao.renovacao)
-  if (tokens.renovacao && tokens.renovacao !== autorizacao.renovacao) {
-    await rpc('atualizar_renovacao_backup', { conta, anterior: autorizacao.renovacao, renovacao: tokens.renovacao })
-  }
-  const google = await consultarContaDrive(tokens.acesso)
-  exigirCopia(google.id === autorizacao.contaGoogleId, 'conta')
-  const drive = criarDriveBackup(tokens.acesso, google.id, autorizacao.destino, conta)
   portas.aoAvancar?.('captura')
   const hoje = registro(await rpc('capturar_backup_servidor', { conta, captura: crypto.randomUUID(), destino: vinculo.destino, agora }))
   const proxima = await rpc('proxima_captura_backup', { conta })
@@ -39,31 +42,58 @@ export async function executarBackupServidor(portas: PortasBackupServidor, agora
     const pendente = lerCapturaServidor(proxima, vinculo)
     cabecalho = registro(await rpc('capturar_backup_servidor', { conta, captura: pendente.id, destino: vinculo.destino, agora: pendente.capturadoEm }))
   }
+  if (portas.partes) {
+    const preparado = await executarPreparo({ ...portas, partes: portas.partes }, vinculo, texto(cabecalho['id']), tamanhoBloco,
+      (c, estado, pacote, maximo = BLOCOS_POR_PASSO) => enviarCandidata(portas, autorizacao, c, estado, inicio, Math.min(limiteBlocos, maximo), tamanhoBloco, pacote))
+    if (preparado) return preparado
+  }
   if (cabecalho['estado'] === 'aguardando') return { estado: 'pendente', capturaId: texto(cabecalho['id']) }
   const captura = lerCapturaServidor(cabecalho, vinculo)
+  return (await enviarCandidata(portas, autorizacao, captura, cabecalho['estado'], inicio, limiteBlocos, tamanhoBloco)).resultado
+}
+
+async function remontarReserva(portas: PortasBackupServidor, captura: CapturaServidor): Promise<PacoteParaEnvio> {
+  portas.aoAvancar?.('leitura')
+  const fontes = await carregarFontesBackup(portas.rpc, captura)
+  portas.aoAvancar?.('reconstrucao')
+  const dados = await dadosDaCaptura(captura, fontes, portas.baixarOriginal, () => portas.aoAvancar?.('originais'))
+  portas.aoAvancar?.('material')
+  const material = await materialDaCaptura(dados)
+  portas.aoAvancar?.('montagem')
+  const arquivo = await pacoteDaCaptura(captura, dados, portas.aoAvancar)
+  portas.aoAvancar?.('hash')
+  const hash = createHash('sha256')
+  await arquivo.stream().pipeTo(new WritableStream({ write(parte) { hash.update(parte) } }))
+  return { arquivo, material, sha256: hash.digest('hex') }
+}
+
+async function enviarCandidata(portas: PortasBackupServidor, autorizacao: ReturnType<typeof lerAutorizacaoGoogle>, captura: CapturaServidor,
+  estado: unknown, inicio: number, limiteBlocos: number, tamanhoBloco: number, pacote?: PacoteParaEnvio): Promise<PassoDoEnvio> {
+  const { rpc } = portas, conta = captura.vinculo.contaId, vinculo = captura.vinculo
+  const tokens = await renovarTokensGoogle(autorizacao.cliente, autorizacao.renovacao)
+  if (tokens.renovacao && tokens.renovacao !== autorizacao.renovacao) {
+    await rpc('atualizar_renovacao_backup', { conta, anterior: autorizacao.renovacao, renovacao: tokens.renovacao })
+  }
+  const google = await consultarContaDrive(tokens.acesso)
+  exigirCopia(google.id === autorizacao.contaGoogleId, 'conta')
+  const drive = criarDriveBackup(tokens.acesso, google.id, autorizacao.destino, conta)
   let envio = registro(await rpc('consultar_upload_backup', { conta, captura: captura.id }))
   let arquivoId = typeof envio['arquivoId'] === 'string' ? envio['arquivoId'] : null
   let pasta = typeof envio['pastaId'] === 'string' ? envio['pastaId'] : null
+  if (pacote && (envio['estado'] === 'removendo' || envio['estado'] === 'removida')) {
+    // A rotação pode ter começado antes de a chamada anterior registrar o avanço do preparo.
+    exigirCopia(arquivoId && pasta && envio['tamanho'] === String(pacote.arquivo.size) && envio['sha256'] === pacote.sha256)
+    await rotacionar(portas, drive, conta)
+    return { resultado: { estado: 'pronta', capturaId: captura.id, arquivoId, bytes: pacote.arquivo.size }, enviados: pacote.arquivo.size }
+  }
   let conferido = false
   if (arquivoId && pasta) {
     const remoto = await drive.consultar(arquivoId, pasta, captura.id)
     conferido = !!remoto && !remoto.apagado && remoto.tamanho === envio['tamanho'] && remoto.sha256 === envio['sha256']
   }
   if (!conferido) {
-    exigirCopia(cabecalho['estado'] !== 'pronta')
-    portas.aoAvancar?.('leitura')
-    const fontes = await carregarFontesBackup(rpc, captura)
-    portas.aoAvancar?.('reconstrucao')
-    const dados = await dadosDaCaptura(captura, fontes, portas.baixarOriginal, () => portas.aoAvancar?.('originais'))
-    portas.aoAvancar?.('material')
-    const material = await materialDaCaptura(dados)
-    portas.aoAvancar?.('montagem')
-    const arquivo = await pacoteDaCaptura(captura, dados, portas.aoAvancar)
-    portas.aoAvancar?.('hash')
-    // Confere o ZIP inteiro em fluxo, sem alocar outra cópia integral para calcular o hash.
-    const hashDoZip = createHash('sha256')
-    await arquivo.stream().pipeTo(new WritableStream({ write(parte) { hashDoZip.update(parte) } }))
-    const sha256 = hashDoZip.digest('hex')
+    exigirCopia(estado !== 'pronta')
+    const { arquivo, material, sha256 } = pacote ?? await remontarReserva(portas, captura)
     if (!arquivoId && google.limite !== undefined) exigirCopia(google.limite - google.uso >= BigInt(arquivo.size), 'limite')
     portas.aoAvancar?.('pasta')
     if (!pasta) pasta = texto(await rpc('reservar_pasta_backup', { conta, destino: vinculo.destino, pasta: await drive.gerarId() }))
@@ -80,9 +110,12 @@ export async function executarBackupServidor(portas: PortasBackupServidor, agora
     let posicao = sessao ? await drive.consultarPosicao(sessao, arquivo.size) : null
     if (posicao === null) { sessao = await drive.iniciarSessao(arquivoId, pasta, captura, arquivo.size); await registrar(sessao); posicao = 0 }
     exigirCopia(sessao)
+    portas.aoConsultarPosicao?.(posicao)
     let blocos = 0
     while (posicao < arquivo.size) {
-      if (blocos >= limiteBlocos || performance.now() - inicio > 110_000) return { estado: 'pendente', capturaId: captura.id }
+      if (blocos >= limiteBlocos || performance.now() - inicio > 110_000) {
+        return { resultado: { estado: 'pendente', capturaId: captura.id }, enviados: posicao }
+      }
       portas.aoAvancar?.('envio')
       posicao = await drive.enviarBloco(sessao, arquivo, posicao, tamanhoBloco); blocos++
     }
@@ -93,6 +126,13 @@ export async function executarBackupServidor(portas: PortasBackupServidor, agora
   exigirCopia(arquivoId && pasta)
   portas.aoAvancar?.('conferencia')
   await rpc('confirmar_backup', { conta, captura: captura.id, arquivo: arquivoId, tamanho: texto(envio['tamanho']), sha256: texto(envio['sha256']) })
+  await rotacionar(portas, drive, conta)
+  const bytes = Number(texto(envio['tamanho']))
+  return { resultado: { estado: 'pronta', capturaId: captura.id, arquivoId, bytes }, enviados: bytes }
+}
+
+async function rotacionar(portas: PortasBackupServidor, drive: ReturnType<typeof criarDriveBackup>, conta: string): Promise<void> {
+  const { rpc } = portas
   portas.aoAvancar?.('retencao')
   const rotacao = await rpc('planejar_rotacao_backup', { conta })
   exigirCopia(Array.isArray(rotacao))
@@ -101,5 +141,4 @@ export async function executarBackupServidor(portas: PortasBackupServidor, agora
     await drive.remover(arquivo, pastaAntiga, id)
     await rpc('concluir_rotacao_backup', { conta, captura: id, arquivo })
   }
-  return { estado: 'pronta', capturaId: captura.id, arquivoId, bytes: Number(texto(envio['tamanho'])) }
 }

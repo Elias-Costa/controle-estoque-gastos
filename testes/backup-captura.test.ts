@@ -1,10 +1,14 @@
 import { describe, expect, test } from 'bun:test'
 import { carregarFontesBackup, dadosDaCaptura, lerCapturaServidor, materialDaCaptura, pacoteDaCaptura, type CapturaServidor, type FontesBackup } from '../nuvem/backup/captura.ts'
-import { criarArquivoBackup, lerArquivoCopia } from '../src/plataforma/arquivo-copia.ts'
+import { criarArquivoBackup, dataInternaDaCopia, entradasDeDadosCopia, lerArquivoCopia, manifestoDaCopia } from '../src/plataforma/arquivo-copia.ts'
 import { hashDaFoto } from '../src/plataforma/fotos.ts'
 import { indexarMaterialBackup } from '../src/plataforma/material-backup.ts'
 import { uuidv7 } from '../src/dados/identidade.ts'
 import { documentoEstoque } from '../src/sincronizacao/borda-estoque.ts'
+import { consultasDaCopia } from '../src/dados/consultas-copia.ts'
+import { TABELAS_COPIA } from '../src/dados/tipos-copia.ts'
+import { fecharLotesZip, fonteDoZip, gravarLotesZip, shaDosLotes, type ArmazemDeLotes } from '../nuvem/backup/lotes.ts'
+import { gruposDeFotos } from '../nuvem/backup/retomavel.ts'
 
 async function caso() {
   const cliente = uuidv7(), categoria = uuidv7(), produto = uuidv7(), foto = uuidv7(), copia = uuidv7(), compra = uuidv7(), operacao = uuidv7(), fato = uuidv7()
@@ -141,5 +145,82 @@ describe('BA-02 captura do servidor → dados/ZIP, sem Google/Edge reais', () =>
     expect(d.operacoes.map((o) => o.id)).toEqual([grupo.operacao.id, novoId])
     expect(d.movimentos).toHaveLength(2)
     expect(new Set(d.versoesEstoque.map((v) => v.id)).size).toBe(3)
+  })
+})
+
+describe('BA-04 preparo retomável do ZIP', () => {
+  test('um ZIP retomado por intervalos conserva o conteúdo e o índice recusa objeto corrompido', async () => {
+    const { c, fontes, binario, miniatura } = await caso()
+    const dados = await dadosDaCaptura(c, fontes, async () => binario), foto = dados.fotos[0]
+    if (!foto) throw new Error('Foto de teste ausente')
+    const objetos = new Map<string, Uint8Array<ArrayBuffer>>(), reservados = new Set<string>()
+    const leituras: { inicio: number; fim: number; total: number }[] = []
+    const armazem: ArmazemDeLotes = {
+      async gravar(caminho, bytes) {
+        expect(reservados.has(caminho)).toBe(true)
+        if (!objetos.has(caminho)) objetos.set(caminho, bytes.slice())
+      },
+      async ler(caminho, inicio, fim, total) {
+        leituras.push({ inicio, fim, total }); const objeto = objetos.get(caminho)
+        if (!objeto) throw new Error('Parte de teste ausente')
+        return objeto.slice(inicio, fim)
+      },
+      async apagar() { throw new Error('A montagem não limpa objetos') },
+    }
+    const data = dataInternaDaCopia(c.capturadoEm), prefixo = `${c.vinculo.contaId}/${c.id}`
+    const gravar = (entradas: Parameters<typeof gravarLotesZip>[0]) => gravarLotesZip(entradas, data, armazem, prefixo, reservar)
+    const reservar: Parameters<typeof gravarLotesZip>[4] = async (partes) => { for (const p of partes) reservados.add(p.caminho) }
+    const entradasFoto = [{ nome: `fotos/${foto.id}.jpeg`, blob: new Blob([binario]), shaEsperado: foto.sha256 }]
+    const jsons = await gravar(entradasDeDadosCopia(dados)), fotos = await gravar(entradasFoto)
+    expect(await gravar(entradasFoto)).toEqual(fotos)
+    const consultas = await gravar(Object.entries(consultasDaCopia(dados)).map(([nome, texto]) => ({ nome, blob: new Blob([texto]) })))
+    const lotes = [...jsons, ...fotos, ...consultas], arquivos = lotes.flatMap((l) => l.arquivos)
+    lotes.push(...await gravar([{ nome: 'manifesto.json', blob: manifestoDaCopia(c,
+      Object.fromEntries(TABELAS_COPIA.map((t) => [t, dados[t].length])), arquivos, { tipo: 'servidor' }) }]))
+    const { indice, retidos } = await fecharLotesZip(lotes, armazem, prefixo, reservar, Number.MAX_SAFE_INTEGER)
+    const viva = fonteDoZip(indice, armazem, retidos), retomada = fonteDoZip(indice, armazem)
+    leituras.length = 0
+    const inteiro = new Uint8Array(await (await viva.slice(0, viva.size)).arrayBuffer())
+    expect(leituras).toHaveLength(0)
+    const divisa = indice.trechos[0]?.bytes
+    if (!divisa) throw new Error('Índice de teste vazio')
+    const inicio = divisa - 3, fim = divisa + 7
+    expect(new Uint8Array(await (await retomada.slice(inicio, fim)).arrayBuffer())).toEqual(inteiro.slice(inicio, fim))
+    expect(leituras).toHaveLength(2)
+    expect(leituras.every((r) => r.fim - r.inicio < r.total)).toBe(true)
+    const parcial = await fecharLotesZip(lotes, armazem, prefixo, reservar, divisa)
+    leituras.length = 0
+    const fonteParcial = fonteDoZip(parcial.indice, armazem, parcial.retidos)
+    expect(new Uint8Array(await (await fonteParcial.slice(inicio, fim)).arrayBuffer())).toEqual(inteiro.slice(inicio, fim))
+    expect(parcial.indice).toEqual(indice)
+    expect(leituras).toHaveLength(1)
+    expect(shaDosLotes(inteiro)).toBe(indice.sha256)
+    expect(inteiro).toEqual(new Uint8Array(await (await pacoteDaCaptura(c, dados)).arrayBuffer()))
+    const lido = await lerArquivoCopia(new Blob([inteiro]), c.vinculo, async () => miniatura)
+    expect(lido.dados.lancamentos).toEqual(dados.lancamentos)
+    expect(lido.dados.movimentos).toEqual(dados.movimentos)
+    expect(lido.dados.fatosCaixa).toEqual(dados.fatosCaixa)
+    expect(lido.dados.fotos[0]?.binario).toEqual(binario)
+    const primeiraFoto = fotos[0]?.segmentos[0]
+    if (!primeiraFoto) throw new Error('Parte de teste ausente')
+    objetos.get(primeiraFoto.caminho)?.fill(0)
+    await expect(fecharLotesZip(lotes, armazem, prefixo, reservar, 0)).rejects.toThrow()
+  })
+
+  test('o lote de uma foto depende do original e conserva a chave nas datas seguintes', async () => {
+    const { c, fontes } = await caso()
+    const referencia = fontes.fotos[0]
+    if (typeof referencia !== 'object' || !referencia) throw new Error('Foto de teste ausente')
+    const fotos = Array.from({ length: 481 }, () => {
+      const fotoId = uuidv7(), copiaId = uuidv7()
+      return { ...referencia, fotoId, copiaId, caminho: `${c.vinculo.contaId}/${fotoId}/${copiaId}.jpeg` }
+    })
+    const anterior = gruposDeFotos(c, fotos)
+    const nova = { ...c, id: uuidv7(), capturadoEm: '2026-11-06T14:00:00.000Z' }
+    expect(gruposDeFotos(nova, fotos.toReversed())).toEqual(anterior)
+    expect(anterior.every((g) => g.referencias.length <= 32)).toBe(true)
+    const editadas = fotos.map((ref, i) => i === 0 ? { ...ref, sha256: 'f'.repeat(64) } : ref)
+    const chaves = new Set(gruposDeFotos(nova, editadas).map((g) => g.chave))
+    expect(anterior.filter((g) => !chaves.has(g.chave))).toHaveLength(1)
   })
 })

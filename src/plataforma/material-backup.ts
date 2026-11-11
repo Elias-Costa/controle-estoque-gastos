@@ -1,6 +1,12 @@
 import type { DadosCopia } from '../dados/tipos-copia.ts'
 import { conteudoDoEfeito } from '../dominio/regras-estoque.ts'
 import { hashDaFoto } from './fotos.ts'
+import type { FotoLocal } from '../dados/tipos-fotos.ts'
+
+/** Identidade de conteúdo compartilhada pelas origens. Só entra na retenção depois da prova dos bytes. */
+export function conteudoDaFotoParaRetencao(foto: Pick<FotoLocal, 'id' | 'sha256' | 'bytes' | 'largura' | 'altura'>) {
+  return { id: foto.id, sha256: foto.sha256, bytes: foto.bytes, largura: foto.largura, altura: foto.altura }
+}
 
 /** Índice de fatos da mesma captura. Conteúdo equivalente é comparável entre as duas origens (D-084). */
 export async function indexarMaterialBackup(d: DadosCopia, resumir?: (conteudo: string) => string) {
@@ -29,7 +35,7 @@ export async function indexarMaterialBackup(d: DadosCopia, resumir?: (conteudo: 
   for (const v of d.identidadesLoja) await anotar('identidade', v, pendentes.has('identidadeLoja/' + v.id))
   for (const v of d.fotos) {
     // Metadado dispensado, sem os bytes, nunca autoriza apagar a única cópia com a foto.
-    if (v.binario) await anotar('foto', { id: v.id, sha256: v.sha256, bytes: v.bytes, largura: v.largura, altura: v.altura },
+    if (v.binario) await anotar('foto', conteudoDaFotoParaRetencao(v),
       v.situacao !== 'disponivel' || pendentes.has('fotos/' + v.id))
   }
   for (const v of d.enviosProdutoFoto) await anotar('produto', v.cadastro, true)

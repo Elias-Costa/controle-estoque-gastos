@@ -1,21 +1,23 @@
 import { PROJETO_DE_HOMOLOGACAO } from '../destinos-de-teste.ts'
 import { exigirCopia, objetoCopia } from '../../src/dados/formato-copia.ts'
 import type { RpcBackup } from './captura.ts'
+import { BYTES_PARTE, caminhoDeLote, type ArmazemDeLotes } from './lotes.ts'
 
 /** Diagnóstico sem URL, cabeçalho, corpo do PostgREST ou credencial. */
 export class FalhaTransporteBackup extends Error {
   readonly status: number
   constructor(status: number) { super(`Transporte de backup indisponível (HTTP ${status}).`); this.status = status }
 }
-const RPCS_SEM_CORPO = new Set(['registrar_upload_backup', 'confirmar_backup', 'concluir_rotacao_backup', 'cancelar_captura_backup', 'atualizar_renovacao_backup'])
+const RPCS_SEM_CORPO = new Set(['registrar_upload_backup', 'confirmar_backup', 'concluir_rotacao_backup', 'cancelar_captura_backup', 'atualizar_renovacao_backup',
+  'reservar_objetos_backup', 'avancar_preparo_backup', 'soltar_preparo_backup'])
 const RPCS = new Set([...RPCS_SEM_CORPO, 'capturar_backup_servidor', 'ler_captura_backup', 'consultar_upload_backup',
   'planejar_rotacao_backup', 'proxima_captura_backup', 'reservar_pasta_backup', 'obter_autorizacao_backup',
-  'ultimo_backup_confirmado', 'consultar_backup_aparelho', 'reservar_backup_aparelho', 'trocar_sessao_backup_aparelho'])
+  'ultimo_backup_confirmado', 'consultar_backup_aparelho', 'reservar_backup_aparelho', 'trocar_sessao_backup_aparelho', 'assumir_preparo_backup'])
 
 /** Exclusivo do servidor de teste; credencial administrativa nunca sai para Google/app/ZIP. */
 export function criarTransporteBackup(api: string, chave: string, transportar: (url: string, opcoes: RequestInit) => Promise<Response> = fetch) {
   exigirCopia(['http://127.0.0.1:54321', 'http://kong:8000', `https://${PROJETO_DE_HOMOLOGACAO}.supabase.co`].includes(api) && chave.length > 0)
-  async function corpo(r: Response, limite: number): Promise<Uint8Array> {
+  async function corpo(r: Response, limite: number): Promise<Uint8Array<ArrayBuffer>> {
     if (!r.ok || !r.body) { await r.body?.cancel(); throw new FalhaTransporteBackup(r.status) }
     const leitor = r.body.getReader(), partes: Uint8Array[] = []; let tamanho = 0
     try {
@@ -29,8 +31,11 @@ export function criarTransporteBackup(api: string, chave: string, transportar: (
     return bytes
   }
   async function pedir(caminho: string, opcoes: RequestInit = {}): Promise<Response> {
+    const headers = new Headers(opcoes.headers)
+    headers.set('apikey', chave); headers.set('authorization', `Bearer ${chave}`)
+    if (!headers.has('content-type')) headers.set('content-type', 'application/json')
     try { return await transportar(api + caminho, { ...opcoes, redirect: 'error', signal: AbortSignal.timeout(20_000),
-      headers: { apikey: chave, authorization: `Bearer ${chave}`, 'content-type': 'application/json' } }) }
+      headers }) }
     catch { throw new FalhaTransporteBackup(0) }
   }
   const rpc: RpcBackup = async (nome, argumentos) => {
@@ -42,7 +47,54 @@ export function criarTransporteBackup(api: string, chave: string, transportar: (
     if (bytes.byteLength === 0 && RPCS_SEM_CORPO.has(nome)) return null
     try { return JSON.parse(new TextDecoder().decode(bytes)) } catch { throw new FalhaTransporteBackup(200) }
   }
-  return { rpc,
+  async function corpoDaParte(r: Response, tamanho: number): Promise<Uint8Array<ArrayBuffer>> {
+    exigirCopia(r.body)
+    const bytes = new Uint8Array(tamanho), leitor = r.body.getReader()
+    let posicao = 0
+    try {
+      while (true) {
+        const parte = await leitor.read(); if (parte.done) break
+        exigirCopia(posicao + parte.value.length <= tamanho, 'limite')
+        bytes.set(parte.value, posicao); posicao += parte.value.length
+      }
+    } finally { await leitor.cancel() }
+    exigirCopia(posicao === tamanho)
+    return bytes
+  }
+  const partes: ArmazemDeLotes = {
+    async gravar(caminho, bytes) {
+      exigirCopia(caminhoDeLote(caminho) && bytes.length > 0 && bytes.length <= BYTES_PARTE)
+      const r = await pedir('/storage/v1/object/backup-partes/' + caminho, { method: 'POST',
+        headers: { 'content-type': 'application/octet-stream', 'x-upsert': 'false' }, body: bytes })
+      if (r.status === 400) {
+        // A API legada do Storage encapsula o conflito de chave em HTTP 400.
+        const resposta: unknown = await r.json().catch(() => undefined)
+        if (objetoCopia(resposta) && resposta['statusCode'] === '409' && resposta['code'] === 'KeyAlreadyExists') return
+        throw new FalhaTransporteBackup(r.status)
+      }
+      await r.body?.cancel()
+      // O escritor confere tamanho e SHA também quando a tentativa anterior já gravou.
+      if (!r.ok && r.status !== 409) throw new FalhaTransporteBackup(r.status)
+    },
+    async ler(caminho, inicio, fim, total) {
+      exigirCopia(caminhoDeLote(caminho) && [inicio, fim, total].every(Number.isSafeInteger) && inicio >= 0 && fim > inicio && fim <= total && total <= BYTES_PARTE)
+      const inteiro = inicio === 0 && fim === total
+      const r = await pedir('/storage/v1/object/authenticated/backup-partes/' + caminho,
+        inteiro ? {} : { headers: { range: `bytes=${inicio}-${fim - 1}` } })
+      if (r.status !== (inteiro ? 200 : 206) || !inteiro && r.headers.get('content-range') !== `bytes ${inicio}-${fim - 1}/${total}`) {
+        await r.body?.cancel(); throw new FalhaTransporteBackup(r.status)
+      }
+      return corpoDaParte(r, fim - inicio)
+    },
+    async apagar(caminhos) {
+      exigirCopia(caminhos.length <= 32 && caminhos.every((c) => caminhoDeLote(c)))
+      if (!caminhos.length) return
+      const r = await pedir('/storage/v1/object/backup-partes', { method: 'DELETE', body: JSON.stringify({ prefixes: caminhos }) })
+      await r.body?.cancel()
+      if (!r.ok) throw new FalhaTransporteBackup(r.status)
+    },
+  }
+  return { rpc, partes,
     /** Valida o bearer do app no Auth do mesmo projeto. O browser nunca fornece conta por argumento. */
     async autenticar(token: string): Promise<string | null> {
       try {

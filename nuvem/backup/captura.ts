@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { dadosDaCopia, exigirCopia, objetoCopia, lerVinculoCopia } from '../../src/dados/formato-copia.ts'
 import { LIMITES_COPIA, type DadosCopia, type VinculoConta } from '../../src/dados/tipos-copia.ts'
+import { LIMITE_FOTO_BYTES, type FotoLocal } from '../../src/dados/tipos-fotos.ts'
 import { clienteDaNuvem, lancamentoDaNuvem, normalizarCarimbo } from '../../src/sincronizacao/borda.ts'
 import { categoriaDaNuvem, produtoDaNuvem, recepcaoDaNuvem } from '../../src/sincronizacao/borda-estoque.ts'
 import { recepcaoCaixaDaNuvem } from '../../src/sincronizacao/borda-caixa.ts'
@@ -64,10 +65,22 @@ function idDeVersao(tipo: string, conteudo: string): string {
 }
 function registro(v: unknown): Record<string, unknown> { exigirCopia(objetoCopia(v)); return v }
 
-/** Reconstrói o retrato 5/10 e confere referências/tamanhos; SHA dos originais é conferido ao montar o ZIP. */
-export async function dadosDaCaptura(c: CapturaServidor, f: FontesBackup,
-  baixarOriginal: (referencia: Readonly<Record<string, unknown>>) => Promise<Uint8Array>,
-  aoLerOriginais?: () => void): Promise<DadosCopia> {
+/** Metadado do original retido. A rota nunca recebe caminho fornecido pelo aplicativo (D-084). */
+export function fotoDaCaptura(c: CapturaServidor, entrada: unknown): FotoLocal {
+  const r = registro(entrada)
+  exigirCopia(r['disponivel'] === true && typeof r['fotoId'] === 'string' && /^[0-9a-f-]{36}$/.test(r['fotoId']) &&
+    typeof r['copiaId'] === 'string' && /^[0-9a-f-]{36}$/.test(r['copiaId']) && typeof r['produtoId'] === 'string' &&
+    typeof r['caminho'] === 'string' && typeof r['sha256'] === 'string' && /^[0-9a-f]{64}$/.test(r['sha256']) &&
+    typeof r['bytes'] === 'number' && Number.isSafeInteger(r['bytes']) && r['bytes'] > 0 && r['bytes'] <= LIMITE_FOTO_BYTES &&
+    typeof r['largura'] === 'number' && typeof r['altura'] === 'number', 'foto')
+  exigirCopia(r['caminho'] === `${c.vinculo.contaId}/${r['fotoId']}/${r['copiaId']}.jpeg`, 'foto')
+  return { id: r['fotoId'], copiaId: r['copiaId'], produtoId: r['produtoId'], cadastroEm: normalizarCarimbo('foto.cadastro', r['cadastroEm']),
+    geracaoEnvio: c.id, sha256: r['sha256'], bytes: r['bytes'], largura: r['largura'], altura: r['altura'], caminho: r['caminho'],
+    situacao: 'disponivel', registrada: true }
+}
+
+/** Reconstrói o retrato 5/10 sem carregar os bytes dos originais. */
+export function metadadosDaCaptura(c: CapturaServidor, f: FontesBackup): DadosCopia {
   const d: DadosCopia = { clientes: f.clientes.map(clienteDaNuvem), lancamentos: f.lancamentos.map((v) => {
     const l = registro(v); return lancamentoDaNuvem({ ...l, cliente_id: l['clienteId'], estorna_id: l['estornaId'] })
   }), categorias: f.categorias.map(categoriaDaNuvem), produtos: f.produtos.map(produtoDaNuvem), fila: [], sincronizacao: [],
@@ -109,28 +122,38 @@ export async function dadosDaCaptura(c: CapturaServidor, f: FontesBackup,
     d.versoesCaixa.push({ id, operacaoId: r.grupo.operacao.id, grupo: r.grupo, aceita: true })
     d.operacoesCaixa.push({ ...r.grupo.operacao, versaoId: id }); d.fatosCaixa.push(...r.grupo.fatos)
   }
-  aoLerOriginais?.()
-  async function lerOriginal(entrada: unknown): Promise<DadosCopia['fotos'][number]> {
-    const r = registro(entrada)
-    exigirCopia(r['disponivel'] === true && typeof r['fotoId'] === 'string' && typeof r['copiaId'] === 'string' &&
-      typeof r['produtoId'] === 'string' && typeof r['caminho'] === 'string' && typeof r['sha256'] === 'string' &&
-      typeof r['bytes'] === 'number' && typeof r['largura'] === 'number' && typeof r['altura'] === 'number', 'foto')
-    exigirCopia(r['caminho'] === `${c.vinculo.contaId}/${r['fotoId']}/${r['copiaId']}.jpeg`, 'foto')
-    const binario = await baixarOriginal(r)
-    exigirCopia(binario.byteLength === r['bytes'], 'foto')
-    return { id: r['fotoId'], copiaId: r['copiaId'], produtoId: r['produtoId'], cadastroEm: normalizarCarimbo('foto.cadastro', r['cadastroEm']),
-      geracaoEnvio: c.id, sha256: r['sha256'], bytes: r['bytes'], largura: r['largura'], altura: r['altura'], caminho: r['caminho'],
-      situacao: 'disponivel', registrada: true, binario }
+  d.fotos = f.fotos.map((entrada) => fotoDaCaptura(c, entrada))
+  return dadosDaCopia(d, 5)
+}
+
+/** Lê apenas as referências solicitadas. O escritor confere o SHA dos bytes efetivamente usados. */
+export async function baixarLoteDaCaptura(c: CapturaServidor, referencias: readonly unknown[],
+  baixarOriginal: (referencia: Readonly<Record<string, unknown>>) => Promise<Uint8Array>): Promise<(FotoLocal & { binario: Uint8Array })[]> {
+  async function lerOriginal(entrada: unknown) {
+    const foto = fotoDaCaptura(c, entrada), binario = await baixarOriginal(registro(entrada))
+    exigirCopia(binario instanceof Uint8Array && binario.byteLength === foto.bytes, 'foto')
+    return { ...foto, binario }
   }
   // Limita as requisições simultâneas e conserva a ordem da captura, mesmo se o Storage responder fora de ordem.
-  for (let inicio = 0; inicio < f.fotos.length; inicio += LOTE_ORIGINAIS) {
-    const lote = await Promise.allSettled(f.fotos.slice(inicio, inicio + LOTE_ORIGINAIS).map(lerOriginal))
+  const fotos: (FotoLocal & { binario: Uint8Array })[] = []
+  for (let inicio = 0; inicio < referencias.length; inicio += LOTE_ORIGINAIS) {
+    const lote = await Promise.allSettled(referencias.slice(inicio, inicio + LOTE_ORIGINAIS).map(lerOriginal))
     for (const original of lote) {
       if (original.status === 'rejected') throw original.reason
-      d.fotos.push(original.value)
+      fotos.push(original.value)
     }
   }
-  return dadosDaCopia(d, 5)
+  return fotos
+}
+
+/** Retrato inteiro para reservas do formato de montagem anterior e para o instrumento de comparação. */
+export async function dadosDaCaptura(c: CapturaServidor, f: FontesBackup,
+  baixarOriginal: (referencia: Readonly<Record<string, unknown>>) => Promise<Uint8Array>,
+  aoLerOriginais?: () => void): Promise<DadosCopia> {
+  const dados = metadadosDaCaptura(c, f)
+  aoLerOriginais?.()
+  dados.fotos = await baixarLoteDaCaptura(c, f.fotos, baixarOriginal)
+  return dados
 }
 
 /** Material canônico por fato/grupo, usado somente para conferir cobertura na retenção D-084. */

@@ -28,7 +28,10 @@ export function criarHandlerBackup(portas: PortasBackupServidor & { readonly has
         if (autorizacao.destino !== portas.destino) throw new Error()
         return Response.json({ pronto: true, alcance: 'configuracao_e_banco', arquivosEnviados: 0, segredosImpressos: false })
       }
-      const resultado = await executarBackupServidor({ ...portas, aoAvancar(avanco) {
+      const resultado = await executarBackupServidor({ ...portas, aoConsultarPosicao(bytesAceitos) {
+        console.info(JSON.stringify({ evento: 'backup_posicao', bytesAceitos }))
+        portas.aoConsultarPosicao?.(bytesAceitos)
+      }, aoAvancar(avanco) {
         // Registrar a entrada na fase permite localizar até encerramento forçado pelo Edge (BA-04).
         if (etapa !== avanco) console.info(JSON.stringify({ evento: 'backup_etapa', etapa: avanco, decorridoMs: Math.round(performance.now() - inicio) }))
         etapa = avanco
