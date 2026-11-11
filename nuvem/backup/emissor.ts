@@ -28,7 +28,12 @@ export function criarHandlerBackup(portas: PortasBackupServidor & { readonly has
         if (autorizacao.destino !== portas.destino) throw new Error()
         return Response.json({ pronto: true, alcance: 'configuracao_e_banco', arquivosEnviados: 0, segredosImpressos: false })
       }
-      const resultado = await executarBackupServidor({ ...portas, aoAvancar(avanco) { etapa = avanco; portas.aoAvancar?.(avanco) } }, portas.agora())
+      const resultado = await executarBackupServidor({ ...portas, aoAvancar(avanco) {
+        // Registrar a entrada na fase permite localizar até encerramento forçado pelo Edge (BA-04).
+        if (etapa !== avanco) console.info(JSON.stringify({ evento: 'backup_etapa', etapa: avanco, decorridoMs: Math.round(performance.now() - inicio) }))
+        etapa = avanco
+        portas.aoAvancar?.(avanco)
+      } }, portas.agora())
       return Response.json({ ...resultado, duracaoMs: Math.round(performance.now() - inicio), segredosImpressos: false })
     } catch (e) {
       // Corpos de erro do Drive/PostgREST podem refletir capacidade de upload ou dados da conta.

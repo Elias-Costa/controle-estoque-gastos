@@ -1,4 +1,4 @@
-import { BlobReader, BlobWriter, ZipReader, ZipWriter, type FileEntry } from '@zip.js/zip.js/lib/zip-core.js'
+import { BlobReader, Writer, ZipReader, ZipWriter, type FileEntry } from '@zip.js/zip.js/lib/zip-core.js'
 import { dadosDaCopia, exigirCopia, jsonDaCopia, lerJsonDaTabela, lerOrigemBackup, lerVinculoCopia, objetoCopia } from '../dados/formato-copia.ts'
 import { consultasDaCopia } from '../dados/consultas-copia.ts'
 import { fotosNecessariasCopia, mesmoVinculo } from '../dados/repositorio-copia.ts'
@@ -7,10 +7,36 @@ import { LIMITE_MINIATURA_BYTES } from '../dados/tipos-fotos.ts'
 import { hashDaFoto, miniaturaDaFoto } from './fotos.ts'
 
 type ArquivoListado = { nome: string; bytes: number; sha256: string }
+/** Fases do empacotamento, sem conteúdo do arquivo na observação (BA-04). */
+export type EtapaArquivoCopia = 'validacao_dados' | 'validacao_fotos' | 'zip_dados' | 'zip_fotos' | 'zip_consultas' | 'zip_fechamento'
 const codificador = new TextEncoder()
 const textoJson = (v: unknown) => new Blob([jsonDaCopia(v)], { type: 'application/json' })
 const NOME_VALIDO = /^(?:dados\/(?:[a-zA-Z]+)\/\d{6}\.json|(?:fotos|miniaturas)\/[0-9a-f-]{36}\.jpeg|consultas\/(?:fichas|estoque|caixa)\.csv)$/
-async function hashBlob(blob: Blob): Promise<string> { return hashDaFoto(new Uint8Array(await blob.arrayBuffer())) }
+function blobDoBinario(binario: Uint8Array): Blob {
+  // Blob copia a vista exata; não duplicar antes nem incluir bytes fora do intervalo.
+  const parte = binario.buffer instanceof ArrayBuffer
+    ? new Uint8Array(binario.buffer, binario.byteOffset, binario.byteLength) : new Uint8Array(binario)
+  return new Blob([parte])
+}
+class PartesDoZip extends Writer<Blob> {
+  private partes: Blob[] = []
+  override writeUint8Array(parte: Uint8Array): Promise<void> {
+    this.partes.push(blobDoBinario(parte))
+    return Promise.resolve()
+  }
+  override getData(): Promise<Blob> {
+    // BA-04: Response.blob() do BlobWriter concatena o ZIP inteiro ao fechar no Edge.
+    // Partes já imutáveis dispensam esse buffer contíguo extra; zip.js mantém formato/CRC.
+    const arquivo = new Blob(this.partes, { type: 'application/zip' })
+    this.partes = []
+    return Promise.resolve(arquivo)
+  }
+}
+async function hashBlob(blob: Blob): Promise<string> {
+  // Blob já é imutável; o buffer lido para o hash não precisa de outra cópia defensiva.
+  const hash = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer())
+  return Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, '0')).join('')
+}
 async function conferirFotos(d: DadosCopia, exigirMiniatura = true): Promise<void> {
   for (const foto of fotosNecessariasCopia(d)) {
     exigirCopia(foto.binario && (!exigirMiniatura || foto.miniatura) && foto.binario.byteLength === foto.bytes, 'foto')
@@ -22,48 +48,71 @@ export async function criarArquivoCopia(estagio: EstagioCopia, dados: DadosCopia
   return criarArquivo(estagio, dados)
 }
 /** ZIP autossuficiente 5/10: aceita originais sem miniaturas, reconstruídas na importação (D-084). */
-export async function criarArquivoBackup(estagio: EstagioCopia, dados: DadosCopia, origem: OrigemBackup): Promise<Blob> {
-  return criarArquivo(estagio, dados, lerOrigemBackup(origem))
+export async function criarArquivoBackup(estagio: EstagioCopia, dados: DadosCopia, origem: OrigemBackup,
+  aoAvancar?: (etapa: EtapaArquivoCopia) => void, resumir = hashBlob): Promise<Blob> {
+  return criarArquivo(estagio, dados, lerOrigemBackup(origem), aoAvancar, resumir)
 }
-async function criarArquivo(estagio: EstagioCopia, dados: DadosCopia, origem?: OrigemBackup): Promise<Blob> {
+async function criarArquivo(estagio: EstagioCopia, dados: DadosCopia, origem?: OrigemBackup,
+  aoAvancar?: (etapa: EtapaArquivoCopia) => void, resumir = hashBlob): Promise<Blob> {
   exigirCopia(estagio.pronto && estagio.tipo === 'exportacao', 'estagio')
-  dadosDaCopia(dados); await conferirFotos(dados, !origem)
+  aoAvancar?.('validacao_dados')
+  dadosDaCopia(dados)
+  // Metadados da mesma foto acompanham o Blob imutável que será conferido e escrito.
+  dados = { ...dados, fotos: dados.fotos.map((foto) => ({ ...foto })) }
+  aoAvancar?.('validacao_fotos')
+  for (const foto of fotosNecessariasCopia(dados)) {
+    exigirCopia(foto.binario && (origem || foto.miniatura) && foto.binario.byteLength === foto.bytes, 'foto')
+  }
   const carimbo = new Date(estagio.capturadoEm)
   // BA-02/D-084: remontar a mesma captura deve produzir os mesmos bytes para retomar o upload.
   // zip.js usa componentes locais no DOS timestamp; os componentes UTC fixam o resultado entre runtimes.
   // A captura do aparelho pode ser retomada após trocar de fuso. A data real está no manifesto.
   const dataDoZip = origem?.tipo === 'aparelho' ? new Date(2000, 0, 1, 12)
     : new Date(carimbo.getUTCFullYear(), carimbo.getUTCMonth(), carimbo.getUTCDate(), carimbo.getUTCHours(), carimbo.getUTCMinutes(), carimbo.getUTCSeconds())
-  const escritor = new ZipWriter(new BlobWriter('application/zip'), { level: 0, useWebWorkers: false, bufferedWrite: false, extendedTimestamp: false,
+  const escritor = new ZipWriter(new PartesDoZip(), { level: 0, useWebWorkers: false, bufferedWrite: false, extendedTimestamp: false,
     ...(origem ? { lastModDate: dataDoZip } : {}) })
   const arquivos: ArquivoListado[] = []
   let bytes = 0, textos = 0
-  async function adicionar(nome: string, blob: Blob): Promise<void> {
+  async function adicionar(nome: string, blob: Blob, hashConferido?: string): Promise<void> {
     bytes += blob.size
     const textual = nome.endsWith('.json') || nome.endsWith('.csv')
     if (textual) textos += blob.size
     exigirCopia(bytes <= L.arquivo && textos <= L.textos && arquivos.length + 2 <= L.entradas && (!textual || blob.size <= L.lote), 'limite')
-    arquivos.push({ nome, bytes: blob.size, sha256: await hashBlob(blob) })
+    arquivos.push({ nome, bytes: blob.size, sha256: hashConferido ?? await resumir(blob) })
     await escritor.add(nome, new BlobReader(blob))
   }
   try {
+    aoAvancar?.('zip_dados')
     for (const tabela of TABELAS_COPIA) {
       const linhas: readonly unknown[] = tabela === 'fotos' ? dados.fotos.map(({ binario: _b, miniatura: _m, ...foto }) => foto) : dados[tabela]
-      let lote: unknown[] = [], tamanho = 2, numero = 0
-      async function gravar() { await adicionar(`dados/${tabela}/${String(numero++).padStart(6, '0')}.json`, textoJson(lote)); lote = []; tamanho = 2 }
+      let lote: string[] = [], tamanho = 2, numero = 0
+      async function gravar() {
+        // Mesma indentação de jsonDaCopia(linhas), reaproveitando a serialização que dimensiona o lote.
+        const texto = lote.length ? `[\n${lote.join(',\n')}\n]` : '[]'
+        await adicionar(`dados/${tabela}/${String(numero++).padStart(6, '0')}.json`, new Blob([texto], { type: 'application/json' }))
+        lote = []; tamanho = 2
+      }
       for (const linha of linhas) {
-        const comprimento = codificador.encode(jsonDaCopia(linha)).byteLength + 16
+        const json = jsonDaCopia(linha), comprimento = codificador.encode(json).byteLength + 16
         exigirCopia(comprimento <= L.lote - 2, 'limite')
         if (tamanho + comprimento > L.lote) await gravar()
-        lote.push(linha); tamanho += comprimento
+        lote.push(`  ${json.replaceAll('\n', '\n  ')}`); tamanho += comprimento
       }
       if (lote.length || numero === 0) await gravar()
     }
+    aoAvancar?.('zip_fotos')
     for (const foto of dados.fotos) {
-      if (foto.binario) await adicionar(`fotos/${foto.id}.jpeg`, new Blob([new Uint8Array(foto.binario)]))
-      if (!origem && foto.miniatura) await adicionar(`miniaturas/${foto.id}.jpeg`, new Blob([new Uint8Array(foto.miniatura)]))
+      if (foto.binario) {
+        const original = blobDoBinario(foto.binario), sha256 = await resumir(original)
+        exigirCopia(original.size === foto.bytes && sha256 === foto.sha256, 'foto')
+        // Somente este bloco privado reaproveita o hash dos mesmos bytes efetivamente escritos.
+        await adicionar(`fotos/${foto.id}.jpeg`, original, sha256)
+      }
+      if (!origem && foto.miniatura) await adicionar(`miniaturas/${foto.id}.jpeg`, blobDoBinario(foto.miniatura))
     }
+    aoAvancar?.('zip_consultas')
     for (const [nome, conteudo] of Object.entries(consultasDaCopia(dados))) await adicionar(nome, new Blob([conteudo], { type: 'text/csv;charset=utf-8' }))
+    aoAvancar?.('zip_fechamento')
     const manifesto = textoJson({ formato: origem ? 5 : 4, esquema: 10, ...(origem ? { origem } : {}), id: estagio.id, vinculo: estagio.vinculo,
       capturadoEm: estagio.capturadoEm, quantidades: Object.fromEntries(TABELAS_COPIA.map((t) => [t, dados[t].length])), arquivos })
     exigirCopia(manifesto.size <= L.manifesto && bytes + manifesto.size <= L.arquivo, 'limite')

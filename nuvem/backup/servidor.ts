@@ -1,12 +1,13 @@
+import { createHash } from 'node:crypto'
 import { carregarFontesBackup, dadosDaCaptura, lerCapturaServidor, materialDaCaptura, pacoteDaCaptura, type RpcBackup } from './captura.ts'
 import { lerAutorizacaoGoogle } from './cofre-google.ts'
 import { consultarContaDrive, renovarTokensGoogle } from './google.ts'
 import { criarDriveBackup } from './drive.ts'
 import { exigirCopia, objetoCopia } from '../../src/dados/formato-copia.ts'
-import { hashDaFoto } from '../../src/plataforma/fotos.ts'
+import type { EtapaArquivoCopia } from '../../src/plataforma/arquivo-copia.ts'
 
 /** Etapas técnicas do executor, sem carregar conteúdo privado. */
-export type EtapaBackupServidor = 'autorizacao' | 'captura' | 'leitura' | 'montagem' | 'pasta' | 'sessao' | 'envio' | 'conferencia' | 'retencao'
+export type EtapaBackupServidor = EtapaArquivoCopia | 'autorizacao' | 'captura' | 'leitura' | 'reconstrucao' | 'originais' | 'material' | 'montagem' | 'hash' | 'pasta' | 'sessao' | 'envio' | 'conferencia' | 'retencao'
 /** A observação de etapa não recebe dados, token, caminho ou capacidade de upload. */
 export type PortasBackupServidor = { readonly rpc: RpcBackup; readonly destino: string; readonly baixarOriginal: (ref: Readonly<Record<string, unknown>>) => Promise<Uint8Array>
   readonly aoAvancar?: (etapa: EtapaBackupServidor) => void }
@@ -52,10 +53,17 @@ export async function executarBackupServidor(portas: PortasBackupServidor, agora
     exigirCopia(cabecalho['estado'] !== 'pronta')
     portas.aoAvancar?.('leitura')
     const fontes = await carregarFontesBackup(rpc, captura)
-    const dados = await dadosDaCaptura(captura, fontes, portas.baixarOriginal)
+    portas.aoAvancar?.('reconstrucao')
+    const dados = await dadosDaCaptura(captura, fontes, portas.baixarOriginal, () => portas.aoAvancar?.('originais'))
+    portas.aoAvancar?.('material')
+    const material = await materialDaCaptura(dados)
     portas.aoAvancar?.('montagem')
-    const material = await materialDaCaptura(dados), arquivo = await pacoteDaCaptura(captura, dados)
-    const sha256 = await hashDaFoto(new Uint8Array(await arquivo.arrayBuffer()))
+    const arquivo = await pacoteDaCaptura(captura, dados, portas.aoAvancar)
+    portas.aoAvancar?.('hash')
+    // Confere o ZIP inteiro em fluxo, sem alocar outra cópia integral para calcular o hash.
+    const hashDoZip = createHash('sha256')
+    await arquivo.stream().pipeTo(new WritableStream({ write(parte) { hashDoZip.update(parte) } }))
+    const sha256 = hashDoZip.digest('hex')
     if (!arquivoId && google.limite !== undefined) exigirCopia(google.limite - google.uso >= BigInt(arquivo.size), 'limite')
     portas.aoAvancar?.('pasta')
     if (!pasta) pasta = texto(await rpc('reservar_pasta_backup', { conta, destino: vinculo.destino, pasta: await drive.gerarId() }))

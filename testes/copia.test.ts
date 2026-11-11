@@ -158,6 +158,11 @@ describe('E-35: arquivo e estágio, IndexedDB simulado; não prova aparelho', ()
     expect(lida.dados.versoesCaixa.length).toBe(2)
     const reader = new ZipReader(new BlobReader(p.arquivo), { useWebWorkers: false })
     const entradas = await reader.getEntries()
+    for (const tabela of TABELAS_COPIA) {
+      const e = entradas.find((e) => e.filename === `dados/${tabela}/000000.json`); exigirCopia(e && !e.directory)
+      const linhas = tabela === 'fotos' ? p.dados.fotos.map(({ binario: _b, miniatura: _m, ...foto }) => foto) : p.dados[tabela]
+      expect(await (await e.getData(new BlobWriter())).text()).toBe(jsonDaCopia(linhas))
+    }
     for (const nome of ['fichas', 'estoque', 'caixa']) {
       const e = entradas.find((e) => e.filename === `consultas/${nome}.csv`); exigirCopia(e && !e.directory)
       const texto = await (await e.getData(new BlobWriter())).text()
@@ -178,6 +183,23 @@ describe('E-35: arquivo e estágio, IndexedDB simulado; não prova aparelho', ()
     ok(await estoque.cancelarVenda(venda.id, DIA, [{ itemId: venda.itens[0].id, quantidade: 0 }]))
     const consultas = consultasDaCopia(await criarRepositorioCopia(b).conferirDados())
     expect(consultas['consultas/estoque.csv']).toContain('"5";"2"')
+    b.close()
+  })
+  test('BA-04 a consulta em lote conserva diagnóstico por produto e cliente sem anotações', async () => {
+    const b = aparelho(), ids = await povoar(b), estoque = criarOperacoesEstoque(criarRepositorioEstoque(b))
+    ok(await cadastrarCliente(criarRepositorioLocal(b), { nome: 'Sem lançamentos' }))
+    ok(await estoque.cadastrarProduto({ nome: 'Produto saudável', categoriaId: ids.produto.categoriaId, custoManual: 150n }))
+    const grupo = ok(await estoque.lancarVenda({ clienteId: ids.cliente.id, data: DIA, desconto: 0n, pagamento: 'fiado',
+      itens: [{ produtoId: ids.produto.id, descricao: 'Produto', quantidade: 3, entregue: 1, precoUnitario: 1000n }],
+      parcelas: [{ vencimento: DIA, valor: 3000n }] }))
+    const venda = grupo.lancamentos[0]; exigirCopia(venda && venda.tipo === 'venda')
+    const dados = await criarRepositorioCopia(b).conferirDados()
+    // Duas ocorrências vigentes do mesmo item exigem conferir somente a promessa desse produto.
+    dados.lancamentos.push({ ...venda, id: uuidv7() })
+    const consultas = consultasDaCopia(dados)
+    expect(consultas['consultas/estoque.csv']).toContain('"Produto";"";"";"Livre";"6";"Conferir entregas";"R$ 90.071.992.547.409,93"')
+    expect(consultas['consultas/estoque.csv']).toContain('"Produto saudável";"";"";"Livre";"0";"0";"R$ 1,50"')
+    expect(consultas['consultas/fichas.csv']).toContain('"Sem lançamentos";"";"";"";"Sem anotações";"";"R$ 0,00"')
     b.close()
   })
   test('publicar em outra base preserva fila e identidades; novo aparelho, cursores recomeçam', async () => {
@@ -290,6 +312,18 @@ describe('E-35: arquivo e estágio, IndexedDB simulado; não prova aparelho', ()
     expect(await criarRepositorioEstoque(b).encerrar(tentativa.id, { data: DIA, confirmado: true, intencaoPendente: false }))
       .toEqual({ ok: true, valor: encerramento })
     a.close(); b.close()
+  })
+  test('BA-04 índices de vínculos conservam versões financeiras com o mesmo id e recusam cliente alheio', async () => {
+    const b = aparelho(); await povoar(b); const { dados } = await pacote(b)
+    const venda = dados.lancamentos.find((l) => l.tipo === 'venda'), cliente = dados.clientes[0]; exigirCopia(venda && cliente)
+    const outro = { ...cliente, id: uuidv7() }; dados.clientes.push(outro)
+    dados.evidenciasCopia.push({ id: venda.id, tentativa: venda, aceita: { ...venda, clienteId: outro.id } })
+    const estorno = { tipo: 'estorno' as const, id: uuidv7(), clienteId: cliente.id, data: DIA, estornaId: venda.id }
+    dados.lancamentos.push(estorno, { ...estorno, id: uuidv7(), clienteId: outro.id })
+    expect(() => dadosDaCopia(dados)).not.toThrow()
+    dados.evidenciasCopia = []
+    expect(() => dadosDaCopia(dados)).toThrow()
+    b.close()
   })
   for (const caso of ['hash', 'numero', 'vinculo', 'foto', 'faltante', 'segredo', 'futuro'] as const) test(`pacote inválido ${caso} não chega à publicação, inclusive com hashes refeitos`, async () => {
     const b = aparelho(); await povoar(b); const p = await pacote(b)

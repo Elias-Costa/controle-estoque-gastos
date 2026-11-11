@@ -59,6 +59,7 @@
     "backup:executar:homologacao": "bun --no-env-file run ferramentas/testar-ambiente.ts homologacao backup-executar",
     "backup:volume:local": "bun --no-env-file run ferramentas/testar-ambiente.ts local backup-volume",
     "backup:volume:homologacao": "bun --no-env-file run ferramentas/testar-ambiente.ts homologacao backup-volume",
+    "backup:perfil:homologacao": "bun --no-env-file run ferramentas/testar-ambiente.ts homologacao backup-perfil",
     "backup:aparelho:homologacao": "bun --no-env-file run ferramentas/testar-ambiente.ts homologacao provar-backup-aparelho",
     "check": "bun run typecheck && bun run lint && bun run test"
   },

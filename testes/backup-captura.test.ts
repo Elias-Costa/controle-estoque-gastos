@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import { carregarFontesBackup, dadosDaCaptura, lerCapturaServidor, materialDaCaptura, pacoteDaCaptura, type CapturaServidor, type FontesBackup } from '../nuvem/backup/captura.ts'
-import { lerArquivoCopia } from '../src/plataforma/arquivo-copia.ts'
+import { criarArquivoBackup, lerArquivoCopia } from '../src/plataforma/arquivo-copia.ts'
 import { hashDaFoto } from '../src/plataforma/fotos.ts'
+import { indexarMaterialBackup } from '../src/plataforma/material-backup.ts'
 import { uuidv7 } from '../src/dados/identidade.ts'
 import { documentoEstoque } from '../src/sincronizacao/borda-estoque.ts'
 
@@ -48,6 +49,7 @@ describe('BA-02 captura do servidor → dados/ZIP, sem Google/Edge reais', () =>
     expect(lido.dados.fotos[0]?.binario).toEqual(binario); expect(lido.dados.fotos[0]?.miniatura).toEqual(miniatura)
     const material = await materialDaCaptura(d)
     expect(material.length).toBeGreaterThan(0); expect(material.every((h) => /^[a-f0-9]{64}$/.test(h))).toBe(true)
+    expect(material).toEqual((await indexarMaterialBackup(d)).material)
   })
   test('original errado/ausente ou caminho alheio impede o pacote antes da publicação', async () => {
     const { c, fontes } = await caso()
@@ -55,6 +57,64 @@ describe('BA-02 captura do servidor → dados/ZIP, sem Google/Edge reais', () =>
     const ref = fontes.fotos[0]
     if (typeof ref !== 'object' || ref === null) throw new Error('Fixture ausente')
     await expect(dadosDaCaptura(c, { ...fontes, fotos: [{ ...ref, caminho: `outra/${uuidv7()}.jpeg` }] }, async () => { throw new Error('Não deve baixar') })).rejects.toThrow()
+  })
+  test('BA-04 confere o original uma vez no empacotador e conserva os mesmos bytes com SHA nativo', async () => {
+    const { c, fontes, binario } = await caso()
+    const dados = await dadosDaCaptura(c, fontes, async () => binario)
+    let hashesDoOriginal = 0
+    const web = await criarArquivoBackup({ id: c.id, tipo: 'exportacao', vinculo: c.vinculo, capturadoEm: c.capturadoEm, pronto: true },
+      dados, { tipo: 'servidor' }, undefined, async (blob) => {
+        if (blob.size === binario.byteLength) hashesDoOriginal++
+        return hashDaFoto(new Uint8Array(await blob.arrayBuffer()))
+      })
+    expect(hashesDoOriginal).toBe(1)
+    expect(new Uint8Array(await web.arrayBuffer())).toEqual(new Uint8Array(await (await pacoteDaCaptura(c, dados)).arrayBuffer()))
+  })
+  test('BA-04 recusa corrupção do mesmo tamanho e troca de bytes antes da escrita do original', async () => {
+    const { c, fontes, binario } = await caso()
+    const errado = new Uint8Array(binario); errado[0] = (errado[0] ?? 0) ^ 1
+    const corrompidos = await dadosDaCaptura(c, fontes, async () => errado)
+    await expect(pacoteDaCaptura(c, corrompidos)).rejects.toMatchObject({ motivo: 'foto' })
+    const dados = await dadosDaCaptura(c, fontes, async () => new Uint8Array(binario))
+    await expect(pacoteDaCaptura(c, dados, (etapa) => {
+      if (etapa === 'zip_dados') dados.fotos[0]?.binario?.fill(0)
+    })).rejects.toMatchObject({ motivo: 'foto' })
+  })
+  test('BA-04 o conteúdo já conferido e escrito não muda com o buffer do chamador', async () => {
+    const { c, fontes, binario, miniatura } = await caso()
+    const comMargens = new Uint8Array(binario.length + 32).fill(123)
+    comMargens.set(binario, 16)
+    const dados = await dadosDaCaptura(c, fontes, async () => comMargens.subarray(16, -16))
+    const arquivo = await pacoteDaCaptura(c, dados, (etapa) => {
+      if (etapa === 'zip_consultas') dados.fotos[0]?.binario?.fill(0)
+    })
+    const lido = await lerArquivoCopia(arquivo, c.vinculo, async () => miniatura)
+    expect(lido.dados.fotos[0]?.binario).toEqual(binario)
+  })
+  test('baixa originais em lotes limitados sem trocar a ordem do ZIP', async () => {
+    const { c, fontes, binario } = await caso()
+    const ref = fontes.fotos[0], produto = fontes.produtos[0]
+    if (typeof ref !== 'object' || ref === null || typeof produto !== 'object' || produto === null) throw new Error('Fixture ausente')
+    const pares = Array.from({ length: 9 }, () => {
+      const fotoId = uuidv7(), copiaId = uuidv7(), produtoId = uuidv7()
+      return {
+        foto: { ...ref, fotoId, copiaId, produtoId, caminho: `${c.vinculo.contaId}/${fotoId}/${copiaId}.jpeg` },
+        produto: { ...produto, id: produtoId, foto_id: fotoId },
+      }
+    })
+    const fotos = pares.map((par) => par.foto)
+    let ativos = 0, maximo = 0
+    const concluidos: unknown[] = []
+    const d = await dadosDaCaptura(c, { ...fontes, fotos, produtos: [{ ...produto, foto_id: null }, ...pares.map((par) => par.produto)] }, async (original) => {
+      maximo = Math.max(maximo, ++ativos)
+      await Bun.sleep(original['fotoId'] === fotos[0]?.fotoId ? 20 : 0)
+      concluidos.push(original['fotoId'])
+      ativos--
+      return binario
+    })
+    expect(maximo).toBe(8)
+    expect(concluidos[0]).not.toBe(fotos[0]?.fotoId)
+    expect(d.fotos.map((foto) => foto.id)).toEqual(fotos.map((foto) => foto.fotoId))
   })
   test('cabeçalho de outra conta/destino e lote truncado não são aceitos como captura inteira', async () => {
     const { c } = await caso()

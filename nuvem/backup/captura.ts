@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { dadosDaCopia, exigirCopia, objetoCopia, lerVinculoCopia } from '../../src/dados/formato-copia.ts'
 import { LIMITES_COPIA, type DadosCopia, type VinculoConta } from '../../src/dados/tipos-copia.ts'
 import { clienteDaNuvem, lancamentoDaNuvem, normalizarCarimbo } from '../../src/sincronizacao/borda.ts'
@@ -8,8 +9,7 @@ import { identidadeDaNuvem } from '../../src/sincronizacao/identidade-loja.ts'
 import { efeitosAposEncerramentos, identidadeDaTentativa } from '../../src/dominio/recuperacao-estoque.ts'
 import { chaveDoEfeito } from '../../src/dominio/estoque.ts'
 import { conteudoDoEfeito } from '../../src/dominio/regras-estoque.ts'
-import { hashDaFoto } from '../../src/plataforma/fotos.ts'
-import { criarArquivoBackup } from '../../src/plataforma/arquivo-copia.ts'
+import { criarArquivoBackup, type EtapaArquivoCopia } from '../../src/plataforma/arquivo-copia.ts'
 import { indexarMaterialBackup } from '../../src/plataforma/material-backup.ts'
 
 /** Cabeçalho durável; conta/destino não são credenciais Google. */
@@ -51,16 +51,23 @@ export async function carregarFontesBackup(rpc: RpcBackup, captura: CapturaServi
   return fontes
 }
 
-async function idDeVersao(tipo: string, valor: unknown): Promise<string> {
-  const hash = await hashDaFoto(new TextEncoder().encode(`${tipo}:${conteudoDoEfeito(valor)}`))
+const LOTE_ORIGINAIS = 8
+
+function sha256(conteudo: string | Uint8Array): string {
+  return createHash('sha256').update(conteudo).digest('hex')
+}
+
+function idDeVersao(tipo: string, conteudo: string): string {
+  const hash = sha256(`${tipo}:${conteudo}`)
   // UUID técnico reconstruído, estável por conteúdo. Nenhum id de cliente/fato/movimento é trocado.
   return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-8${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`
 }
 function registro(v: unknown): Record<string, unknown> { exigirCopia(objetoCopia(v)); return v }
 
-/** Reconstrói apenas as estruturas técnicas locais necessárias ao leitor 5/10; preserva fatos e Q47A. */
+/** Reconstrói o retrato 5/10 e confere referências/tamanhos; SHA dos originais é conferido ao montar o ZIP. */
 export async function dadosDaCaptura(c: CapturaServidor, f: FontesBackup,
-  baixarOriginal: (referencia: Readonly<Record<string, unknown>>) => Promise<Uint8Array>): Promise<DadosCopia> {
+  baixarOriginal: (referencia: Readonly<Record<string, unknown>>) => Promise<Uint8Array>,
+  aoLerOriginais?: () => void): Promise<DadosCopia> {
   const d: DadosCopia = { clientes: f.clientes.map(clienteDaNuvem), lancamentos: f.lancamentos.map((v) => {
     const l = registro(v); return lancamentoDaNuvem({ ...l, cliente_id: l['clienteId'], estorna_id: l['estornaId'] })
   }), categorias: f.categorias.map(categoriaDaNuvem), produtos: f.produtos.map(produtoDaNuvem), fila: [], sincronizacao: [],
@@ -73,16 +80,23 @@ export async function dadosDaCaptura(c: CapturaServidor, f: FontesBackup,
   const projecao = efeitosAposEncerramentos({ operacoes: aceitos, lancamentos: d.lancamentos,
     movimentos: operacoes.flatMap((r) => r.grupo.movimentos) }, [],
   d.encerramentos.map((e) => ({ ...e, tentativa: identidadeDaTentativa(e.evidencia.grupo) })))
-  const grupos = new Map([...aceitos, ...d.encerramentos.flatMap((e) => [e.evidencia.grupo, ...(e.novaOperacao ? [e.novaOperacao] : [])])]
-    .map((g) => [conteudoDoEfeito(g), g]))
-  for (const grupo of grupos.values()) {
-    const id = await idDeVersao('estoque', grupo)
-    d.versoesEstoque.push({ id, operacaoId: grupo.operacao.id, grupo, ...(aceitos.some((a) => conteudoDoEfeito(a) === conteudoDoEfeito(grupo)) ? { aceita: true } : {}) })
+  const gruposAceitos = new Map(aceitos.map((g) => [conteudoDoEfeito(g), g]))
+  const grupos = new Map(gruposAceitos)
+  for (const e of d.encerramentos) {
+    grupos.set(conteudoDoEfeito(e.evidencia.grupo), e.evidencia.grupo)
+    if (e.novaOperacao) grupos.set(conteudoDoEfeito(e.novaOperacao), e.novaOperacao)
+  }
+  // A mesma chave canônica conserva os ids da captura ao retomar um ZIP já reservado.
+  const versoes = new Map<string, string>()
+  for (const [conteudo, grupo] of grupos) {
+    const id = idDeVersao('estoque', conteudo)
+    versoes.set(conteudo, id)
+    d.versoesEstoque.push({ id, operacaoId: grupo.operacao.id, grupo, ...(gruposAceitos.has(conteudo) ? { aceita: true } : {}) })
   }
   const atuais = new Map([...aceitos, ...projecao.pendentes].map((g) => [g.operacao.id, g]))
   for (const grupo of atuais.values()) {
-    const versao = d.versoesEstoque.find((v) => conteudoDoEfeito(v.grupo) === conteudoDoEfeito(grupo)); exigirCopia(versao)
-    d.operacoes.push({ ...grupo.operacao, versaoId: versao.id })
+    const versaoId = versoes.get(conteudoDoEfeito(grupo)); exigirCopia(versaoId)
+    d.operacoes.push({ ...grupo.operacao, versaoId })
   }
   for (const grupo of projecao.pendentes) d.fila.push({ ordem: d.fila.length + 1, tabela: 'operacoes', registroId: grupo.operacao.id,
     versao: grupo.operacao.revisao, criadoEm: c.capturadoEm })
@@ -91,31 +105,41 @@ export async function dadosDaCaptura(c: CapturaServidor, f: FontesBackup,
   d.movimentos = [...movimentos.values()]
   d.relogioEstoque = [{ chave: 'cadastro', ultimo: d.movimentos.reduce((maior, m) => m.tipo === 'compra' && m.ordemCadastro > maior ? m.ordemCadastro : maior, 0n) }]
   for (const r of f.caixa.map(recepcaoCaixaDaNuvem)) {
-    const id = await idDeVersao('caixa', r.grupo)
+    const id = idDeVersao('caixa', conteudoDoEfeito(r.grupo))
     d.versoesCaixa.push({ id, operacaoId: r.grupo.operacao.id, grupo: r.grupo, aceita: true })
     d.operacoesCaixa.push({ ...r.grupo.operacao, versaoId: id }); d.fatosCaixa.push(...r.grupo.fatos)
   }
-  for (const entrada of f.fotos) {
+  aoLerOriginais?.()
+  async function lerOriginal(entrada: unknown): Promise<DadosCopia['fotos'][number]> {
     const r = registro(entrada)
     exigirCopia(r['disponivel'] === true && typeof r['fotoId'] === 'string' && typeof r['copiaId'] === 'string' &&
       typeof r['produtoId'] === 'string' && typeof r['caminho'] === 'string' && typeof r['sha256'] === 'string' &&
       typeof r['bytes'] === 'number' && typeof r['largura'] === 'number' && typeof r['altura'] === 'number', 'foto')
     exigirCopia(r['caminho'] === `${c.vinculo.contaId}/${r['fotoId']}/${r['copiaId']}.jpeg`, 'foto')
     const binario = await baixarOriginal(r)
-    exigirCopia(binario.byteLength === r['bytes'] && await hashDaFoto(binario) === r['sha256'], 'foto')
-    d.fotos.push({ id: r['fotoId'], copiaId: r['copiaId'], produtoId: r['produtoId'], cadastroEm: normalizarCarimbo('foto.cadastro', r['cadastroEm']),
+    exigirCopia(binario.byteLength === r['bytes'], 'foto')
+    return { id: r['fotoId'], copiaId: r['copiaId'], produtoId: r['produtoId'], cadastroEm: normalizarCarimbo('foto.cadastro', r['cadastroEm']),
       geracaoEnvio: c.id, sha256: r['sha256'], bytes: r['bytes'], largura: r['largura'], altura: r['altura'], caminho: r['caminho'],
-      situacao: 'disponivel', registrada: true, binario })
+      situacao: 'disponivel', registrada: true, binario }
+  }
+  // Limita as requisições simultâneas e conserva a ordem da captura, mesmo se o Storage responder fora de ordem.
+  for (let inicio = 0; inicio < f.fotos.length; inicio += LOTE_ORIGINAIS) {
+    const lote = await Promise.allSettled(f.fotos.slice(inicio, inicio + LOTE_ORIGINAIS).map(lerOriginal))
+    for (const original of lote) {
+      if (original.status === 'rejected') throw original.reason
+      d.fotos.push(original.value)
+    }
   }
   return dadosDaCopia(d, 5)
 }
 
 /** Material canônico por fato/grupo, usado somente para conferir cobertura na retenção D-084. */
 export async function materialDaCaptura(d: DadosCopia): Promise<readonly string[]> {
-  return (await indexarMaterialBackup(d)).material
+  return (await indexarMaterialBackup(d, sha256)).material
 }
 
-/** Empacota a captura já conferida; miniaturas continuam responsabilidade automática da importação. */
-export async function pacoteDaCaptura(c: CapturaServidor, dados: DadosCopia): Promise<Blob> {
-  return criarArquivoBackup({ id: c.id, tipo: 'exportacao', vinculo: c.vinculo, capturadoEm: c.capturadoEm, pronto: true }, dados, { tipo: 'servidor' })
+/** Confere os bytes efetivos e empacota a captura; miniaturas são reconstruídas na importação. */
+export async function pacoteDaCaptura(c: CapturaServidor, dados: DadosCopia, aoAvancar?: (etapa: EtapaArquivoCopia) => void): Promise<Blob> {
+  return criarArquivoBackup({ id: c.id, tipo: 'exportacao', vinculo: c.vinculo, capturadoEm: c.capturadoEm, pronto: true }, dados,
+    { tipo: 'servidor' }, aoAvancar, async (blob) => sha256(new Uint8Array(await blob.arrayBuffer())))
 }

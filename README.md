@@ -263,3 +263,9 @@ Para preparar o disparo natural das 11h de Fortaleza com o volume de BA-04, use
 `bun run backup:volume:homologacao` na conta fictícia vinculada ao Drive de teste.
 O comando `bun run backup:volume:local` confere o mesmo transporte com uma amostra.
 [Carga e leitura da prova](nuvem/backup/LEIA-ME.md#carga-da-ba-04).
+
+Para comparar a montagem de uma captura fictícia retida antes/depois de otimização,
+use `bun run backup:perfil:homologacao --captura=<UUID> --referencia` uma vez e
+repita sem `--referencia`. O instrumento lê a captura e originais, salva a referência
+local e exige igualdade de tamanho/SHA; não envia ao Drive. CPU medida no Bun não
+comprova o orçamento do Edge. [Procedimento](nuvem/backup/LEIA-ME.md#captura-retomada-e-proteção).

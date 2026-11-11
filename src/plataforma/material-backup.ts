@@ -3,12 +3,13 @@ import { conteudoDoEfeito } from '../dominio/regras-estoque.ts'
 import { hashDaFoto } from './fotos.ts'
 
 /** Índice de fatos da mesma captura. Conteúdo equivalente é comparável entre as duas origens (D-084). */
-export async function indexarMaterialBackup(d: DadosCopia) {
+export async function indexarMaterialBackup(d: DadosCopia, resumir?: (conteudo: string) => string) {
   const pendentes = new Set(d.fila.map((i) => `${i.tabela}/${i.registroId}`))
   const material = new Set<string>(), exclusivos = new Set<string>()
   const codificador = new TextEncoder()
   async function anotar(tipo: string, valor: unknown, exclusivo: boolean): Promise<void> {
-    const hash = await hashDaFoto(codificador.encode(conteudoDoEfeito([tipo, valor])))
+    const conteudo = conteudoDoEfeito([tipo, valor])
+    const hash = resumir ? resumir(conteudo) : await hashDaFoto(codificador.encode(conteudo))
     material.add(hash)
     if (exclusivo) exclusivos.add(hash)
   }

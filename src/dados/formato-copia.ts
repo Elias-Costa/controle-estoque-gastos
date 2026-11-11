@@ -232,20 +232,24 @@ export function validarVinculosCopia(d: DadosCopia): void {
   }
   const clientes = new Set(d.clientes.map((c) => c.id)), produtos = new Set(d.produtos.map((p) => p.id))
   const financeiros = [...d.lancamentos, ...d.versoesEstoque.flatMap((v) => v.grupo.lancamentos), ...d.evidenciasCopia.flatMap((e) => [e.tentativa, e.aceita])]
+  // Índices de existência incluem todas as versões; não escolher um conteúdo por id (EL-02/04).
+  const alvosFinanceiros = new Set(financeiros.filter((l) => l.tipo !== 'estorno').map((l) => `${l.clienteId}/${l.id}`))
+  const itensVendidos = new Set(financeiros.flatMap((l) => l.tipo === 'venda' ? l.itens.map((i) => `${i.produtoId}/${i.id}`) : []))
   for (const l of financeiros) {
     exigirCopia(clientes.has(l.clienteId))
-    if (l.tipo === 'estorno') exigirCopia(financeiros.some((a) => a.id === l.estornaId && a.tipo !== 'estorno' && a.clienteId === l.clienteId))
+    if (l.tipo === 'estorno') exigirCopia(alvosFinanceiros.has(`${l.clienteId}/${l.estornaId}`))
     if (l.tipo === 'venda') exigirCopia(l.itens.every((i) => !i.produtoId || produtos.has(i.produtoId)))
   }
   for (const p of d.produtos) exigirCopia(novoProduto(p, d.categorias).ok)
   const movimentos = [...d.movimentos, ...d.versoesEstoque.flatMap((v) => v.grupo.movimentos)]
   const referencias = new Set(movimentos.map(chaveDoEfeito))
+  const bases = new Set(movimentos.flatMap((m) => m.tipo === 'contagem' ? m.base.map(chaveDoEfeito) : []))
+  const alvosEstoque = new Set(movimentos.map((m) => `${m.produtoId}/${chaveDoEfeito(m)}`))
   for (const m of movimentos) {
     exigirCopia(produtos.has(m.produtoId))
-    exigirCopia(m.conhecidos.every((r) => referencias.has(chaveDoEfeito(r)) ||
-      movimentos.some((a) => a.tipo === 'contagem' && a.base.some((e) => chaveDoEfeito(e) === chaveDoEfeito(r)))))
-    if (m.tipo === 'anulacao') exigirCopia(movimentos.some((a) => a.produtoId === m.produtoId && chaveDoEfeito(a) === chaveDoEfeito(m.alvo)))
-    if (m.tipo === 'entrega' || m.tipo === 'retorno') exigirCopia(financeiros.some((l) => l.tipo === 'venda' && l.itens.some((i) => i.id === m.itemId && i.produtoId === m.produtoId)))
+    exigirCopia(m.conhecidos.every((r) => referencias.has(chaveDoEfeito(r)) || bases.has(chaveDoEfeito(r))))
+    if (m.tipo === 'anulacao') exigirCopia(alvosEstoque.has(`${m.produtoId}/${chaveDoEfeito(m.alvo)}`))
+    if (m.tipo === 'entrega' || m.tipo === 'retorno') exigirCopia(itensVendidos.has(`${m.produtoId}/${m.itemId}`))
   }
   for (const op of d.operacoes) {
     const v = d.versoesEstoque.find((v) => v.id === op.versaoId)
