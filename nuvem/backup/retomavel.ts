@@ -11,7 +11,8 @@ import { caminhoDeLote, fecharLotesZip, fonteDoZip, gravarLotesZip, lerIndiceDoZ
 import type { PacoteParaEnvio, PassoDoEnvio, PortasBackupServidor, ResultadoBackupServidor } from './servidor.ts'
 
 const VERSAO = 1, MAX_FOTOS_NO_LOTE = 32
-const BLOCOS_COM_FECHAMENTO = 12
+// D-084: aproveitar mais partes já conferidas antes de retomar pelo Storage.
+const BLOCOS_COM_FECHAMENTO = 16
 type Grupo = { chave: string; referencias: readonly unknown[] }
 type Portas = PortasBackupServidor & { readonly partes: ArmazemDeLotes }
 
