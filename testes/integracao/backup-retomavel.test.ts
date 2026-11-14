@@ -92,4 +92,37 @@ describe.skipIf(!LIGADA)('BA-04 catálogo retomável no Postgres', () => {
     expect(await assumir(tx, conta, captura, uuidv7())).toEqual({ modo: 'legado' })
     expect(await tx`select 1 from backup_interno.preparos where dono=${conta}::uuid`).toHaveLength(0)
   }))
+
+  test('consulta de upload mantém a retomada e a confirmação sem transferir o material de retenção', () => transacao(async (tx, conta, captura) => {
+    const sessao = 'https://www.googleapis.com/upload/drive/v3/files?upload_id=ficticio'
+    await tx`select public.registrar_upload_backup(${conta}::uuid,${captura}::uuid,'arquivo','pasta',${sessao},'14',${SHA},
+      array(select lpad(to_hex(i),64,'0') from generate_series(0,21657) i order by i),'{}')`
+    const consultar = (sp: SQL, dono = conta) => sp<{ r: Record<string, unknown> | null }[]>`
+      select public.consultar_upload_backup(${dono}::uuid,${captura}::uuid) r`
+    for (const papel of ['anon', 'authenticated']) await recusar(tx, async (sp) => {
+      await sp.unsafe(`set local role ${papel}`)
+      await consultar(sp)
+    }, '42501')
+    const esperado = { estado: 'enviando', arquivoId: 'arquivo', pastaId: 'pasta', sessao, tamanho: '14', sha256: SHA }
+    await tx.savepoint(async (sp) => {
+      await sp.unsafe('set local role service_role')
+      expect(await consultar(sp)).toEqual([{ r: esperado }])
+      expect(await consultar(sp, uuidv7())).toEqual([{ r: null }])
+      await sp.unsafe('reset role')
+    })
+    await tx`select public.confirmar_backup(${conta}::uuid,${captura}::uuid,'arquivo','14',${SHA})`
+    expect(await consultar(tx)).toEqual([{ r: { ...esperado, estado: 'pronta', sessao: null } }])
+    const [conferencia] = await tx<{ material_intacto: boolean; bytes_antes: number; bytes_depois: number }[]>`
+      select c.material=array(select lpad(to_hex(i),64,'0') from generate_series(0,21657) i order by i) as material_intacto,
+        octet_length((r || jsonb_build_object('id',c.id,'material',c.material,'exclusivos',c.exclusivos,
+          'dia',c.dia,'capturadoEm',c.capturado_em))::text) as bytes_antes,
+        octet_length(r::text) as bytes_depois
+      from backup_interno.capturas c cross join lateral public.consultar_upload_backup(c.dono,c.id) r
+      where c.dono=${conta}::uuid and c.id=${captura}::uuid`
+    expect(conferencia?.material_intacto).toBe(true)
+    expect(conferencia?.bytes_antes).toBeGreaterThan(1_470_000)
+    expect(conferencia?.bytes_depois).toBeLessThan(300)
+    console.log(JSON.stringify({ prova: 'tamanho_consulta_upload', antes: conferencia?.bytes_antes,
+      depois: conferencia?.bytes_depois }))
+  }))
 })
