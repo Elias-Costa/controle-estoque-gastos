@@ -64,15 +64,18 @@ async function pacote(b: BancoLocal) {
 test('BA-03 mantém a mesma captura na reabertura, deixa receber offline e só encerra após confirmação', async () => {
   const fabrica = new IDBFactory(), nome = uuidv7(), b = aparelho(fabrica, nome)
   const { cliente } = await povoar(b)
-  const agora = new Date('2026-11-06T02:59:59.000Z')
+  let agora = new Date('2026-11-06T02:59:59.000Z')
   expect(diaDoBackup(agora)).toBe('2026-11-05')
   expect(diaDoBackup(new Date('2026-11-06T03:00:00.000Z'))).toBe('2026-11-06')
   const pedidos: Extract<PedidoBackupAparelho, { acao: 'abrir' }>[] = []
-  let ativo = true, confirmar = false
+  let ativo = true, confirmar = false, consultas = 0
   function motor(banco: BancoLocal) {
     return criarBackupAparelho(banco, criarServicoCopia(banco, null), { agora: () => agora, ativo: () => ativo,
       identidade: async () => CONTA, async pedir(pedido) {
-        if (pedido.acao === 'estado') return { estado: 'configuracao', habilitado: true, ultima: null }
+        if (pedido.acao === 'estado') {
+          consultas++
+          return { estado: 'configuracao', habilitado: true, ultima: null }
+        }
         exigirCopia(pedido.acao === 'abrir')
         pedidos.push(pedido)
         if (!confirmar) throw new Error('resposta perdida')
@@ -93,14 +96,25 @@ test('BA-03 mantém a mesma captura na reabertura, deixa receber offline e só e
   expect(pedidos).toHaveLength(1)
   ativo = true
   confirmar = true
-  await retomada.acordar()
+  await retomada.acordar(true)
   expect(pedidos[1]).toEqual(pedidos[0])
   expect(await reaberto.estagiosCopia.count()).toBe(0)
   expect(await reaberto.controleCopia.get('backup-aparelho')).toEqual({ chave: 'backup-aparelho', concluido: '2026-11-05' })
   expect(await reaberto.controleCopia.get('backup-confirmado')).toMatchObject({ ultima: { origem: 'aparelho' } })
   expect(await reaberto.lancamentos.get(receberOffline.recebimento.id)).toBeDefined()
-  await retomada.acordar()
+  const consultasAposConfirmar = consultas
+  const novoMotor = motor(reaberto)
+  await novoMotor.acordar(true)
+  expect(consultas).toBe(consultasAposConfirmar)
+  await novoMotor.acordar()
+  expect(consultas).toBe(consultasAposConfirmar + 1)
   expect(pedidos).toHaveLength(2)
+  agora = new Date('2026-11-06T03:00:00.000Z')
+  await novoMotor.acordar(true)
+  expect(consultas).toBe(consultasAposConfirmar + 2)
+  expect(pedidos).toHaveLength(3)
+  expect(pedidos[2]?.captura).not.toBe(pedidos[0]?.captura)
+  expect(await reaberto.controleCopia.get('backup-aparelho')).toEqual({ chave: 'backup-aparelho', concluido: '2026-11-06' })
   reaberto.close()
 })
 async function alterar(arquivo: Blob, mudar: (nome: string, blob: Blob) => Promise<Blob | null>, atualizarHashes = false) {

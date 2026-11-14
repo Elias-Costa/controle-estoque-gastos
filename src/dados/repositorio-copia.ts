@@ -161,6 +161,12 @@ export function criarRepositorioCopia(banco: BancoLocal, agora = () => new Date(
       if (controle?.chave === 'restauracao' && controle.id === id && controle.fase === 'escolher') await banco.controleCopia.delete('restauracao')
     })
   }
+  async function backupConcluidoNoDia(vinculo: VinculoConta, dia: string): Promise<boolean> {
+    const [conta, controle] = await banco.controleCopia.bulkGet(['conta', 'backup-aparelho'])
+    return conta?.chave === 'conta' && mesmoVinculo(conta.vinculo, vinculo) &&
+      controle?.chave === 'backup-aparelho' && !controle.tentativa &&
+      controle.concluido !== undefined && controle.concluido >= dia
+  }
   async function reservarBackup(vinculo: VinculoConta, dia: string, instante: Date): Promise<string | null> {
     return banco.transaction('rw', escopo, async () => {
       await conferirConta(vinculo)
@@ -208,7 +214,7 @@ export function criarRepositorioCopia(banco: BancoLocal, agora = () => new Date(
       ultima: u?.chave === 'backup-confirmado' ? u.ultima : undefined }
   }
   return { capturar, lerEstagio, completarFoto, concluirCaptura, reservarImportacao, prepararImportacao, publicar, descartar,
-    reservarBackup, marcarFalhaBackup, guardarUltimoBackup, concluirBackup, lerEstadoBackup,
+    backupConcluidoNoDia, reservarBackup, marcarFalhaBackup, guardarUltimoBackup, concluirBackup, lerEstadoBackup,
     listar: async () => (await banco.estagiosCopia.toArray()).filter((e) => !e.aparelhoId),
     async vinculo() { const c = await banco.controleCopia.get('conta'); return c?.chave === 'conta' ? c.vinculo : null },
     async restauracao() { const c = await banco.controleCopia.get('restauracao'); return c?.chave === 'restauracao' ? c : null },

@@ -40,13 +40,16 @@ export function criarBackupAparelho(banco: BancoLocal, copia: Pick<ReturnType<ty
 }) {
   const repo = criarRepositorioCopia(banco)
   let executando = false
-  async function acordar(): Promise<void> {
+  async function acordar(periodico = false): Promise<void> {
     if (executando || !portas.ativo()) return
     executando = true
     let id: string | null = null
     try {
       const conta = await portas.identidade()
       if (!conta || !portas.ativo()) return
+      // D-084: o relógio só precisa consultar a nuvem enquanto há trabalho no aparelho.
+      if (periodico && await repo.backupConcluidoNoDia(conta, diaDoBackup(portas.agora?.() ?? new Date()))) return
+      if (!portas.ativo()) return
       const estado = await portas.pedir({ acao: 'estado' })
       if (!objetoCopia(estado) || estado['estado'] !== 'configuracao' || estado['habilitado'] !== true || !portas.ativo()) return
       await vincularContaCopia(banco, conta)

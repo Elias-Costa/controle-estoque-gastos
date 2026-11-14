@@ -39,7 +39,7 @@ if (backupAparelho) {
   window.addEventListener('online', acordar)
   document.addEventListener('visibilitychange', acordar)
   conta.assinar(acordar)
-  setInterval(acordar, 60_000)
+  setInterval(() => { void backupAparelho?.acordar(true) }, 60_000)
 }
 
 // O laboratório de E-08 (D-043): a prova de offline lança vendas e lê a ficha por ele, por
