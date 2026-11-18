@@ -20,6 +20,7 @@
  */
 
 import { SQL } from 'bun'
+import type { TransactionSQL } from 'bun'
 import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { exigirDestinoDeTeste } from './ambiente-de-teste.ts'
@@ -87,6 +88,19 @@ export async function aplicarPendentes(sql: SQL, migracoes: readonly Migracao[])
   return novas
 }
 
+/** Executa a reversão na transação do runner ou na transação de prova. */
+export async function executarReversao(tx: TransactionSQL, migracao: Migracao): Promise<void> {
+  if (migracao.nome !== '0016_backup-retomavel') { await tx.unsafe(migracao.reverter); return }
+  if (exigirDestinoDeTeste() !== 'local') throw new Error('A reversão do bucket de preparo exige o Supabase local.')
+  // A 0016 recusa objetos e referências. O lock fecha a janela para a criação concorrente de um objeto.
+  // A configuração documentada pelo Storage vale só para remover a definição vazia na mesma transação.
+  await tx`select id from storage.buckets where id='backup-partes' for update`
+  const [config] = await tx<{ anterior: string | null }[]>`select current_setting('storage.allow_delete_query',true) anterior`
+  await tx`select set_config('storage.allow_delete_query','true',true)`
+  await tx.unsafe(migracao.reverter)
+  await tx`select set_config('storage.allow_delete_query',${config?.anterior ?? 'false'},true)`
+}
+
 /** Reverte a última registrada, numa transação. Devolve o nome, ou `null` se não havia nenhuma. */
 export async function reverterUltima(sql: SQL, migracoes: readonly Migracao[]): Promise<string | null> {
   const ultima = (await aplicadas(sql)).at(-1)
@@ -96,7 +110,7 @@ export async function reverterUltima(sql: SQL, migracoes: readonly Migracao[]): 
     throw new Error(`${ultima} está registrada no banco mas não existe em nuvem/migracoes/ — não há como reverter`)
   }
   await sql.begin(async (tx) => {
-    await tx.unsafe(migracao.reverter)
+    await executarReversao(tx, migracao)
     await tx`delete from public.migracoes where nome = ${migracao.nome}`
   })
   return migracao.nome

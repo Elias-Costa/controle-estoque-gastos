@@ -2,7 +2,7 @@ import type { DadosCopia } from './tipos-copia.ts'
 import { emReais } from '../dominio/dinheiro.ts'
 import { saldo, totalDaVenda, totalDoDebito } from '../dominio/ficha.ts'
 import { projetarEstoque } from '../dominio/estoque.ts'
-import { prometidoDoProduto } from '../dominio/vendas-estoque.ts'
+import { prometidoDoProduto, projetarCompromissos } from '../dominio/vendas-estoque.ts'
 import { custoDoProduto } from '../dominio/produtos.ts'
 import { projetarCaixa } from '../dominio/caixa.ts'
 
@@ -16,21 +16,26 @@ function csv(linhas: readonly (readonly unknown[])[]): string { return '\ufeff' 
 /** Consultas derivadas do mesmo retrato; nenhuma coluna é fonte da restauração (RF-28). */
 export function consultasDaCopia(d: DadosCopia): Readonly<Record<string, string>> {
   const fichas: unknown[][] = [['Cliente', 'Telefone', 'Anotação', 'Data', 'Tipo', 'Valor', 'Saldo da ficha']]
+  const porCliente = new Map<string, DadosCopia['lancamentos']>(d.clientes.map((c) => [c.id, []]))
+  for (const l of d.lancamentos) porCliente.get(l.clienteId)?.push(l)
   for (const c of d.clientes) {
-    const ficha = d.lancamentos.filter((l) => l.clienteId === c.id)
+    const ficha = porCliente.get(c.id) ?? []
     const restante = emReais(saldo(ficha))
     if (!ficha.length) fichas.push([c.nome, c.telefone, '', '', 'Sem anotações', '', restante])
     for (const l of ficha) fichas.push([c.nome, c.telefone, l.id, l.data, l.tipo,
       l.tipo === 'venda' ? emReais(totalDaVenda(l)) : l.tipo === 'saldo-anterior' ? emReais(totalDoDebito(l)) : 'valor' in l ? emReais(l.valor) : `Desfaz ${l.estornaId}`, restante])
   }
   const estoque: unknown[][] = [['Produto', 'Marca', 'Código', 'Categoria', 'Físico', 'Prometido', 'Custo de referência']]
+  const categorias = new Map(d.categorias.map((c) => [c.id, c.nome]))
+  const compromissos = projetarCompromissos(d.lancamentos, d.movimentos, d.produtos.map((p) => p.id))
   for (const p of d.produtos) {
-    // Só vendas deste produto podem prometê-lo; todos os estornos continuam na consulta.
-    // Evita procurar estorno de cada venda avulsa novamente para cada um dos 400 produtos.
-    const vinculados = d.lancamentos.filter((l) => l.tipo === 'estorno' || l.tipo === 'venda' && l.itens.some((i) => i.produtoId === p.id))
-    const posicao = projetarEstoque(d.movimentos, p.id), promessa = prometidoDoProduto(vinculados, d.movimentos, p.id)
+    const conjunto = compromissos.ok ? compromissos.valor.get(p.id) : undefined
+    // BA-04: caminho válido projeta uma vez. Falha conserva o diagnóstico independente de cada coluna/produto.
+    const posicao = conjunto ? { ok: true, valor: conjunto.estoque } as const : projetarEstoque(d.movimentos, p.id)
+    const promessa = conjunto ? { ok: true, valor: conjunto.prometido } as const : prometidoDoProduto(
+      d.lancamentos.filter((l) => l.tipo === 'estorno' || l.tipo === 'venda' && l.itens.some((i) => i.produtoId === p.id)), d.movimentos, p.id)
     const custo = posicao.ok ? custoDoProduto(p, posicao.valor.comprasVigentes) : undefined
-    estoque.push([p.nome, p.marca, p.codigoCatalogo, d.categorias.find((c) => c.id === p.categoriaId)?.nome,
+    estoque.push([p.nome, p.marca, p.codigoCatalogo, categorias.get(p.categoriaId),
       posicao.ok ? posicao.valor.fisico : 'Conferir contagem', promessa.ok ? promessa.valor : 'Conferir entregas', custo === undefined ? 'Não informado' : emReais(custo)])
   }
   const caixa: unknown[][] = [['Mês', 'Mostrar', 'Entrou', 'Saiu', 'Diferença']]

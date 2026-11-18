@@ -20,6 +20,7 @@ import { criarConta, type Conta } from './conta.ts'
 import { criarClienteSupabase, criarNuvemSupabase, type Nuvem } from './nuvem.ts'
 import { iniciarSincronizacao } from './sincronizacao.ts'
 import { criarServicoCopia } from './copia.ts'
+import { criarBackupAparelho } from './backup-aparelho.ts'
 import { criarConsultaContatoSuporte } from './contato-suporte.ts'
 
 const url: string | undefined = import.meta.env.VITE_SUPABASE_URL
@@ -49,6 +50,17 @@ export const sincronizacao = iniciarSincronizacao({ banco, nuvem: nuvemDoApp })
 
 /** RF-28: cópia sob comando, com arquivo carregado apenas ao abrir o fluxo. */
 export const copia = criarServicoCopia(banco, nuvemDoApp, () => sincronizacao.acordar())
+
+/** BA-03: a conta logada autoriza só o envio da sua candidata. */
+export const backupAparelho = supabaseDoApp && nuvemDoApp?.identidade ? criarBackupAparelho(banco, copia, {
+  identidade: nuvemDoApp.identidade,
+  ativo: () => document.visibilityState === 'visible' && navigator.onLine && conta.estado() === 'entrou',
+  async pedir(pedido) {
+    const { data, error } = await supabaseDoApp.functions.invoke<unknown>('enviar-backup/aparelho', { body: pedido, timeout: 90_000 })
+    if (error) throw new Error('Cópia automática indisponível')
+    return data
+  },
+}) : null
 
 aoEnfileirar(() => sincronizacao.acordar())
 
