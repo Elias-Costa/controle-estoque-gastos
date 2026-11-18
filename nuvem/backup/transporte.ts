@@ -2,6 +2,7 @@ import { PROJETO_DE_HOMOLOGACAO } from '../destinos-de-teste.ts'
 import { exigirCopia, objetoCopia } from '../../src/dados/formato-copia.ts'
 import type { RpcBackup } from './captura.ts'
 import { BYTES_PARTE, caminhoDeLote, type ArmazemDeLotes } from './lotes.ts'
+import { ORIGEM_BACKUP_PRODUCAO } from './destino.ts'
 
 /** Diagnóstico sem URL, cabeçalho, corpo do PostgREST ou credencial. */
 export class FalhaTransporteBackup extends Error {
@@ -14,9 +15,9 @@ const RPCS = new Set([...RPCS_SEM_CORPO, 'capturar_backup_servidor', 'ler_captur
   'planejar_rotacao_backup', 'proxima_captura_backup', 'reservar_pasta_backup', 'obter_autorizacao_backup',
   'ultimo_backup_confirmado', 'consultar_backup_aparelho', 'reservar_backup_aparelho', 'trocar_sessao_backup_aparelho', 'assumir_preparo_backup'])
 
-/** Exclusivo do servidor de teste; credencial administrativa nunca sai para Google/app/ZIP. */
+/** Exclusivo do servidor nos destinos confirmados; credencial administrativa nunca sai para Google/app/ZIP. */
 export function criarTransporteBackup(api: string, chave: string, transportar: (url: string, opcoes: RequestInit) => Promise<Response> = fetch) {
-  exigirCopia(['http://127.0.0.1:54321', 'http://kong:8000', `https://${PROJETO_DE_HOMOLOGACAO}.supabase.co`].includes(api) && chave.length > 0)
+  exigirCopia(['http://127.0.0.1:54321', 'http://kong:8000', `https://${PROJETO_DE_HOMOLOGACAO}.supabase.co`, ORIGEM_BACKUP_PRODUCAO].includes(api) && chave.length > 0)
   async function corpo(r: Response, limite: number): Promise<Uint8Array<ArrayBuffer>> {
     if (!r.ok || !r.body) { await r.body?.cancel(); throw new FalhaTransporteBackup(r.status) }
     const leitor = r.body.getReader(), partes: Uint8Array[] = []; let tamanho = 0
@@ -40,7 +41,9 @@ export function criarTransporteBackup(api: string, chave: string, transportar: (
   }
   const rpc: RpcBackup = async (nome, argumentos) => {
     exigirCopia(RPCS.has(nome))
-    const resposta = await pedir(`/rest/v1/rpc/${nome}`, { method: 'POST', body: JSON.stringify(argumentos) })
+    // D-085: somente os dois acessos ao cofre usam RPCs próprias; as capturas conservam seu protocolo.
+    const nomeRemoto = api === ORIGEM_BACKUP_PRODUCAO && ['obter_autorizacao_backup', 'atualizar_renovacao_backup'].includes(nome) ? `${nome}_producao` : nome
+    const resposta = await pedir(`/rest/v1/rpc/${nomeRemoto}`, { method: 'POST', body: JSON.stringify(argumentos) })
     // PostgREST devolve 204 para RETURNS void. Só essas mutações aceitam resposta vazia.
     if (resposta.status === 204 && RPCS_SEM_CORPO.has(nome)) return null
     const bytes = await corpo(resposta, 8 * 1024 * 1024)

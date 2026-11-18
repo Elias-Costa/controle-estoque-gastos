@@ -1,5 +1,6 @@
 import type { AutorizacaoGoogle } from '../../nuvem/backup/cofre-google.ts'
-import { PROJETO_GOOGLE_DE_TESTE } from '../../nuvem/backup/google.ts'
+import { PROJETO_GOOGLE_DE_TESTE, PROJETO_GOOGLE_DE_PRODUCAO } from '../../nuvem/backup/google.ts'
+import { ORIGEM_BACKUP_PRODUCAO } from '../../nuvem/backup/destino.ts'
 
 /** JSON Desktop fictício; não autoriza nenhuma conta Google real. */
 export const clienteGoogleFicticio = { installed: { project_id: PROJETO_GOOGLE_DE_TESTE,
@@ -10,3 +11,7 @@ export const autorizacaoGoogleFicticia: AutorizacaoGoogle = { formato: 1, ambien
   contaId: '019a4b25-0000-7000-8000-000000000001', contaGoogleId: '1234567890',
   cliente: { projetoId: PROJETO_GOOGLE_DE_TESTE, clienteId: clienteGoogleFicticio.installed.client_id, segredo: clienteGoogleFicticio.installed.client_secret },
   renovacao: 'token-apenas-ficticio', autorizadoEm: '2026-11-05T12:00:00.000Z' }
+
+/** Só formato e SQL transacional em teste: jamais faz pedido ao destino indicado no conteúdo. */
+export const autorizacaoProducaoFicticia: AutorizacaoGoogle = { ...autorizacaoGoogleFicticia, ambiente: 'producao',
+  destino: ORIGEM_BACKUP_PRODUCAO, cliente: { ...autorizacaoGoogleFicticia.cliente, projetoId: PROJETO_GOOGLE_DE_PRODUCAO } }

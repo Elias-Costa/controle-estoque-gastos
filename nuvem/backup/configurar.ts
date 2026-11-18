@@ -1,7 +1,7 @@
 import type { SQL } from 'bun'
 import { conectar } from '../migrar.ts'
-import { exigirDestinoDeTeste } from '../ambiente-de-teste.ts'
-import { consultarAutorizacaoGoogle } from './cofre-google.ts'
+import { exigirDestinoConfiguracaoBackup } from './destino.ts'
+import { consultarAutorizacaoGoogle, SEGREDO_GOOGLE_BACKUP, SEGREDO_GOOGLE_BACKUP_PRODUCAO } from './cofre-google.ts'
 import { FalhaGoogle } from './google.ts'
 import { hashDaFoto } from '../../src/plataforma/fotos.ts'
 
@@ -14,12 +14,12 @@ async function lerToken(sql: SQL): Promise<string | null> {
   return token
 }
 
-/** Prepara só material próprio no Vault e imprime seu hash público para configurar o Edge de teste. */
-export async function prepararBackup(): Promise<void> {
-  const ambiente = exigirDestinoDeTeste(), sql = conectar()
+/** Prepara só material próprio no Vault e imprime seu hash público para configurar o Edge. */
+export async function prepararBackup(projetoDeProducao?: string): Promise<void> {
+  const ambiente = exigirDestinoConfiguracaoBackup(projetoDeProducao), sql = conectar()
   try {
-    const autorizacao = await consultarAutorizacaoGoogle(sql)
-    if (!autorizacao || autorizacao.destino !== new URL(process.env.VITE_SUPABASE_URL ?? '').origin || autorizacao.ambiente !== ambiente) throw new FalhaGoogle('Autorize primeiro o Google neste destino de teste.')
+    const autorizacao = await consultarAutorizacaoGoogle(sql, ambiente === 'producao' ? SEGREDO_GOOGLE_BACKUP_PRODUCAO : SEGREDO_GOOGLE_BACKUP)
+    if (!autorizacao || autorizacao.destino !== new URL(process.env.VITE_SUPABASE_URL ?? '').origin || autorizacao.ambiente !== ambiente) throw new FalhaGoogle('Autorize primeiro o Google neste destino.')
     const token = await sql.begin(async (tx) => {
       await tx`select pg_advisory_xact_lock(hashtextextended('fichinhas-backup-servico-v1',84))`
       let atual = await lerToken(tx)
@@ -35,9 +35,11 @@ export async function prepararBackup(): Promise<void> {
 }
 
 /** Instala/conserva somente o job próprio depois dos negativos/saúde do handler publicado. */
-export async function agendarBackup(): Promise<void> {
-  const ambiente = exigirDestinoDeTeste(), sql = conectar()
+export async function agendarBackup(projetoDeProducao?: string): Promise<void> {
+  const ambiente = exigirDestinoConfiguracaoBackup(projetoDeProducao), sql = conectar()
   try {
+    const autorizacao = await consultarAutorizacaoGoogle(sql, ambiente === 'producao' ? SEGREDO_GOOGLE_BACKUP_PRODUCAO : SEGREDO_GOOGLE_BACKUP)
+    if (!autorizacao || autorizacao.destino !== new URL(process.env.VITE_SUPABASE_URL ?? '').origin || autorizacao.ambiente !== ambiente) throw new FalhaGoogle('Autorize primeiro o Google neste destino.')
     const token = await lerToken(sql), api = new URL(process.env.VITE_SUPABASE_URL ?? '').origin
     if (!token || !api) throw new FalhaGoogle('Prepare primeiro o serviço de backup neste destino.')
     const endpoint = api + '/functions/v1/enviar-backup'

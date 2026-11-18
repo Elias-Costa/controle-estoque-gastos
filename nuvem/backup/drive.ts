@@ -1,5 +1,6 @@
 import { exigirCopia, objetoCopia } from '../../src/dados/formato-copia.ts'
 import { sessaoDoDrive } from '../../src/plataforma/protocolo-backup.ts'
+import { ORIGEM_BACKUP_PRODUCAO } from './destino.ts'
 
 /** Erro fechado: não carrega corpo HTTP, URI de upload ou token na mensagem. */
 export class FalhaDrive extends Error {
@@ -80,7 +81,7 @@ export function criarDriveBackup(acesso: string, contaGoogleId: string, destino:
       let atual = await consultar(id)
       if (!atual) {
         const r = await pedir(`${API}?fields=id`, { method: 'POST', headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ id, name: `Fichinhas — backup de teste — ${contaId.slice(0, 8)}`, mimeType: 'application/vnd.google-apps.folder', appProperties: propriedades }) })
+          body: JSON.stringify({ id, name: `Fichinhas — backup${destino === ORIGEM_BACKUP_PRODUCAO ? '' : ' de teste'} — ${contaId.slice(0, 8)}`, mimeType: 'application/vnd.google-apps.folder', appProperties: propriedades }) })
         if (!r.ok && r.status !== 409) { await r.body?.cancel(); throw new FalhaDrive(r.status) }
         await r.body?.cancel(); atual = await consultar(id)
       }

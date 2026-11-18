@@ -1,5 +1,7 @@
 /** Projeto público de teste confirmado pelo mantenedor em 05/11/2026; não inferir de um segredo. */
 export const PROJETO_GOOGLE_DE_TESTE = 'fichinhas-backup-homologacao'
+/** Projeto definitivo confirmado pelo mantenedor em 18/11/2026 (D-085). */
+export const PROJETO_GOOGLE_DE_PRODUCAO = 'fichinhas-backup'
 /** D-084: acesso somente aos arquivos criados/abertos pela aplicação. */
 export const ESCOPO_DRIVE = 'https://www.googleapis.com/auth/drive.file'
 const AUTORIZACAO = 'https://accounts.google.com/o/oauth2/v2/auth'
@@ -21,13 +23,13 @@ function texto(v: unknown, limite = 4096): v is string { return typeof v === 'st
 function base64url(v: Uint8Array): string { return btoa(String.fromCharCode(...v)).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '') }
 
 /** Recusa cliente Web, outro projeto e endpoints fornecidos pelo arquivo antes de fazer rede. */
-export function lerClienteGoogle(v: unknown): ClienteGoogle {
+export function lerClienteGoogle(v: unknown, projeto = PROJETO_GOOGLE_DE_TESTE): ClienteGoogle {
   const c = objeto(v) && !Object.hasOwn(v, 'web') ? v['installed'] : null
-  if (!objeto(c) || c['project_id'] !== PROJETO_GOOGLE_DE_TESTE ||
+  if (![PROJETO_GOOGLE_DE_TESTE, PROJETO_GOOGLE_DE_PRODUCAO].includes(projeto) || !objeto(c) || c['project_id'] !== projeto ||
     !texto(c['client_id'], 256) || !/^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$/i.test(c['client_id']) ||
     !texto(c['client_secret'], 512) || ![AUTORIZACAO, 'https://accounts.google.com/o/oauth2/auth'].includes(String(c['auth_uri'])) || c['token_uri'] !== TOKEN ||
     !Array.isArray(c['redirect_uris']) || !c['redirect_uris'].includes('http://localhost')) {
-    throw new FalhaGoogle('JSON precisa ser do cliente Desktop do projeto Google de teste confirmado.')
+    throw new FalhaGoogle('JSON precisa ser do cliente Desktop do projeto Google confirmado para este ambiente.')
   }
   return { projetoId: c['project_id'], clienteId: c['client_id'], segredo: c['client_secret'] }
 }
@@ -39,7 +41,7 @@ export async function criarTentativaGoogle(): Promise<TentativaGoogle> {
     desafio: base64url(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verificador)))) }
 }
 
-/** Autoriza apenas callback HTTP de loopback com porta efêmera; produção não é callback Desktop. */
+/** Autoriza apenas callback HTTP de loopback com porta efêmera, nunca a URL remota do app. */
 export function urlAutorizacaoGoogle(cliente: ClienteGoogle, tentativa: TentativaGoogle, retorno: string): string {
   const uri = new URL(retorno)
   if (uri.origin !== `http://127.0.0.1:${uri.port}` || !uri.port || uri.pathname !== '/oauth2/retorno' || uri.search || uri.hash || uri.username || uri.password ||
