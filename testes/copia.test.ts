@@ -13,8 +13,10 @@ import { criarRepositorioCaixa } from '../src/dados/repositorio-caixa.ts'
 import { criarRepositorioCopia, vincularContaCopia } from '../src/dados/repositorio-copia.ts'
 import { dadosDaCopia, exigirCopia, jsonDaCopia, objetoCopia } from '../src/dados/formato-copia.ts'
 import { LIMITES_COPIA, TABELAS_COPIA, type VinculoConta } from '../src/dados/tipos-copia.ts'
-import { lerArquivoCopia } from '../src/plataforma/arquivo-copia.ts'
+import { criarArquivoBackup, criarArquivoCopia, lerArquivoCopia } from '../src/plataforma/arquivo-copia.ts'
 import { criarServicoCopia } from '../src/sincronizacao/copia.ts'
+import { criarBackupAparelho } from '../src/sincronizacao/backup-aparelho.ts'
+import { diaDoBackup, type PedidoBackupAparelho } from '../src/plataforma/protocolo-backup.ts'
 import { hashDaFoto } from '../src/plataforma/fotos.ts'
 import { saldo } from '../src/dominio/ficha.ts'
 import { projetarEstoque } from '../src/dominio/estoque.ts'
@@ -58,11 +60,72 @@ async function pacote(b: BancoLocal) {
   const resultado = await servico.exportar()
   return { ...resultado, dados: (await criarRepositorioCopia(b).lerEstagio(resultado.id)).dados }
 }
-async function alterar(arquivo: Blob, mudar: (nome: string, blob: Blob) => Promise<Blob>, atualizarHashes = false) {
+
+test('BA-03 mantém a mesma captura na reabertura, deixa receber offline e só encerra após confirmação', async () => {
+  const fabrica = new IDBFactory(), nome = uuidv7(), b = aparelho(fabrica, nome)
+  const { cliente } = await povoar(b)
+  let agora = new Date('2026-11-06T02:59:59.000Z')
+  expect(diaDoBackup(agora)).toBe('2026-11-05')
+  expect(diaDoBackup(new Date('2026-11-06T03:00:00.000Z'))).toBe('2026-11-06')
+  const pedidos: Extract<PedidoBackupAparelho, { acao: 'abrir' }>[] = []
+  let ativo = true, confirmar = false, consultas = 0
+  function motor(banco: BancoLocal) {
+    return criarBackupAparelho(banco, criarServicoCopia(banco, null), { agora: () => agora, ativo: () => ativo,
+      identidade: async () => CONTA, async pedir(pedido) {
+        if (pedido.acao === 'estado') {
+          consultas++
+          return { estado: 'configuracao', habilitado: true, ultima: null }
+        }
+        exigirCopia(pedido.acao === 'abrir')
+        pedidos.push(pedido)
+        if (!confirmar) throw new Error('resposta perdida')
+        return { estado: 'pronta', confirmada: { origem: 'aparelho', capturadoEm: pedido.instante } }
+      } })
+  }
+  await motor(b).acordar()
+  const tentativa = await b.controleCopia.get('backup-aparelho')
+  expect(tentativa).toMatchObject({ tentativa: { id: pedidos[0]?.captura, falhou: true } })
+  expect(await criarRepositorioCopia(b).listar()).toEqual([])
+  expect(pedidos[0]?.exclusivos.length).toBeGreaterThan(0)
+  b.close()
+  const reaberto = aparelho(fabrica, nome)
+  ativo = false
+  const receberOffline = ok(await receber(criarRepositorioLocal(reaberto), { clienteId: cliente.id, data: DIA, valor: 10n, forma: 'pix' }))
+  const retomada = motor(reaberto)
+  await retomada.acordar()
+  expect(pedidos).toHaveLength(1)
+  ativo = true
+  confirmar = true
+  await retomada.acordar(true)
+  expect(pedidos[1]).toEqual(pedidos[0])
+  expect(await reaberto.estagiosCopia.count()).toBe(0)
+  expect(await reaberto.controleCopia.get('backup-aparelho')).toEqual({ chave: 'backup-aparelho', concluido: '2026-11-05' })
+  expect(await reaberto.controleCopia.get('backup-confirmado')).toMatchObject({ ultima: { origem: 'aparelho' } })
+  expect(await reaberto.lancamentos.get(receberOffline.recebimento.id)).toBeDefined()
+  const consultasAposConfirmar = consultas
+  const novoMotor = motor(reaberto)
+  await novoMotor.acordar(true)
+  expect(consultas).toBe(consultasAposConfirmar)
+  await novoMotor.acordar()
+  expect(consultas).toBe(consultasAposConfirmar + 1)
+  expect(pedidos).toHaveLength(2)
+  agora = new Date('2026-11-06T03:00:00.000Z')
+  await novoMotor.acordar(true)
+  expect(consultas).toBe(consultasAposConfirmar + 2)
+  expect(pedidos).toHaveLength(3)
+  expect(pedidos[2]?.captura).not.toBe(pedidos[0]?.captura)
+  expect(await reaberto.controleCopia.get('backup-aparelho')).toEqual({ chave: 'backup-aparelho', concluido: '2026-11-06' })
+  reaberto.close()
+})
+async function alterar(arquivo: Blob, mudar: (nome: string, blob: Blob) => Promise<Blob | null>, atualizarHashes = false) {
   const leitor = new ZipReader(new BlobReader(arquivo), { useWebWorkers: false })
   const writer = new ZipWriter(new BlobWriter(), { level: 0, useWebWorkers: false, extendedTimestamp: false })
   const partes = new Map<string, Blob>()
-  for (const e of await leitor.getEntries()) { exigirCopia(!e.directory); partes.set(e.filename, await mudar(e.filename, await e.getData(new BlobWriter()))) }
+  for (const e of await leitor.getEntries()) {
+    exigirCopia(!e.directory)
+    const blob = await mudar(e.filename, await e.getData(new BlobWriter()))
+    if (blob) partes.set(e.filename, blob)
+  }
   if (atualizarHashes) {
     const m = partes.get('manifesto.json'); exigirCopia(m)
     const manifesto: unknown = JSON.parse(await m.text()); exigirCopia(objetoCopia(manifesto) && Array.isArray(manifesto['arquivos']))
@@ -109,6 +172,11 @@ describe('E-35: arquivo e estágio, IndexedDB simulado; não prova aparelho', ()
     expect(lida.dados.versoesCaixa.length).toBe(2)
     const reader = new ZipReader(new BlobReader(p.arquivo), { useWebWorkers: false })
     const entradas = await reader.getEntries()
+    for (const tabela of TABELAS_COPIA) {
+      const e = entradas.find((e) => e.filename === `dados/${tabela}/000000.json`); exigirCopia(e && !e.directory)
+      const linhas = tabela === 'fotos' ? p.dados.fotos.map(({ binario: _b, miniatura: _m, ...foto }) => foto) : p.dados[tabela]
+      expect(await (await e.getData(new BlobWriter())).text()).toBe(jsonDaCopia(linhas))
+    }
     for (const nome of ['fichas', 'estoque', 'caixa']) {
       const e = entradas.find((e) => e.filename === `consultas/${nome}.csv`); exigirCopia(e && !e.directory)
       const texto = await (await e.getData(new BlobWriter())).text()
@@ -129,6 +197,23 @@ describe('E-35: arquivo e estágio, IndexedDB simulado; não prova aparelho', ()
     ok(await estoque.cancelarVenda(venda.id, DIA, [{ itemId: venda.itens[0].id, quantidade: 0 }]))
     const consultas = consultasDaCopia(await criarRepositorioCopia(b).conferirDados())
     expect(consultas['consultas/estoque.csv']).toContain('"5";"2"')
+    b.close()
+  })
+  test('BA-04 a consulta em lote conserva diagnóstico por produto e cliente sem anotações', async () => {
+    const b = aparelho(), ids = await povoar(b), estoque = criarOperacoesEstoque(criarRepositorioEstoque(b))
+    ok(await cadastrarCliente(criarRepositorioLocal(b), { nome: 'Sem lançamentos' }))
+    ok(await estoque.cadastrarProduto({ nome: 'Produto saudável', categoriaId: ids.produto.categoriaId, custoManual: 150n }))
+    const grupo = ok(await estoque.lancarVenda({ clienteId: ids.cliente.id, data: DIA, desconto: 0n, pagamento: 'fiado',
+      itens: [{ produtoId: ids.produto.id, descricao: 'Produto', quantidade: 3, entregue: 1, precoUnitario: 1000n }],
+      parcelas: [{ vencimento: DIA, valor: 3000n }] }))
+    const venda = grupo.lancamentos[0]; exigirCopia(venda && venda.tipo === 'venda')
+    const dados = await criarRepositorioCopia(b).conferirDados()
+    // Duas ocorrências vigentes do mesmo item exigem conferir somente a promessa desse produto.
+    dados.lancamentos.push({ ...venda, id: uuidv7() })
+    const consultas = consultasDaCopia(dados)
+    expect(consultas['consultas/estoque.csv']).toContain('"Produto";"";"";"Livre";"6";"Conferir entregas";"R$ 90.071.992.547.409,93"')
+    expect(consultas['consultas/estoque.csv']).toContain('"Produto saudável";"";"";"Livre";"0";"0";"R$ 1,50"')
+    expect(consultas['consultas/fichas.csv']).toContain('"Sem lançamentos";"";"";"";"Sem anotações";"";"R$ 0,00"')
     b.close()
   })
   test('publicar em outra base preserva fila e identidades; novo aparelho, cursores recomeçam', async () => {
@@ -242,6 +327,18 @@ describe('E-35: arquivo e estágio, IndexedDB simulado; não prova aparelho', ()
       .toEqual({ ok: true, valor: encerramento })
     a.close(); b.close()
   })
+  test('BA-04 índices de vínculos conservam versões financeiras com o mesmo id e recusam cliente alheio', async () => {
+    const b = aparelho(); await povoar(b); const { dados } = await pacote(b)
+    const venda = dados.lancamentos.find((l) => l.tipo === 'venda'), cliente = dados.clientes[0]; exigirCopia(venda && cliente)
+    const outro = { ...cliente, id: uuidv7() }; dados.clientes.push(outro)
+    dados.evidenciasCopia.push({ id: venda.id, tentativa: venda, aceita: { ...venda, clienteId: outro.id } })
+    const estorno = { tipo: 'estorno' as const, id: uuidv7(), clienteId: cliente.id, data: DIA, estornaId: venda.id }
+    dados.lancamentos.push(estorno, { ...estorno, id: uuidv7(), clienteId: outro.id })
+    expect(() => dadosDaCopia(dados)).not.toThrow()
+    dados.evidenciasCopia = []
+    expect(() => dadosDaCopia(dados)).toThrow()
+    b.close()
+  })
   for (const caso of ['hash', 'numero', 'vinculo', 'foto', 'faltante', 'segredo', 'futuro'] as const) test(`pacote inválido ${caso} não chega à publicação, inclusive com hashes refeitos`, async () => {
     const b = aparelho(); await povoar(b); const p = await pacote(b)
     const adulterado = await alterar(p.arquivo, async (nome, blob) => {
@@ -278,5 +375,106 @@ describe('E-35: arquivo e estágio, IndexedDB simulado; não prova aparelho', ()
     expect(serializado).toContain('"9007199254740993"')
     expect(() => dadosDaCopia({ ...dados, tokens: ['proibido'] })).toThrow()
     b.close()
+  })
+})
+
+describe('BA-01: backup 5/10, originais autossuficientes e publicação integral', () => {
+  async function backup(b: BancoLocal) {
+    const p = await pacote(b), { estagio } = await criarRepositorioCopia(b).lerEstagio(p.id)
+    const dados = { ...p.dados, fotos: p.dados.fotos.map(({ miniatura: _m, ...f }) => f) }
+    const arquivo = await criarArquivoBackup(estagio, dados, { tipo: 'servidor' })
+    return { arquivo, dados, completos: p.dados, estagio }
+  }
+  test('leitores 1/6 e 2/7 conservam fotos, dinheiro e fila sem fabricar tabelas posteriores', async () => {
+    const b = aparelho(); await povoar(b); const p = await pacote(b)
+    const { estagio } = await criarRepositorioCopia(b).lerEstagio(p.id)
+    const dados = { ...p.dados, produtos: p.dados.produtos.map(({ classificacao: _c, classificacaoConhecida: _k, ...produto }) => produto),
+      enviosProdutoFoto: p.dados.enviosProdutoFoto.map(({ cadastro, ...envio }) => {
+        const { classificacao: _c, classificacaoConhecida: _k, ...produto } = cadastro
+        return { ...envio, cadastro: produto }
+      }) }
+    const base = await criarArquivoCopia(estagio, dados)
+    for (const [formato, esquema, removidas] of [[1, 6, ['modelos', 'identidadesLoja']], [2, 7, ['identidadesLoja']]] as const) {
+      const antigo = await alterar(base, async (nome, blob) => {
+        if (removidas.some((t) => nome.startsWith(`dados/${t}/`))) return null
+        if (nome !== 'manifesto.json') return blob
+        const m: unknown = JSON.parse(await blob.text()); exigirCopia(objetoCopia(m) && Array.isArray(m['arquivos']))
+        const quantidades = m['quantidades']; exigirCopia(objetoCopia(quantidades))
+        for (const tabela of removidas) delete quantidades[tabela]
+        m['formato'] = formato; m['esquema'] = esquema
+        m['arquivos'] = m['arquivos'].filter((a: unknown) => {
+          if (!objetoCopia(a) || typeof a['nome'] !== 'string') return false
+          const caminho = a['nome']; return !removidas.some((t) => caminho.startsWith(`dados/${t}/`))
+        })
+        return new Blob([JSON.stringify(m)])
+      })
+      expect(conteudoDoEfeito((await lerArquivoCopia(antigo, CONTA)).dados)).toBe(conteudoDoEfeito(dados))
+    }
+    b.close()
+  })
+  test('5/10 sem miniaturas conserva centavos além de Number, fila, estoque e histórico; ambas as origens são explícitas', async () => {
+    const b = aparelho(); await povoar(b); const p = await backup(b)
+    const miniatura = p.completos.fotos[0]?.miniatura, original = p.completos.fotos[0]?.binario; exigirCopia(miniatura && original)
+    for (const origem of [{ tipo: 'servidor' }, { tipo: 'aparelho', aparelhoId: uuidv7() }] as const) {
+      const arquivo = await criarArquivoBackup(p.estagio, p.dados, origem)
+      const leitor = new ZipReader(new BlobReader(arquivo), { useWebWorkers: false })
+      const entradas = await leitor.getEntries()
+      expect(entradas.some((e) => e.filename.startsWith('miniaturas/'))).toBe(false)
+      await leitor.close()
+      let decodificadas = 0
+      const lida = await lerArquivoCopia(arquivo, CONTA, async (binario) => {
+        expect(binario).toEqual(original); decodificadas++; return miniatura
+      })
+      expect(decodificadas).toBe(1); expect(lida.origem).toEqual(origem)
+      expect(conteudoDoEfeito(lida.dados)).toBe(conteudoDoEfeito(p.completos))
+      expect(saldo(lida.dados.lancamentos)).toBe(GRANDE - 10n)
+    }
+    b.close()
+  })
+  for (const caso of ['sem-original', 'hash-arquivo', 'hash-foto', 'origem', 'identidade', 'segredo', 'sem-origem', 'esquema', 'legado'] as const) {
+    test(`5/10 recusa ${caso} antes do decoder`, async () => {
+      const b = aparelho(); await povoar(b); const p = await backup(b)
+      const arquivo = await alterar(p.arquivo, async (nome, blob) => {
+        if (caso === 'sem-original' && nome.startsWith('fotos/')) return null
+        if (caso === 'hash-arquivo' && nome.startsWith('fotos/')) return new Blob([new Uint8Array(blob.size)])
+        if (caso === 'hash-foto' && nome === 'dados/fotos/000000.json') {
+          const fotos: unknown = JSON.parse(await blob.text()); exigirCopia(Array.isArray(fotos) && objetoCopia(fotos[0]))
+          fotos[0]['sha256'] = '0'.repeat(64); return new Blob([JSON.stringify(fotos)])
+        }
+        if (nome !== 'manifesto.json') return blob
+        const m: unknown = JSON.parse(await blob.text()); exigirCopia(objetoCopia(m) && Array.isArray(m['arquivos']))
+        if (caso === 'sem-original') m['arquivos'] = m['arquivos'].filter((a: unknown) => objetoCopia(a) && typeof a['nome'] === 'string' && !a['nome'].startsWith('fotos/'))
+        if (caso === 'origem') m['origem'] = { tipo: 'outro' }
+        if (caso === 'identidade') m['origem'] = { tipo: 'aparelho', aparelhoId: 'qualquer' }
+        if (caso === 'segredo') m['origem'] = { tipo: 'servidor', token: 'proibido' }
+        if (caso === 'sem-origem') delete m['origem']
+        if (caso === 'esquema') m['esquema'] = 9
+        if (caso === 'legado') { m['formato'] = 4; delete m['origem'] }
+        return new Blob([JSON.stringify(m)])
+      }, caso === 'hash-foto')
+      let decodificadas = 0
+      await recusa(lerArquivoCopia(arquivo, CONTA, async () => { decodificadas++; return new Uint8Array([1]) }))
+      expect(decodificadas).toBe(0); b.close()
+    })
+  }
+  test('decoder falho, vazio ou acima do teto preserva a base vazia e a reserva; sucesso publica a mesma fila', async () => {
+    const a = aparelho(); await povoar(a); const p = await backup(a), b = aparelho()
+    await vincularContaCopia(b, CONTA)
+    const repo = criarRepositorioCopia(b), id = await repo.reservarImportacao()
+    for (const miniaturizar of [async () => { throw new Error('decoder fictício falhou') },
+      async () => new Uint8Array(), async () => new Uint8Array(20_481)]) {
+      await recusa(criarServicoCopia(b, null, undefined, miniaturizar).importar(p.arquivo, id), 'arquivo')
+      expect(await b.lancamentos.count()).toBe(0); expect(await b.fotos.count()).toBe(0)
+      expect(await b.lotesCopia.count()).toBe(0); expect((await repo.restauracao())?.fase).toBe('escolher')
+    }
+    const miniatura = p.completos.fotos[0]?.miniatura; exigirCopia(miniatura)
+    await criarServicoCopia(b, null, undefined, async () => miniatura).importar(p.arquivo, id)
+    expect(await b.fila.toArray()).toEqual(p.dados.fila)
+    const foto = (await b.fotos.toArray())[0], original = p.completos.fotos[0]; exigirCopia(foto && original)
+    expect(foto.binario).toEqual(original.binario); expect(foto.miniatura).toEqual(original.miniatura)
+    expect(foto.geracaoEnvio).not.toBe(original.geracaoEnvio)
+    expect(saldo(await b.lancamentos.toArray())).toBe(GRANDE - 10n)
+    expect((await repo.restauracao())?.fase).toBe('reconciliar')
+    a.close(); b.close()
   })
 })

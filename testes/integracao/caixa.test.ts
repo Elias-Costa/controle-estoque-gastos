@@ -303,6 +303,7 @@ describe.skipIf(!LIGADA)('caixa no Postgres E-32', () => {
     })
   })
 
+  // BA-04: a comparação percorre também os cinco anos fictícios carregados na homologação.
   test('upgrade/reversão vazia preservam histórico F1/F2/fotos; reversão com caixa recusa sem alteração', async () => {
     await transacao(async (tx) => {
       await tx.unsafe('reset role')
@@ -359,7 +360,7 @@ describe.skipIf(!LIGADA)('caixa no Postgres E-32', () => {
       await assumir(tx)
       expect((await baixar(tx)).map((r) => r['grupo'])).toEqual([g])
     })
-  })
+  }, 120_000)
 
   // Cada disputa tem seu próprio limite; latência hospedada não soma seis cenários
   // sob um único relógio. A prova de bloqueio no Postgres continua em disputar.

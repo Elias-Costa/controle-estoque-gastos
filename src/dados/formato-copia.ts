@@ -8,7 +8,7 @@ import type { GrupoEstoque } from '../dominio/vendas-estoque.ts'
 import type { FatoCaixa } from '../dominio/gastos.ts'
 import type { GrupoCaixa, OperacaoCaixaLocal, VersaoCaixa } from './tipos-caixa.ts'
 import { LIMITE_FOTO_BYTES, LIMITE_MINIATURA_BYTES, type EnvioProdutoFoto, type EstadoFotos, type FotoLocal, type ProtecaoFotoLocal, type UsoFotoLocal } from './tipos-fotos.ts'
-import { LIMITES_COPIA, TABELAS_COPIA, type DadosCopia, type EvidenciaCopia, type TabelaCopia, type VinculoConta } from './tipos-copia.ts'
+import { LIMITES_COPIA, TABELAS_COPIA, type DadosCopia, type EvidenciaCopia, type OrigemBackup, type TabelaCopia, type VinculoConta } from './tipos-copia.ts'
 import { preferenciaModelosValida } from './modelos-whatsapp.ts'
 import { preferenciaIdentidadeValida } from './identidade-loja.ts'
 
@@ -169,7 +169,7 @@ function lerLista<T>(v: unknown, guarda: (linha: unknown) => linha is T): T[] {
   return v.map((linha: unknown) => { exigirCopia(guarda(linha)); return linha })
 }
 /** Campos fechados por formato; leitores antigos não aceitam extensões de pacotes novos. */
-export function dadosDaCopia(v: unknown, formato: 1 | 2 | 3 | 4 = 4): DadosCopia {
+export function dadosDaCopia(v: unknown, formato: 1 | 2 | 3 | 4 | 5 = 4): DadosCopia {
   exigirCopia(objetoCopia(v) && Object.keys(v).length === TABELAS_COPIA.length && Object.keys(v).every((k) => TABELAS_COPIA.some((t) => t === k)))
   const dados: DadosCopia = { clientes: lerLista(v['clientes'], cliente), lancamentos: lerLista(v['lancamentos'], lancamento),
     fila: lerLista(v['fila'], fila), sincronizacao: lerLista(v['sincronizacao'], cursor), categorias: lerLista(v['categorias'], categoria),
@@ -194,6 +194,14 @@ export function dadosDaCopia(v: unknown, formato: 1 | 2 | 3 | 4 = 4): DadosCopia
 }
 /** JSON legível: apenas bigint vira texto; bytes têm arquivos próprios. */
 export function jsonDaCopia(v: unknown): string { return JSON.stringify(v, (_k, item: unknown) => typeof item === 'bigint' ? String(item) : item, 2) }
+
+/** Distingue capturas sem aceitar campos privados ou origem de aparelho sem identidade. */
+export function lerOrigemBackup(v: unknown): OrigemBackup {
+  exigirCopia(objetoCopia(v))
+  if (v['tipo'] === 'servidor') { exigirCopia(campos(v, { tipo: escolha('servidor') })); return { tipo: 'servidor' } }
+  exigirCopia(campos(v, { tipo: escolha('aparelho'), aparelhoId: id }) && typeof v['aparelhoId'] === 'string')
+  return { tipo: 'aparelho', aparelhoId: v['aparelhoId'] }
+}
 const CAMPOS_INTEIROS = new Set(['valor', 'preco', 'desconto', 'precoUnitario', 'custoManual', 'precoVenda', 'custoUnitario', 'ordemCadastro', 'ultimo'])
 /** Recupera apenas campos inteiros conhecidos; número monetário nunca vira bigint por coerção. */
 export function lerJsonDaTabela(tabela: TabelaCopia, textoJson: string): unknown {
@@ -224,20 +232,24 @@ export function validarVinculosCopia(d: DadosCopia): void {
   }
   const clientes = new Set(d.clientes.map((c) => c.id)), produtos = new Set(d.produtos.map((p) => p.id))
   const financeiros = [...d.lancamentos, ...d.versoesEstoque.flatMap((v) => v.grupo.lancamentos), ...d.evidenciasCopia.flatMap((e) => [e.tentativa, e.aceita])]
+  // Índices de existência incluem todas as versões; não escolher um conteúdo por id (EL-02/04).
+  const alvosFinanceiros = new Set(financeiros.filter((l) => l.tipo !== 'estorno').map((l) => `${l.clienteId}/${l.id}`))
+  const itensVendidos = new Set(financeiros.flatMap((l) => l.tipo === 'venda' ? l.itens.map((i) => `${i.produtoId}/${i.id}`) : []))
   for (const l of financeiros) {
     exigirCopia(clientes.has(l.clienteId))
-    if (l.tipo === 'estorno') exigirCopia(financeiros.some((a) => a.id === l.estornaId && a.tipo !== 'estorno' && a.clienteId === l.clienteId))
+    if (l.tipo === 'estorno') exigirCopia(alvosFinanceiros.has(`${l.clienteId}/${l.estornaId}`))
     if (l.tipo === 'venda') exigirCopia(l.itens.every((i) => !i.produtoId || produtos.has(i.produtoId)))
   }
   for (const p of d.produtos) exigirCopia(novoProduto(p, d.categorias).ok)
   const movimentos = [...d.movimentos, ...d.versoesEstoque.flatMap((v) => v.grupo.movimentos)]
   const referencias = new Set(movimentos.map(chaveDoEfeito))
+  const bases = new Set(movimentos.flatMap((m) => m.tipo === 'contagem' ? m.base.map(chaveDoEfeito) : []))
+  const alvosEstoque = new Set(movimentos.map((m) => `${m.produtoId}/${chaveDoEfeito(m)}`))
   for (const m of movimentos) {
     exigirCopia(produtos.has(m.produtoId))
-    exigirCopia(m.conhecidos.every((r) => referencias.has(chaveDoEfeito(r)) ||
-      movimentos.some((a) => a.tipo === 'contagem' && a.base.some((e) => chaveDoEfeito(e) === chaveDoEfeito(r)))))
-    if (m.tipo === 'anulacao') exigirCopia(movimentos.some((a) => a.produtoId === m.produtoId && chaveDoEfeito(a) === chaveDoEfeito(m.alvo)))
-    if (m.tipo === 'entrega' || m.tipo === 'retorno') exigirCopia(financeiros.some((l) => l.tipo === 'venda' && l.itens.some((i) => i.id === m.itemId && i.produtoId === m.produtoId)))
+    exigirCopia(m.conhecidos.every((r) => referencias.has(chaveDoEfeito(r)) || bases.has(chaveDoEfeito(r))))
+    if (m.tipo === 'anulacao') exigirCopia(alvosEstoque.has(`${m.produtoId}/${chaveDoEfeito(m.alvo)}`))
+    if (m.tipo === 'entrega' || m.tipo === 'retorno') exigirCopia(itensVendidos.has(`${m.produtoId}/${m.itemId}`))
   }
   for (const op of d.operacoes) {
     const v = d.versoesEstoque.find((v) => v.id === op.versaoId)
