@@ -271,3 +271,23 @@ use `bun run backup:perfil:homologacao --captura=<UUID> --referencia` uma vez e
 repita sem `--referencia`. O instrumento lê a captura e originais, salva a referência
 local e exige igualdade de tamanho/SHA; não envia ao Drive. CPU medida no Bun não
 comprova o orçamento do Edge. [Procedimento](nuvem/backup/LEIA-ME.md#captura-retomada-e-proteção).
+
+## Configuração do backup em produção
+
+As entradas de produção são próprias; as suítes continuam restritas a local e
+homologação. O mantenedor aplica as migrations pendentes pelo runner antes do
+preparo. Estes comandos não aplicam migrations nem publicam serviços:
+
+| Comando | Finalidade |
+|---|---|
+| `backup:google:autorizar:producao` | Consentimento inicial da conta Google da usuária |
+| `backup:google:reautorizar:producao` | Novo consentimento para o mesmo vínculo |
+| `backup:google:verificar:producao` | Renovação, identidade e cota, sem enviar arquivo |
+| `backup:preparar:producao` | Token próprio no Vault e hash público do serviço |
+| `backup:agendar:producao` | Conferência HTTP/saúde e agendamento do job próprio |
+
+Executar com `bun run <comando>` e `--projeto=awmesexptpalzonbucwc`. As três ações
+Google também exigem `--conta=<UUID>`; autorizar/reautorizar exigem o caminho
+absoluto do JSON Desktop do projeto Google `fichinhas-backup`, fora do repositório.
+O UUID é conferido no Auth, sem a senha da usuária. Não enviar JSON ou tokens ao chat.
+[Ordem de configuração, publicação do Edge e limites](nuvem/backup/LEIA-ME.md#produção--preparo-pelo-mantenedor).
