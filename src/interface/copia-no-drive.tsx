@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { liveQuery } from 'dexie'
 import { banco } from '../dados/instancia.ts'
 import { criarRepositorioCopia } from '../dados/repositorio-copia.ts'
-import { backupAparelho, conexaoDrive, conta } from '../sincronizacao/instancia.ts'
+import { backupAparelho, conexaoDrive, conta, copia } from '../sincronizacao/instancia.ts'
 import type { EstadoConexaoDrive } from '../sincronizacao/conexao-drive.ts'
 import { Botao } from './Botao.tsx'
 
@@ -28,7 +28,11 @@ export function CopiaNoDrive({ aoEntrar }: { readonly aoEntrar: () => void }) {
       try {
         const c = await conexaoDrive.estado()
         if (!ativa) return
-        if (c.vinculoId && !await repo.vincularDrive(c.vinculoId, c.conectadoEm ?? '')) return
+        if (c.vinculoId) {
+          await copia.vinculo()
+          if (!await repo.vincularDrive(c.vinculoId, c.conectadoEm ?? '') ||
+            !await repo.guardarConexaoDrive({ vinculoId: c.vinculoId, conectadoEm: c.conectadoEm ?? '', email: c.email ?? '' })) return
+        }
         if (!ativa) return
         mostrar(c); avisar(undefined)
         void backupAparelho?.acordar()
@@ -45,7 +49,8 @@ export function CopiaNoDrive({ aoEntrar }: { readonly aoEntrar: () => void }) {
     try { window.location.assign(await conexaoDrive.conectar()) }
     catch { avisar('Não deu para abrir o Google. Confira a internet e tente novamente.'); iniciando.current = false; abrir(false) }
   }
-  const corrente = conexao?.vinculoId && conexao.vinculoId === estado?.vinculoId
+  const conhecida = conexao ?? (estado?.conexaoDrive && { preparado: true, ...estado.conexaoDrive })
+  const corrente = conhecida?.vinculoId && conhecida.vinculoId === estado?.vinculoId
   const ultima = corrente ? estado.ultima : undefined
   const instante = ultima ? new Date(ultima.capturadoEm) : null
   return <section aria-label="Cópia no Drive" className="my-6 space-y-3 rounded-xl border border-borda bg-papel p-4">
@@ -54,13 +59,13 @@ export function CopiaNoDrive({ aoEntrar }: { readonly aoEntrar: () => void }) {
       <p>Entre na sua conta para conectar e conferir seu Google Drive.</p>
       {sessao !== 'sem-nuvem' && <Botao tipo="secundario" aoTocar={aoEntrar}>Entrar na sua conta</Botao>}
     </> : <>
-      {conexao?.email ? <p className="break-words">Google Drive conectado: <strong>{conexao.email}</strong></p>
-        : conexao?.preparado ? <p>Escolha sua conta no Google para guardar as próximas cópias no seu Drive. As cópias anteriores ficam preservadas onde foram feitas.</p>
-          : conexao ? <p>A conexão com o Google Drive ainda precisa ser preparada. Peça ajuda ao responsável pelo aplicativo.</p> : !aviso && <p role="status">Conferindo a conta do Drive…</p>}
-      {conexao?.preparado && <Botao tipo="secundario" aoTocar={() => { void conectar() }} desabilitado={abrindo}>{abrindo ? 'Abrindo o Google…' : 'Conectar Google Drive'}</Botao>}
+      {conhecida?.email ? <p className="break-words">{conexao ? 'Google Drive conectado:' : 'Última conta do Drive conferida neste aparelho:'} <strong>{conhecida.email}</strong></p>
+        : conhecida?.preparado ? <p>Escolha sua conta no Google para guardar as próximas cópias no seu Drive. As cópias anteriores ficam preservadas onde foram feitas.</p>
+          : conhecida ? <p>A conexão com o Google Drive ainda precisa ser preparada. Peça ajuda ao responsável pelo aplicativo.</p> : !aviso && <p role="status">Conferindo a conta do Drive…</p>}
+      {conhecida?.preparado && <Botao tipo="secundario" aoTocar={() => { void conectar() }} desabilitado={abrindo}>{abrindo ? 'Abrindo o Google…' : 'Conectar Google Drive'}</Botao>}
       {aviso && <><p role="alert">{aviso}</p><Botao tipo="secundario" aoTocar={() => reler((n) => n + 1)}>Conferir conexão</Botao></>}
     </>}
-    {sessao === 'entrou' && conexao?.vinculoId && <div role="status" className="space-y-2">
+    {sessao === 'entrou' && conhecida?.vinculoId && <div role="status" className="space-y-2">
       {ultima && instante ? <>
         <p>Última cópia confirmada <time className="block" dateTime={ultima.capturadoEm}>{data.format(instante)} às {hora.format(instante)}</time></p>
         <p>{ultima.origem === 'servidor' ? 'Feita com as anotações já enviadas à sua conta.' : 'Feita a partir das anotações de um aparelho.'}</p>
