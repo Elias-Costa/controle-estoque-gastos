@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { banco } from '../dados/instancia.ts'
 import { ErroCopia } from '../dados/formato-copia.ts'
 import { criarRepositorioCopia } from '../dados/repositorio-copia.ts'
@@ -33,6 +33,7 @@ function resumo(l: Lancamento): string {
 export function TelaCopia({ aoVoltar, aoEntrar }: { aoVoltar: () => void; aoEntrar: () => void }) {
   const [revisao, reler] = useState(0), [trabalhando, trabalhar] = useState(false)
   const [aviso, avisar] = useState<string>(), [arquivo, escolher] = useState<File>()
+  const elementoAviso = useRef<HTMLParagraphElement>(null), focarRecusa = useRef(false)
   const [download, oferecer] = useState<{ url: string; nome: string }>()
   const leitura = useLeitura(async () => ({ estagios: await repo.listar(), restauracao: await repo.restauracao(),
     vinculo: await repo.vinculo(), evidencias: await banco.evidenciasCopia.toArray(), clientes: await banco.clientes.toArray() }), `copia/${revisao}`)
@@ -47,10 +48,18 @@ export function TelaCopia({ aoVoltar, aoEntrar }: { aoVoltar: () => void; aoEntr
     return () => { ativa = false }
   }, [])
   useEffect(() => () => { if (download) URL.revokeObjectURL(download.url) }, [download])
+  useEffect(() => {
+    if (!aviso || trabalhando || !focarRecusa.current) return
+    focarRecusa.current = false
+    // RNF-03: a recusa precisa aparecer após o toque, mesmo quando a ação fica abaixo do aviso.
+    elementoAviso.current?.focus({ preventScroll: true })
+    elementoAviso.current?.scrollIntoView({ block: 'start' })
+  }, [aviso, trabalhando])
   async function executar(acao: () => Promise<void>) {
     if (trabalhando) return
+    focarRecusa.current = false
     trabalhar(true); avisar(undefined)
-    try { await acao() } catch (erro) { avisar(frase(erro)) }
+    try { await acao() } catch (erro) { focarRecusa.current = true; avisar(frase(erro)) }
     finally { trabalhar(false); reler((n) => n + 1) }
   }
   async function preparar(id?: string) {
@@ -66,7 +75,7 @@ export function TelaCopia({ aoVoltar, aoEntrar }: { aoVoltar: () => void; aoEntr
     <p>Guarde suas fichinhas, produtos, fotos e anotações em um arquivo, incluindo o que ainda não foi enviado para sua conta.</p>
     <p>O arquivo contém nomes, telefones e valores. Guarde em um lugar que só você e quem ajuda você possam abrir.</p>
     {leitura.estado === 'falhou' && <p role="alert">Não deu para abrir as preparações. Suas anotações continuam aqui.</p>}
-    {aviso && <p role="status">{aviso}</p>}
+    {aviso && <p ref={elementoAviso} role="status" tabIndex={-1}>{aviso}</p>}
     {trabalhando && <p role="status">Conferindo as anotações e as fotos…</p>}
     <CopiaNoDrive aoEntrar={aoEntrar} />
     <section aria-label="Guardar uma cópia" className="my-6">
