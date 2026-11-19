@@ -1,11 +1,16 @@
 import type { SQL } from 'bun'
 import { conectar } from '../migrar.ts'
 import { exigirDestinoConfiguracaoBackup } from './destino.ts'
-import { consultarAutorizacaoGoogle, SEGREDO_GOOGLE_BACKUP, SEGREDO_GOOGLE_BACKUP_PRODUCAO } from './cofre-google.ts'
+import { lerAutorizacaoGoogle } from './cofre-google.ts'
 import { FalhaGoogle } from './google.ts'
 import { hashDaFoto } from '../../src/plataforma/fotos.ts'
 
 const SEGREDO = 'fichinhas-backup-servico-v1', JOB = 'fichinhas-backup'
+async function autorizacaoAtiva(sql: SQL, ambiente: string) {
+  const [linha] = ambiente === 'producao' ? await sql<{ valor: unknown }[]>`select public.obter_autorizacao_backup_producao() valor`
+    : await sql<{ valor: unknown }[]>`select public.obter_autorizacao_backup() valor`
+  return linha?.valor === null || linha?.valor === undefined ? null : lerAutorizacaoGoogle(linha.valor)
+}
 async function lerToken(sql: SQL): Promise<string | null> {
   const r = await sql<{ valor: string }[]>`select decrypted_secret valor from vault.decrypted_secrets where name=${SEGREDO}`
   if (r.length === 0) return null
@@ -18,8 +23,14 @@ async function lerToken(sql: SQL): Promise<string | null> {
 export async function prepararBackup(projetoDeProducao?: string): Promise<void> {
   const ambiente = exigirDestinoConfiguracaoBackup(projetoDeProducao), sql = conectar()
   try {
-    const autorizacao = await consultarAutorizacaoGoogle(sql, ambiente === 'producao' ? SEGREDO_GOOGLE_BACKUP_PRODUCAO : SEGREDO_GOOGLE_BACKUP)
-    if (!autorizacao || autorizacao.destino !== new URL(process.env.VITE_SUPABASE_URL ?? '').origin || autorizacao.ambiente !== ambiente) throw new FalhaGoogle('Autorize primeiro o Google neste destino.')
+    const [web] = await sql<{ destino: string }[]>`select destino from backup_interno.clientes_web where clientes_web.ambiente=${ambiente}`
+    const api = new URL(process.env.VITE_SUPABASE_URL ?? '').origin
+    if (web) {
+      if (web.destino !== api) throw new FalhaGoogle('Cliente Web preparado para outro destino; preservado.')
+    } else {
+      const autorizacao = await autorizacaoAtiva(sql, ambiente)
+      if (!autorizacao || autorizacao.destino !== api || autorizacao.ambiente !== ambiente) throw new FalhaGoogle('Prepare o cliente Web deste destino antes de publicar o serviço.')
+    }
     const token = await sql.begin(async (tx) => {
       await tx`select pg_advisory_xact_lock(hashtextextended('fichinhas-backup-servico-v1',84))`
       let atual = await lerToken(tx)
@@ -38,7 +49,7 @@ export async function prepararBackup(projetoDeProducao?: string): Promise<void> 
 export async function agendarBackup(projetoDeProducao?: string): Promise<void> {
   const ambiente = exigirDestinoConfiguracaoBackup(projetoDeProducao), sql = conectar()
   try {
-    const autorizacao = await consultarAutorizacaoGoogle(sql, ambiente === 'producao' ? SEGREDO_GOOGLE_BACKUP_PRODUCAO : SEGREDO_GOOGLE_BACKUP)
+    const autorizacao = await autorizacaoAtiva(sql, ambiente)
     if (!autorizacao || autorizacao.destino !== new URL(process.env.VITE_SUPABASE_URL ?? '').origin || autorizacao.ambiente !== ambiente) throw new FalhaGoogle('Autorize primeiro o Google neste destino.')
     const token = await lerToken(sql), api = new URL(process.env.VITE_SUPABASE_URL ?? '').origin
     if (!token || !api) throw new FalhaGoogle('Prepare primeiro o serviço de backup neste destino.')

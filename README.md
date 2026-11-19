@@ -215,7 +215,12 @@ privadas; não trocar IP, HTTPS ou porta durante uma prova de retenção local.
 
 ## Configuração Google para o backup — homologação
 
-BA-02 prepara a autorização Google no servidor de teste. No terminal interativo Windows,
+Para a conexão pelo app (emenda D-085), usar `backup:google:web:homologacao` com
+o JSON **Aplicativo da Web**, fora do repositório. Depois de publicar o serviço,
+abrir o laboratório em `http://127.0.0.1:4174` e escolher a conta Google pelo app.
+[Sequência e retornos OAuth](nuvem/backup/LEIA-ME.md#conectar-google-drive-pelo-app--d-085).
+
+O caminho Desktop abaixo conserva os ensaios anteriores da BA-02. No terminal interativo Windows,
 com o cliente Desktop do projeto `fichinhas-backup-homologacao` fora do repositório:
 
 ```powershell
@@ -280,14 +285,19 @@ preparo. Estes comandos não aplicam migrations nem publicam serviços:
 
 | Comando | Finalidade |
 |---|---|
-| `backup:google:autorizar:producao` | Consentimento inicial da conta Google da usuária |
-| `backup:google:reautorizar:producao` | Novo consentimento para o mesmo vínculo |
-| `backup:google:verificar:producao` | Renovação, identidade e cota, sem enviar arquivo |
+| `backup:google:web:producao` | Prepara cliente Web e UUID permitido; a conta Google é escolhida pelo app |
+| `backup:google:verificar:producao` | Renovação da conexão ativa, identidade e cota, sem enviar arquivo |
+| `backup:google:autorizar:producao` | Caminho Desktop anterior, preservado para manutenção do vínculo legado |
+| `backup:google:reautorizar:producao` | Consentimento do mesmo vínculo Desktop; não migra conta nem conexão Web |
 | `backup:preparar:producao` | Token próprio no Vault e hash público do serviço |
 | `backup:agendar:producao` | Conferência HTTP/saúde e agendamento do job próprio |
 
-Executar com `bun run <comando>` e `--projeto=awmesexptpalzonbucwc`. As três ações
-Google também exigem `--conta=<UUID>`; autorizar/reautorizar exigem o caminho
+Executar com `bun run <comando>` e `--projeto=awmesexptpalzonbucwc`. As ações
+Google também exigem `--conta=<UUID>`. A ação `web` exige o caminho absoluto do JSON
+Web. Autorizar/reautorizar exigem o caminho
 absoluto do JSON Desktop do projeto Google `fichinhas-backup`, fora do repositório.
 O UUID é conferido no Auth, sem a senha da usuária. Não enviar JSON ou tokens ao chat.
+Em **Cópia das anotações → Conectar Google Drive**, a usuária escolhe a conta e
+autoriza no Google; o app mostra o e-mail conectado. A conexão seguinte conserva
+os arquivos anteriores e separa os catálogos. Verificar informa `conectadoPeloApp`.
 [Ordem de configuração, publicação do Edge e limites](nuvem/backup/LEIA-ME.md#produção--preparo-pelo-mantenedor).

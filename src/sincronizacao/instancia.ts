@@ -22,6 +22,7 @@ import { iniciarSincronizacao } from './sincronizacao.ts'
 import { criarServicoCopia } from './copia.ts'
 import { criarBackupAparelho } from './backup-aparelho.ts'
 import { criarConsultaContatoSuporte } from './contato-suporte.ts'
+import { criarConexaoDrive } from './conexao-drive.ts'
 
 const url: string | undefined = import.meta.env.VITE_SUPABASE_URL
 const chaveAnonima: string | undefined = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -50,6 +51,13 @@ export const sincronizacao = iniciarSincronizacao({ banco, nuvem: nuvemDoApp })
 
 /** RF-28: cópia sob comando, com arquivo carregado apenas ao abrir o fluxo. */
 export const copia = criarServicoCopia(banco, nuvemDoApp, () => sincronizacao.acordar())
+
+/** D-085: conexão Google independente do login Fichinhas; somente a sessão atual inicia. */
+export const conexaoDrive = supabaseDoApp ? criarConexaoDrive(async (pedido) => {
+  const { data, error } = await supabaseDoApp.functions.invoke<unknown>('enviar-backup/conexao', { body: pedido, timeout: 30_000 })
+  if (error) throw new Error('Conexão do Google Drive indisponível')
+  return data
+}) : null
 
 /** BA-03: a conta logada autoriza só o envio da sua candidata. */
 export const backupAparelho = supabaseDoApp && nuvemDoApp?.identidade ? criarBackupAparelho(banco, copia, {

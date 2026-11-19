@@ -7,6 +7,9 @@ declare const self: ServiceWorkerGlobalScope & { readonly __WB_MANIFEST: (string
 // D-032: instalar em espera; não chamar skipWaiting/clientsClaim nem recarregar clientes.
 precacheAndRoute(self.__WB_MANIFEST)
 cleanupOutdatedCaches()
+// D-085: code/state não casam com a URL do precache. Servir o retorno isolado antes do fallback do app.
+registerRoute(({ url, request }) => url.origin === self.location.origin && request.mode === 'navigate' &&
+  url.pathname === '/google-drive-retorno.html', createHandlerBoundToURL('/google-drive-retorno.html'))
 registerRoute(new NavigationRoute(createHandlerBoundToURL('/index.html')))
 
 self.addEventListener('message', (evento) => {

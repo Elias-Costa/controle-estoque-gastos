@@ -53,9 +53,11 @@ export function criarBackupAparelho(banco: BancoLocal, copia: Pick<ReturnType<ty
       const estado = await portas.pedir({ acao: 'estado' })
       if (!objetoCopia(estado) || estado['estado'] !== 'configuracao' || estado['habilitado'] !== true || !portas.ativo()) return
       await vincularContaCopia(banco, conta)
-      if (estado['ultima'] !== null) await repo.guardarUltimoBackup(lerConfirmada(estado['ultima']))
+      const drive = typeof estado['vinculoId'] === 'string' ? estado['vinculoId'] : undefined
+      if (drive && (typeof estado['conexaoEm'] !== 'string' || !await repo.vincularDrive(drive, estado['conexaoEm']))) return
+      if (estado['ultima'] !== null && !await repo.guardarUltimoBackup(lerConfirmada(estado['ultima']), drive)) return
       const instante = portas.agora?.() ?? new Date()
-      id = await repo.reservarBackup(conta, diaDoBackup(instante), instante)
+      id = await repo.reservarBackup(conta, diaDoBackup(instante), instante, drive)
       if (!id || !portas.ativo()) return
       await repo.marcarFalhaBackup(id, false)
       const { estagio, dados } = await copia.prepararBackup(id, conta)
@@ -95,7 +97,7 @@ export function criarBackupAparelho(banco: BancoLocal, copia: Pick<ReturnType<ty
       exigirCopia(objetoCopia(resposta) && resposta['estado'] === 'pronta')
       const confirmada = lerConfirmada(resposta['confirmada'])
       exigirCopia(confirmada.origem === 'aparelho' && Date.parse(confirmada.capturadoEm) === Date.parse(estagio.capturadoEm))
-      await repo.concluirBackup(id, confirmada)
+      await repo.concluirBackup(id, confirmada, drive)
     } catch {
       // Uma resposta perdida não solta o estágio nem a foto. A próxima abertura consulta a mesma candidata.
       if (id && portas.ativo()) await repo.marcarFalhaBackup(id, true).catch(() => undefined)

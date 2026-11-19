@@ -6,10 +6,14 @@ export const PROJETO_GOOGLE_DE_PRODUCAO = 'fichinhas-backup'
 export const ESCOPO_DRIVE = 'https://www.googleapis.com/auth/drive.file'
 const AUTORIZACAO = 'https://accounts.google.com/o/oauth2/v2/auth'
 const TOKEN = 'https://oauth2.googleapis.com/token'
+/** Retorno Web de produção aprovado em D-085; não aceitar origem fornecida pelo navegador. */
+export const RETORNO_GOOGLE_PRODUCAO = 'https://controle-estoque-gastos.vercel.app/google-drive-retorno.html'
+/** Retorno Web do laboratório de homologação D-050. */
+export const RETORNO_GOOGLE_TESTE = 'http://127.0.0.1:4174/google-drive-retorno.html'
 
 /** Mensagem própria e fechada; erros HTTP/SQL originais podem conter credenciais. */
 export class FalhaGoogle extends Error {}
-/** Cliente Desktop: permanece fora do app e de qualquer pacote de backup. */
+/** Cliente OAuth: seu segredo permanece no servidor e fora de qualquer pacote de backup. */
 export type ClienteGoogle = { readonly projetoId: string; readonly clienteId: string; readonly segredo: string }
 /** Par PKCE novo por tentativa; o verificador nunca vai na URL do navegador. */
 export type TentativaGoogle = { readonly estado: string; readonly verificador: string; readonly desafio: string }
@@ -95,6 +99,14 @@ export function trocarCodigoGoogle(cliente: ClienteGoogle, tentativa: TentativaG
   urlAutorizacaoGoogle(cliente, tentativa, retorno)
   return pedirTokens({ client_id: cliente.clienteId, client_secret: cliente.segredo, code: codigo,
     code_verifier: tentativa.verificador, redirect_uri: retorno, grant_type: 'authorization_code' })
+}
+
+/** Troca Web no servidor, com verificador privado e retorno cadastrado para o ambiente. */
+export function trocarCodigoGoogleWeb(cliente: ClienteGoogle, verificador: string, retorno: string, codigo: string): Promise<TokensGoogle> {
+  if (![RETORNO_GOOGLE_PRODUCAO, RETORNO_GOOGLE_TESTE].includes(retorno) || !/^[A-Za-z0-9_-]{43}$/.test(verificador) ||
+    codigo.length < 1 || codigo.length > 4096) throw new FalhaGoogle('Retorno Google inválido.')
+  return pedirTokens({ client_id: cliente.clienteId, client_secret: cliente.segredo, code: codigo,
+    code_verifier: verificador, redirect_uri: retorno, grant_type: 'authorization_code' })
 }
 
 /** Renovação somente no servidor/configurador, nunca na aplicação da usuária (D-084). */

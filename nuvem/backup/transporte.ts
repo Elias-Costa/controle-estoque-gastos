@@ -14,9 +14,12 @@ const RPCS_SEM_CORPO = new Set(['registrar_upload_backup', 'confirmar_backup', '
 const RPCS = new Set([...RPCS_SEM_CORPO, 'capturar_backup_servidor', 'ler_captura_backup', 'consultar_upload_backup',
   'planejar_rotacao_backup', 'proxima_captura_backup', 'reservar_pasta_backup', 'obter_autorizacao_backup',
   'ultimo_backup_confirmado', 'consultar_backup_aparelho', 'reservar_backup_aparelho', 'trocar_sessao_backup_aparelho', 'assumir_preparo_backup'])
+const CONEXAO = new Set(['configuracao_google_web', 'abrir_tentativa_google', 'consumir_tentativa_google', 'concluir_conexao_google'])
 
 /** Exclusivo do servidor nos destinos confirmados; credencial administrativa nunca sai para Google/app/ZIP. */
 export function criarTransporteBackup(api: string, chave: string, transportar: (url: string, opcoes: RequestInit) => Promise<Response> = fetch) {
+  // Uma instância por requisição: o vínculo nunca é compartilhado entre execuções concorrentes.
+  let vinculo: string | undefined
   exigirCopia(['http://127.0.0.1:54321', 'http://kong:8000', `https://${PROJETO_DE_HOMOLOGACAO}.supabase.co`, ORIGEM_BACKUP_PRODUCAO].includes(api) && chave.length > 0)
   async function corpo(r: Response, limite: number): Promise<Uint8Array<ArrayBuffer>> {
     if (!r.ok || !r.body) { await r.body?.cancel(); throw new FalhaTransporteBackup(r.status) }
@@ -40,15 +43,24 @@ export function criarTransporteBackup(api: string, chave: string, transportar: (
     catch { throw new FalhaTransporteBackup(0) }
   }
   const rpc: RpcBackup = async (nome, argumentos) => {
-    exigirCopia(RPCS.has(nome))
+    exigirCopia(RPCS.has(nome) || CONEXAO.has(nome))
     // D-085: somente os dois acessos ao cofre usam RPCs próprias; as capturas conservam seu protocolo.
-    const nomeRemoto = api === ORIGEM_BACKUP_PRODUCAO && ['obter_autorizacao_backup', 'atualizar_renovacao_backup'].includes(nome) ? `${nome}_producao` : nome
-    const resposta = await pedir(`/rest/v1/rpc/${nomeRemoto}`, { method: 'POST', body: JSON.stringify(argumentos) })
+    let nomeRemoto = api === ORIGEM_BACKUP_PRODUCAO && ['obter_autorizacao_backup', 'atualizar_renovacao_backup'].includes(nome) ? `${nome}_producao` : nome
+    let corpoPedido: unknown = argumentos
+    if (vinculo && nome !== 'obter_autorizacao_backup' && !CONEXAO.has(nome)) {
+      nomeRemoto = nome === 'atualizar_renovacao_backup' ? 'renovar_google_web' : 'rpc_backup_vinculado'
+      corpoPedido = nome === 'atualizar_renovacao_backup' ? { vinculo, anterior: argumentos['anterior'], renovacao: argumentos['renovacao'] } : { vinculo, nome, argumentos }
+    }
+    const resposta = await pedir(`/rest/v1/rpc/${nomeRemoto}`, { method: 'POST', body: JSON.stringify(corpoPedido) })
     // PostgREST devolve 204 para RETURNS void. Só essas mutações aceitam resposta vazia.
-    if (resposta.status === 204 && RPCS_SEM_CORPO.has(nome)) return null
+    if (resposta.status === 204 && (RPCS_SEM_CORPO.has(nome) || CONEXAO.has(nome))) return null
     const bytes = await corpo(resposta, 8 * 1024 * 1024)
     if (bytes.byteLength === 0 && RPCS_SEM_CORPO.has(nome)) return null
-    try { return JSON.parse(new TextDecoder().decode(bytes)) } catch { throw new FalhaTransporteBackup(200) }
+    try {
+      const valor: unknown = JSON.parse(new TextDecoder().decode(bytes))
+      if (nome === 'obter_autorizacao_backup') vinculo = objetoCopia(valor) && typeof valor['vinculoId'] === 'string' ? valor['vinculoId'] : undefined
+      return valor
+    } catch { throw new FalhaTransporteBackup(200) }
   }
   async function corpoDaParte(r: Response, tamanho: number): Promise<Uint8Array<ArrayBuffer>> {
     exigirCopia(r.body)

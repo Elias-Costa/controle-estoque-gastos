@@ -20,13 +20,15 @@ function conferirAmbienteDoNome(nome: string, autorizacao: AutorizacaoGoogle): v
   }
 }
 /** Vínculo fechado da autorização ao ambiente, destino e conta Fichinhas (D-050/084/085). */
-export type AutorizacaoGoogle = { readonly formato: 1; readonly ambiente: AmbienteBackup; readonly destino: string
-  readonly contaId: string; readonly contaGoogleId: string; readonly cliente: ClienteGoogle; readonly renovacao: string; readonly autorizadoEm: string }
+export type AutorizacaoGoogle = { readonly formato: 1 | 2; readonly ambiente: AmbienteBackup; readonly destino: string
+  readonly contaId: string; readonly contaGoogleId: string; readonly cliente: ClienteGoogle; readonly renovacao: string; readonly autorizadoEm: string
+  readonly vinculoId?: string; readonly emailGoogle?: string }
 
 /** Valida também material já guardado; formato desconhecido não é reparado nem substituído. */
 export function lerAutorizacaoGoogle(v: unknown): AutorizacaoGoogle {
   if (typeof v !== 'object' || v === null || Array.isArray(v)) throw new FalhaGoogle('Autorização guardada inválida; preservar para conferência.')
-  if (!('formato' in v) || v.formato !== 1 || !('ambiente' in v) || (v.ambiente !== 'local' && v.ambiente !== 'homologacao' && v.ambiente !== 'producao') ||
+  const web = 'formato' in v && v.formato === 2
+  if (!('formato' in v) || (v.formato !== 1 && !web) || !('ambiente' in v) || (v.ambiente !== 'local' && v.ambiente !== 'homologacao' && v.ambiente !== 'producao') ||
     !('destino' in v) || typeof v.destino !== 'string' || !('contaId' in v) || typeof v.contaId !== 'string' ||
     !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(v.contaId) ||
     !('contaGoogleId' in v) || typeof v.contaGoogleId !== 'string' || !/^[a-zA-Z0-9_-]{1,256}$/.test(v.contaGoogleId) ||
@@ -34,7 +36,7 @@ export function lerAutorizacaoGoogle(v: unknown): AutorizacaoGoogle {
     !('autorizadoEm' in v) || typeof v.autorizadoEm !== 'string' || !/^\d{4}-\d\d-\d\dT/.test(v.autorizadoEm) || Number.isNaN(Date.parse(v.autorizadoEm)) ||
     !('cliente' in v) || typeof v.cliente !== 'object' || v.cliente === null ||
     !('clienteId' in v.cliente) || !('projetoId' in v.cliente) || !('segredo' in v.cliente) ||
-    Object.keys(v).sort().join(',') !== 'ambiente,autorizadoEm,cliente,contaGoogleId,contaId,destino,formato,renovacao' ||
+    Object.keys(v).sort().join(',') !== (web ? 'ambiente,autorizadoEm,cliente,contaGoogleId,contaId,destino,emailGoogle,formato,renovacao,vinculoId' : 'ambiente,autorizadoEm,cliente,contaGoogleId,contaId,destino,formato,renovacao') ||
     Object.keys(v.cliente).sort().join(',') !== 'clienteId,projetoId,segredo') {
     throw new FalhaGoogle('Autorização guardada inválida; preservar para conferência.')
   }
@@ -44,7 +46,13 @@ export function lerAutorizacaoGoogle(v: unknown): AutorizacaoGoogle {
   const cliente = lerClienteGoogle({ installed: { project_id: v.cliente.projetoId, client_id: v.cliente.clienteId,
     client_secret: v.cliente.segredo, auth_uri: 'https://accounts.google.com/o/oauth2/v2/auth', token_uri: 'https://oauth2.googleapis.com/token', redirect_uris: ['http://localhost'] } },
   ambiente === 'producao' ? PROJETO_GOOGLE_DE_PRODUCAO : PROJETO_GOOGLE_DE_TESTE)
-  return { formato: 1, ambiente, destino, contaId: v.contaId, contaGoogleId: v.contaGoogleId, cliente, renovacao: v.renovacao, autorizadoEm: v.autorizadoEm }
+  if (web && (!('vinculoId' in v) || typeof v.vinculoId !== 'string' || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(v.vinculoId) ||
+    !('emailGoogle' in v) || typeof v.emailGoogle !== 'string' || v.emailGoogle.length < 3 || v.emailGoogle.length > 320 ||
+    [...v.emailGoogle].some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127))) {
+    throw new FalhaGoogle('Conexão Google guardada inválida; preservar para conferência.')
+  }
+  return { formato: web ? 2 : 1, ambiente, destino, contaId: v.contaId, contaGoogleId: v.contaGoogleId, cliente, renovacao: v.renovacao, autorizadoEm: v.autorizadoEm,
+    ...(web && 'vinculoId' in v && typeof v.vinculoId === 'string' && 'emailGoogle' in v && typeof v.emailGoogle === 'string' ? { vinculoId: v.vinculoId, emailGoogle: v.emailGoogle } : {}) }
 }
 
 /** Somente servidor/configurador: lê o cofre sem imprimir o resultado nem conceder acesso ao app. */

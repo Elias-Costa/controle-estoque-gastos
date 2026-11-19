@@ -83,8 +83,8 @@ type Rota =
  * no recebimento, e "Desde" no saldo anterior, já vêm com ela. Vive aqui, e não na base, por
  * ser conveniência de sessão — recarregar esquece, e nada se perde com isso.
  */
-export function Aplicativo() {
-  const [rota, setRota] = useState<Rota>({ tela: 'inicio' })
+export function Aplicativo({ abrirCopia = false }: { readonly abrirCopia?: boolean } = {}) {
+  const [rota, setRota] = useState<Rota>({ tela: abrirCopia ? 'copia' : 'inicio' })
   const [busca, setBusca] = useState('')
   const [mesCaixa, setMesCaixa] = useState(() => hoje().slice(0, 7))
   const [corteCaixa, setCorteCaixa] = useState<CorteCaixa>('tudo')

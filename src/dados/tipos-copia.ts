@@ -14,6 +14,8 @@ export type VinculoConta = { readonly contaId: string; readonly destino: string 
 export type OrigemBackup = { readonly tipo: 'servidor' } | { readonly tipo: 'aparelho'; readonly aparelhoId: string }
 /** Confirmação do catálogo privado. A hora é da captura, anterior à conclusão do envio. */
 export type BackupConfirmado = { readonly origem: OrigemBackup['tipo']; readonly capturadoEm: string }
+/** Identidade pública já conferida; permite ler o estado offline, sem autorização ou segredo Google. */
+export type ConexaoDriveConferida = { readonly vinculoId: string; readonly conectadoEm: string; readonly email: string }
 /** Uma tentativa é retomada pelo mesmo estágio, inclusive após fechar o app. */
 export type TentativaBackup = { readonly id: string; readonly dia: string; readonly falhou: boolean }
 /** Evidência de colisão F1 durante a restauração; o aceite é a projeção corrente. */
