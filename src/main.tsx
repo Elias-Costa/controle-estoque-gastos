@@ -51,10 +51,12 @@ if (import.meta.env.VITE_LABORATORIO === '1') void import('./plataforma/laborato
 // (AGENTS.md §4). Silenciar o compilador aqui esconderia um index.html quebrado.
 const raiz = document.getElementById('root')
 if (!raiz) throw new Error('Elemento #root não encontrado em index.html')
+const urlInicial = new URL(location.href), abrirCopia = urlInicial.searchParams.get('copia') === '1'
+if (abrirCopia) { urlInicial.searchParams.delete('copia'); history.replaceState(null, '', urlInicial.pathname + urlInicial.search + urlInicial.hash) }
 
 createRoot(raiz).render(
   <StrictMode>
     <AvisoDoLembrete />
-    <Aplicativo />
+    <Aplicativo abrirCopia={abrirCopia} />
   </StrictMode>,
 )

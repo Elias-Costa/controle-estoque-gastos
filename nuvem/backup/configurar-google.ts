@@ -5,13 +5,14 @@ import type { SQL } from 'bun'
 import { createClient } from '@supabase/supabase-js'
 import { conectar } from '../migrar.ts'
 import { exigirDestinoConfiguracaoBackup, validarContaBackup } from './destino.ts'
-import { consultarAutorizacaoGoogle, registrarAutorizacaoGoogle, SEGREDO_GOOGLE_BACKUP, SEGREDO_GOOGLE_BACKUP_PRODUCAO, type AutorizacaoGoogle } from './cofre-google.ts'
+import { consultarAutorizacaoGoogle, lerAutorizacaoGoogle, registrarAutorizacaoGoogle, SEGREDO_GOOGLE_BACKUP, SEGREDO_GOOGLE_BACKUP_PRODUCAO, type AutorizacaoGoogle } from './cofre-google.ts'
 import { abrirRetornoGoogle } from './retorno-google.ts'
+import { lerClienteGoogleWeb } from './google-web.ts'
 import { consultarContaDrive, criarTentativaGoogle, FalhaGoogle, lerClienteGoogle, PROJETO_GOOGLE_DE_TESTE, PROJETO_GOOGLE_DE_PRODUCAO, renovarTokensGoogle,
   trocarCodigoGoogle, urlAutorizacaoGoogle, type ClienteGoogle, type ContaDrive } from './google.ts'
 
 /** Lê somente o JSON Desktop indicado pelo mantenedor, fora da árvore do repositório. */
-export async function lerArquivoClienteGoogle(caminho: string, projeto = PROJETO_GOOGLE_DE_TESTE): Promise<ClienteGoogle> {
+export async function lerArquivoClienteGoogle(caminho: string, projeto = PROJETO_GOOGLE_DE_TESTE, web = false): Promise<ClienteGoogle> {
   try {
     if (!isAbsolute(caminho) || extname(caminho).toLowerCase() !== '.json' || basename(caminho).startsWith('.env')) throw new Error()
     const arquivo = await realpath(caminho), raiz = await realpath(resolve(import.meta.dir, '../..'))
@@ -19,8 +20,8 @@ export async function lerArquivoClienteGoogle(caminho: string, projeto = PROJETO
     if (dentro !== '..' && !dentro.startsWith(`..${sep}`) && !isAbsolute(dentro)) throw new Error()
     const fonte = Bun.file(arquivo)
     if (fonte.size > 16_384) throw new Error()
-    return lerClienteGoogle(await fonte.json(), projeto)
-  } catch { throw new FalhaGoogle('Indique o caminho absoluto do JSON Desktop deste ambiente, guardado fora do repositório; detalhes omitidos.') }
+    return web ? lerClienteGoogleWeb(await fonte.json(), projeto === PROJETO_GOOGLE_DE_PRODUCAO) : lerClienteGoogle(await fonte.json(), projeto)
+  } catch { throw new FalhaGoogle(`Indique o caminho absoluto do JSON ${web ? 'Web' : 'Desktop'} deste ambiente, guardado fora do repositório; detalhes omitidos.`) }
 }
 
 /** D-085: consulta somente o UUID informado no Auth, sem senha ou escolha automática de conta. */
@@ -34,7 +35,8 @@ export async function conferirContaFichinhas(sql: SQL, conta: string): Promise<s
   return email
 }
 
-async function contaFichinhas(): Promise<string> {
+/** Conta fictícia do destino D-050; não é usada para selecionar uma conta de produção. */
+export async function contaFichinhasDeTeste(): Promise<string> {
   const api = process.env.VITE_SUPABASE_URL, anonima = process.env.VITE_SUPABASE_ANON_KEY
   const email = process.env.SUPABASE_TESTE_EMAIL, senha = process.env.SUPABASE_TESTE_SENHA
   if (!api || !anonima || !email || !senha) throw new FalhaGoogle('Configuração da conta fictícia ausente.')
@@ -61,7 +63,7 @@ export async function configurarGoogle(acao: string | undefined, caminho?: strin
   if (acao !== 'verificar' && (!process.stdout.isTTY || !process.stdin.isTTY || process.platform !== 'win32')) {
     throw new FalhaGoogle('Autorize no seu terminal Windows interativo, sem redirecionar a saída.')
   }
-  const contaId = producao ? validarContaBackup(producao.contaId) : await contaFichinhas(), destino = new URL(process.env.VITE_SUPABASE_URL ?? '').origin
+  const contaId = producao ? validarContaBackup(producao.contaId) : await contaFichinhasDeTeste(), destino = new URL(process.env.VITE_SUPABASE_URL ?? '').origin
   const nome = ambiente === 'producao' ? SEGREDO_GOOGLE_BACKUP_PRODUCAO : SEGREDO_GOOGLE_BACKUP
   const projetoGoogle = ambiente === 'producao' ? PROJETO_GOOGLE_DE_PRODUCAO : PROJETO_GOOGLE_DE_TESTE
   const clienteNovo = acao === 'verificar' ? undefined : caminho ? await lerArquivoClienteGoogle(caminho, projetoGoogle) : undefined
@@ -69,7 +71,11 @@ export async function configurarGoogle(acao: string | undefined, caminho?: strin
   const sql = conectar()
   try {
     const emailFichinhas = ambiente === 'producao' ? await conferirContaFichinhas(sql, contaId) : undefined
-    const anterior = await consultarAutorizacaoGoogle(sql, nome)
+    const [linhaAtiva] = ambiente === 'producao' ? await sql<{ valor: unknown }[]>`select public.obter_autorizacao_backup_producao() valor`
+      : await sql<{ valor: unknown }[]>`select public.obter_autorizacao_backup() valor`
+    const ativa = linhaAtiva?.valor === null || linhaAtiva?.valor === undefined ? null : lerAutorizacaoGoogle(linhaAtiva.valor)
+    if (acao !== 'verificar' && ativa?.formato === 2) throw new FalhaGoogle('A conexão atual foi feita pelo app. Para escolher ou autorizar o Drive, use Cópia das anotações.')
+    const anterior = acao === 'verificar' ? ativa : await consultarAutorizacaoGoogle(sql, nome)
     if (anterior) conferirVinculo(anterior, ambiente, contaId, destino)
     if (acao === 'verificar') {
       if (!anterior) throw new FalhaGoogle('Autorize primeiro a conta Google neste ambiente.')
@@ -77,9 +83,10 @@ export async function configurarGoogle(acao: string | undefined, caminho?: strin
       const conta = await consultarContaDrive(token.acesso)
       if (conta.id !== anterior.contaGoogleId) throw new FalhaGoogle('A conta Google renovada diverge da autorização guardada.')
       if (token.renovacao && token.renovacao !== anterior.renovacao) {
-        await sql.begin((tx) => registrarAutorizacaoGoogle(tx, { ...anterior, renovacao: token.renovacao ?? anterior.renovacao }, anterior, nome))
+        if (anterior.vinculoId) await sql`select public.renovar_google_web(${anterior.vinculoId}::uuid,${anterior.renovacao},${token.renovacao})`
+        else await sql.begin((tx) => registrarAutorizacaoGoogle(tx, { ...anterior, renovacao: token.renovacao ?? anterior.renovacao }, anterior, nome))
       }
-      console.log(JSON.stringify({ ambiente, projetoGoogle, autorizado: true, renovacaoConferida: true,
+      console.log(JSON.stringify({ ambiente, projetoGoogle, autorizado: true, renovacaoConferida: true, conectadoPeloApp: anterior.formato === 2,
         ...cotaPublica(conta), arquivosEnviados: 0, segredosImpressos: false }))
       return
     }

@@ -65,7 +65,16 @@ export function criarHandlerBackupAparelho({ rpc, destino, autenticar }: {
       const guardada = await rpc('obter_autorizacao_backup', {})
       const auth = guardada === null ? null : lerAutorizacaoGoogle(guardada)
       const habilitado = auth !== null && auth.contaId === conta && auth.destino === destino
+      let conexaoEm: string | undefined
+      if (pedido.acao === 'estado' && habilitado && auth.vinculoId) {
+        const configuracao = registro(await rpc('configuracao_google_web', { conta }))
+        // D-085: comparar a hora do mesmo banco nos dois canais; o relógio do Edge não ordena vínculos.
+        exigirCopia(configuracao['anterior'] === auth.vinculoId && typeof configuracao['conectadoEm'] === 'string' &&
+          Number.isFinite(Date.parse(configuracao['conectadoEm'])))
+        conexaoEm = configuracao['conectadoEm']
+      }
       if (pedido.acao === 'estado') return responder({ estado: 'configuracao', habilitado,
+        ...(habilitado && auth.vinculoId ? { vinculoId: auth.vinculoId, conexaoEm } : {}),
         ultima: habilitado ? await rpc('ultimo_backup_confirmado', { conta, destino }) : null })
       if (!habilitado) return responder({ erro: 'nao_autorizado' }, 403)
 

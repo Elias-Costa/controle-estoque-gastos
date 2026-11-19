@@ -101,7 +101,7 @@ async function configurarHomologacao(): Promise<void> {
 async function principal(): Promise<void> {
   const ambiente = process.argv[2]
   const acao = process.argv[3]
-  if (!['local', 'homologacao'].includes(ambiente ?? '') || !['iniciar', 'parar', 'migrar', 'reverter', 'integracao', 'navegador', 'build', 'lembretes-preparar', 'lembretes-segredos', 'lembretes-agendar', 'backup-google-autorizar', 'backup-google-reautorizar', 'backup-google-verificar', 'backup-preparar', 'backup-agendar', 'backup-ensaio', 'backup-executar', 'backup-volume', 'backup-perfil', 'provar-backup-aparelho'].includes(acao ?? '')) {
+  if (!['local', 'homologacao'].includes(ambiente ?? '') || !['iniciar', 'parar', 'migrar', 'reverter', 'integracao', 'navegador', 'build', 'lembretes-preparar', 'lembretes-segredos', 'lembretes-agendar', 'backup-google-autorizar', 'backup-google-reautorizar', 'backup-google-verificar', 'backup-google-web', 'backup-preparar', 'backup-agendar', 'backup-ensaio', 'backup-executar', 'backup-volume', 'backup-perfil', 'provar-backup-aparelho'].includes(acao ?? '')) {
     throw new Error('Use local ou homologacao e uma ação: iniciar, parar, migrar, reverter, integracao, navegador ou build.')
   }
   process.env.AMBIENTE_DE_TESTE = ambiente
@@ -125,7 +125,7 @@ async function principal(): Promise<void> {
   console.log(`Ambiente validado: ${ambiente}.`)
   if (acao?.startsWith('backup-google-')) {
     await executar(['run', 'typecheck'])
-    await executar(['run', 'nuvem/backup/configurar-google.ts', acao.slice('backup-google-'.length),
+    await executar(['run', ...(acao === 'backup-google-web' ? ['nuvem/backup/configurar-google-web.ts'] : ['nuvem/backup/configurar-google.ts', acao.slice('backup-google-'.length)]),
       ...process.argv.slice(4).filter((v) => v !== '--configurada')])
     return
   }
@@ -184,7 +184,8 @@ async function principal(): Promise<void> {
   }
   process.env.VITE_LABORATORIO = '1'
   await executar(['x', '--no-install', 'vite', 'build', '--outDir', 'dist-laboratorio'])
-  if (acao === 'navegador') await comContatoFicticio(() => executar(['x', '--no-install', 'playwright', 'test']))
+  if (acao === 'navegador') await comContatoFicticio(() => executar(['x', '--no-install', 'playwright', 'test',
+    ...(process.env.TESTE_NOME ? ['--grep', process.env.TESTE_NOME] : [])]))
 }
 
 if (import.meta.main) {

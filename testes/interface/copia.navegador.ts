@@ -32,4 +32,39 @@ for (const c of [
     await expect(page.getByRole('button', { name: 'Começar a usar uma cópia', exact: true })).toBeVisible()
     expect(erros).toEqual([])
   })
+  test(`D-085 retorno ${c.nome}: remove código da URL, recusa tentativa inválida e volta à cópia`, async ({ page, context }, info) => {
+    const erros: string[] = [], externos: string[] = []
+    page.on('pageerror', (erro) => erros.push(erro.message))
+    page.on('request', (req) => { if (new URL(req.url()).hostname !== '127.0.0.1' && new URL(req.url()).hostname !== 'localhost') externos.push(req.url()) })
+    await page.setViewportSize({ width: c.largura, height: 812 })
+    await page.emulateMedia({ colorScheme: c.tema })
+    await page.goto('/')
+    await page.evaluate(async () => { await navigator.serviceWorker.ready })
+    await page.reload()
+    expect(await page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true)
+    await context.setOffline(true)
+    await page.goto('/google-drive-retorno.html?state=invalida&code=codigo-apenas-ficticio')
+    if (c.ampliar) await page.addStyleTag({ content: 'html { font-size: 200%; }' })
+    await expect(page.getByRole('status')).toContainText('Não deu para conferir esta autorização.')
+    expect(new URL(page.url()).search).toBe('')
+    const chaves = await page.evaluate(async () => {
+      const armazenadas: string[] = []
+      for (const nome of await caches.keys()) for (const pedido of await (await caches.open(nome)).keys()) armazenadas.push(pedido.url)
+      return armazenadas
+    })
+    expect(chaves.some((url) => url.includes('codigo-apenas-ficticio') || url.includes('state=invalida'))).toBe(false)
+    const voltar = page.getByRole('link', { name: 'Voltar ao Fichinhas', exact: true })
+    await voltar.focus()
+    const layout = await voltar.evaluate((e) => ({ altura: e.getBoundingClientRect().height,
+      largura: document.documentElement.clientWidth, conteudo: document.documentElement.scrollWidth, foco: getComputedStyle(e).outlineStyle }))
+    expect(layout.altura).toBeGreaterThanOrEqual(44)
+    expect(layout.conteudo).toBeLessThanOrEqual(layout.largura)
+    expect(layout.foco).not.toBe('none')
+    expect(externos).toEqual([])
+    await page.screenshot({ path: info.outputPath('retorno-drive.png'), fullPage: true })
+    await voltar.click()
+    await expect(page.getByRole('heading', { name: 'Cópia das anotações', exact: true })).toBeVisible()
+    expect(new URL(page.url()).search).toBe('')
+    expect(erros).toEqual([])
+  })
 }

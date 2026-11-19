@@ -167,9 +167,32 @@ export function criarRepositorioCopia(banco: BancoLocal, agora = () => new Date(
       controle?.chave === 'backup-aparelho' && !controle.tentativa &&
       controle.concluido !== undefined && controle.concluido >= dia
   }
-  async function reservarBackup(vinculo: VinculoConta, dia: string, instante: Date): Promise<string | null> {
+  async function driveAtual(id: string | undefined): Promise<boolean> {
+    const c = await banco.controleCopia.get('registro:vinculo-google')
+    return (c?.chave === 'registro:vinculo-google' ? c.conteudo : undefined) === id
+  }
+  async function vincularDrive(id: string, instante: string): Promise<boolean> {
+    exigirCopia(/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id) && Number.isFinite(Date.parse(instante)))
+    return banco.transaction('rw', banco.controleCopia, async () => {
+      const anterior = await banco.controleCopia.get('registro:vinculo-google')
+      if (anterior?.chave === 'registro:vinculo-google' && anterior.conteudo === id) return true
+      const horaAnterior = await banco.controleCopia.get('registro:hora-vinculo-google')
+      if (horaAnterior?.chave === 'registro:hora-vinculo-google' && Date.parse(horaAnterior.conteudo) >= Date.parse(instante)) return false
+      // D-085: conservar estágios e suas fotos; só trocar os ponteiros da confirmação corrente.
+      for (const chave of ['backup-aparelho', 'backup-confirmado'] as const) {
+        const controle = await banco.controleCopia.get(chave)
+        if (controle) await banco.controleCopia.put({ chave: `registro:backup-anterior:${id}:${chave}`, conteudo: JSON.stringify(controle) })
+        await banco.controleCopia.delete(chave)
+      }
+      await banco.controleCopia.put({ chave: 'registro:vinculo-google', conteudo: id })
+      await banco.controleCopia.put({ chave: 'registro:hora-vinculo-google', conteudo: instante })
+      return true
+    })
+  }
+  async function reservarBackup(vinculo: VinculoConta, dia: string, instante: Date, drive?: string): Promise<string | null> {
     return banco.transaction('rw', escopo, async () => {
       await conferirConta(vinculo)
+      if (!await driveAtual(drive)) return null
       if (await banco.controleCopia.get('restauracao')) return null
       const controle = await banco.controleCopia.get('backup-aparelho')
       if (controle?.chave === 'backup-aparelho') {
@@ -191,30 +214,33 @@ export function criarRepositorioCopia(banco: BancoLocal, agora = () => new Date(
       }
     })
   }
-  async function guardarUltimoBackup(ultima: BackupConfirmado): Promise<void> {
-    await banco.transaction('rw', banco.controleCopia, async () => {
+  async function guardarUltimoBackup(ultima: BackupConfirmado, drive?: string): Promise<boolean> {
+    return banco.transaction('rw', banco.controleCopia, async () => {
+      if (!await driveAtual(drive)) return false
       const c = await banco.controleCopia.get('backup-confirmado')
       if (c?.chave !== 'backup-confirmado' || Date.parse(c.ultima.capturadoEm) <= Date.parse(ultima.capturadoEm)) {
         await banco.controleCopia.put({ chave: 'backup-confirmado', ultima })
       }
+      return true
     })
   }
-  async function concluirBackup(id: string, ultima: BackupConfirmado): Promise<void> {
+  async function concluirBackup(id: string, ultima: BackupConfirmado, drive?: string): Promise<void> {
     await banco.transaction('rw', banco.controleCopia, banco.estagiosCopia, banco.lotesCopia, banco.usosFotos, async () => {
       const c = await banco.controleCopia.get('backup-aparelho')
       if (c?.chave !== 'backup-aparelho' || c.tentativa?.id !== id) return
-      await guardarUltimoBackup(ultima)
+      if (!await guardarUltimoBackup(ultima, drive)) return
       await descartar(id)
       await banco.controleCopia.put({ chave: 'backup-aparelho', concluido: c.tentativa.dia })
     })
   }
   async function lerEstadoBackup() {
-    const [c, u] = await banco.controleCopia.bulkGet(['backup-aparelho', 'backup-confirmado'])
+    const [c, u, g] = await banco.controleCopia.bulkGet(['backup-aparelho', 'backup-confirmado', 'registro:vinculo-google'])
     return { tentativa: c?.chave === 'backup-aparelho' ? c.tentativa : undefined,
-      ultima: u?.chave === 'backup-confirmado' ? u.ultima : undefined }
+      ultima: u?.chave === 'backup-confirmado' ? u.ultima : undefined,
+      vinculoId: g?.chave === 'registro:vinculo-google' ? g.conteudo : undefined }
   }
   return { capturar, lerEstagio, completarFoto, concluirCaptura, reservarImportacao, prepararImportacao, publicar, descartar,
-    backupConcluidoNoDia, reservarBackup, marcarFalhaBackup, guardarUltimoBackup, concluirBackup, lerEstadoBackup,
+    backupConcluidoNoDia, reservarBackup, marcarFalhaBackup, guardarUltimoBackup, concluirBackup, lerEstadoBackup, vincularDrive,
     listar: async () => (await banco.estagiosCopia.toArray()).filter((e) => !e.aparelhoId),
     async vinculo() { const c = await banco.controleCopia.get('conta'); return c?.chave === 'conta' ? c.vinculo : null },
     async restauracao() { const c = await banco.controleCopia.get('restauracao'); return c?.chave === 'restauracao' ? c : null },

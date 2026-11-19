@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react'
-import { liveQuery } from 'dexie'
 import { banco } from '../dados/instancia.ts'
 import { ErroCopia } from '../dados/formato-copia.ts'
 import { criarRepositorioCopia } from '../dados/repositorio-copia.ts'
-import type { BackupConfirmado, TentativaBackup } from '../dados/tipos-copia.ts'
 import { copia } from '../sincronizacao/instancia.ts'
 import { Botao } from './Botao.tsx'
 import { Topo } from './Topo.tsx'
@@ -11,32 +9,9 @@ import { useLeitura } from './useLeitura.ts'
 import { CLASSES_DE_CAMPO } from './Campo.tsx'
 import { emReais } from '../dominio/dinheiro.ts'
 import { totalDaVenda, totalDoDebito, type Lancamento } from '../dominio/ficha.ts'
+import { CopiaNoDrive } from './copia-no-drive.tsx'
 
 const repo = criarRepositorioCopia(banco)
-const dataDaCopia = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeZone: 'America/Fortaleza' })
-const horaDaCopia = new Intl.DateTimeFormat('pt-BR', { timeStyle: 'short', timeZone: 'America/Fortaleza' })
-
-function CopiaNoDrive() {
-  const [estado, atualizar] = useState<{ ultima?: BackupConfirmado; tentativa?: TentativaBackup }>()
-  useEffect(() => {
-    const inscricao = liveQuery(repo.lerEstadoBackup).subscribe({ next: atualizar, error: () => atualizar(undefined) })
-    return () => inscricao.unsubscribe()
-  }, [])
-  const instante = estado?.ultima ? new Date(estado.ultima.capturadoEm) : null
-  return <section aria-label="Cópia no Drive" className="my-6 rounded-xl border border-borda bg-papel p-4">
-    <h2 className="text-xl">Cópia no Drive</h2>
-    <div role="status" className="space-y-2">
-      {estado?.ultima && instante ? <>
-        <p>Última cópia confirmada <time className="block" dateTime={estado.ultima.capturadoEm}>{dataDaCopia.format(instante)} às {horaDaCopia.format(instante)}</time></p>
-        <p>{estado.ultima.origem === 'servidor' ? 'Feita com as anotações já enviadas à sua conta.' : 'Feita a partir das anotações de um aparelho.'}</p>
-      </> : <p>Ainda não há confirmação de uma cópia no Drive aqui.</p>}
-      {estado?.tentativa && <p>{estado.tentativa.falhou
-        ? 'Não deu para terminar a cópia do aparelho. O app vai tentar de novo quando estiver aberto e com internet.'
-        : 'A cópia do aparelho está pendente. O app continua a tentativa quando estiver aberto e com internet.'}</p>}
-    </div>
-    <p className="mt-2 text-suave">As anotações mais recentes podem ficar só no aparelho até a próxima cópia.</p>
-  </section>
-}
 
 function frase(erro: unknown): string {
   if (!(erro instanceof ErroCopia)) return 'Não deu para concluir. Suas anotações continuam guardadas. Você pode tentar de novo.'
@@ -93,7 +68,7 @@ export function TelaCopia({ aoVoltar, aoEntrar }: { aoVoltar: () => void; aoEntr
     {leitura.estado === 'falhou' && <p role="alert">Não deu para abrir as preparações. Suas anotações continuam aqui.</p>}
     {aviso && <p role="status">{aviso}</p>}
     {trabalhando && <p role="status">Conferindo as anotações e as fotos…</p>}
-    <CopiaNoDrive />
+    <CopiaNoDrive aoEntrar={aoEntrar} />
     <section aria-label="Guardar uma cópia" className="my-6">
       <h2 className="text-xl">Guardar uma cópia</h2>
       <Botao tipo="principal" desabilitado={trabalhando || !!reserva} aoTocar={() => void preparar()}>Preparar cópia completa</Botao>
