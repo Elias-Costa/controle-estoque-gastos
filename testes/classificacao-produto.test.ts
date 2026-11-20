@@ -86,7 +86,7 @@ describe('E-28B — classificação opcional e compatibilidade D-074/075', () =>
     ok(await repo.salvarProduto({ ...antigo, classificacao: 'masculino' }))
     banco.close()
     const reaberto = abrir(indexedDB, nome)
-    expect(reaberto.verno).toBe(10)
+    expect(reaberto.verno).toBe(11)
     expect(await reaberto.produtos.get(antigo.id)).toEqual({ ...antigo, classificacao: 'masculino', classificacaoConhecida: true })
     expect(await Promise.all(['fotos', 'lancamentos', 'enviosProdutoFoto'].map((tabela) => reaberto.table(tabela).toArray()))).toEqual(antes)
     expect((await reaberto.fila.toArray())[0]?.versao).toBe(5)
@@ -131,7 +131,7 @@ describe('E-28B — classificação opcional e compatibilidade D-074/075', () =>
     const banco = abrir(indexedDB, nome)
     banco.version(5).stores(v5); banco.version(6).stores(v6); banco.version(7).stores(v7)
     ok(await criarRepositorioEstoque(banco).salvarProduto({ ...antigo, classificacao: 'unissex' }))
-    expect(banco.verno).toBe(10)
+    expect(banco.verno).toBe(11)
     expect(await Promise.all(tabelasF3.map((tabela) => banco.table(tabela).toArray()))).toEqual(antes)
     expect((await banco.produtos.get(antigo.id))?.classificacao).toBe('unissex')
   })
@@ -156,7 +156,7 @@ describe('E-28B — classificação opcional e compatibilidade D-074/075', () =>
     await banco.categorias.put(categoria); await banco.produtos.put(antigo)
     await banco.sincronizacao.put({ chave: 'produtos', valor: CARIMBO })
     const base = criarNuvemSupabase(createClient('http://127.0.0.1:9', 'ficticia', { auth: { persistSession: false, autoRefreshToken: false } }))
-    const { fotos: _fotos, identidadeLoja: _identidadeLoja, ...metadados } = base
+    const { fotos: _fotos, identidadeLoja: _identidadeLoja, prazoEncalhe: _prazoEncalhe, ...metadados } = base
     let classificacao = 'inválida'
     const nuvem: Nuvem = { ...metadados, temSessao: async () => true, aoMudarSessao: () => () => undefined,
       buscarClientes: async () => ({ ok: true, valor: [] }), buscarLancamentos: async () => ({ ok: true, valor: [] }),

@@ -6,7 +6,7 @@ import { indexarMaterialBackup } from '../src/plataforma/material-backup.ts'
 import { uuidv7 } from '../src/dados/identidade.ts'
 import { documentoEstoque } from '../src/sincronizacao/borda-estoque.ts'
 import { consultasDaCopia } from '../src/dados/consultas-copia.ts'
-import { TABELAS_COPIA } from '../src/dados/tipos-copia.ts'
+import { TABELAS_COPIA_ATE_V10 } from '../src/dados/tipos-copia.ts'
 import { fecharLotesZip, fonteDoZip, gravarLotesZip, shaDosLotes, type ArmazemDeLotes } from '../nuvem/backup/lotes.ts'
 import { gruposDeFotos } from '../nuvem/backup/retomavel.ts'
 
@@ -28,7 +28,7 @@ async function caso() {
     estoque: [{ recepcao: '1', tipo: 'operacao', grupo, evidencias: [], encerramentoId: null }],
     caixa: [{ recepcao: '1', grupo: { operacao: { id: uuidv7(), revisao: 1, formato: 1, tipo: 'registro', fatos: [{ id: fato, revisao: 1 }] },
       fatos: [{ id: fato, revisao: 1, tipo: 'despesa', data: c.dia, valor: '10000', categoria: 'Teste', classificacao: 'negocio', mercadoria: false }] } }],
-    modelos: [], identidades: [], fotos: [{ fotoId: foto, copiaId: copia, produtoId: produto, cadastroEm: c.capturadoEm,
+    modelos: [], identidades: [], encalhes: [], fotos: [{ fotoId: foto, copiaId: copia, produtoId: produto, cadastroEm: c.capturadoEm,
       caminho: `${c.vinculo.contaId}/${foto}/${copia}.jpeg`, disponivel: true, bytes: binario.byteLength, sha256: await hashDaFoto(binario), largura: 768, altura: 1024 }],
   }
   return { c, fontes, grupo, binario, miniatura }
@@ -61,6 +61,16 @@ describe('BA-02 captura do servidor → dados/ZIP, sem Google/Edge reais', () =>
     const ref = fontes.fotos[0]
     if (typeof ref !== 'object' || ref === null) throw new Error('Fixture ausente')
     await expect(dadosDaCaptura(c, { ...fontes, fotos: [{ ...ref, caminho: `outra/${uuidv7()}.jpeg` }] }, async () => { throw new Error('Não deve baixar') })).rejects.toThrow()
+  })
+  test('E-42 o ZIP capturado pelo servidor recupera a escolha sem fabricar fila', async () => {
+    const { c, fontes, binario, miniatura } = await caso()
+    const id = uuidv7()
+    const dados = await dadosDaCaptura(c, { ...fontes, encalhes: [{ id, dias: 45, atualizado_em: c.capturadoEm }] }, async () => binario)
+    const lida = await lerArquivoCopia(await pacoteDaCaptura(c, dados), c.vinculo, async () => miniatura)
+    expect(lida.origem).toEqual({ tipo: 'servidor' })
+    expect(lida.dados.prazosEncalhe).toEqual([{ chave: 'encalhe', id, dias: 45, atualizadoEm: c.capturadoEm }])
+    expect(lida.dados.fila).toEqual([])
+    expect(lida.dados.lancamentos).toEqual(dados.lancamentos)
   })
   test('BA-04 confere o original uma vez no empacotador e conserva os mesmos bytes com SHA nativo', async () => {
     const { c, fontes, binario } = await caso()
@@ -176,7 +186,7 @@ describe('BA-04 preparo retomável do ZIP', () => {
     const consultas = await gravar(Object.entries(consultasDaCopia(dados)).map(([nome, texto]) => ({ nome, blob: new Blob([texto]) })))
     const lotes = [...jsons, ...fotos, ...consultas], arquivos = lotes.flatMap((l) => l.arquivos)
     lotes.push(...await gravar([{ nome: 'manifesto.json', blob: manifestoDaCopia(c,
-      Object.fromEntries(TABELAS_COPIA.map((t) => [t, dados[t].length])), arquivos, { tipo: 'servidor' }) }]))
+      Object.fromEntries(TABELAS_COPIA_ATE_V10.map((t) => [t, dados[t].length])), arquivos, { tipo: 'servidor' }) }]))
     const { indice, retidos } = await fecharLotesZip(lotes, armazem, prefixo, reservar, Number.MAX_SAFE_INTEGER)
     const viva = fonteDoZip(indice, armazem, retidos), retomada = fonteDoZip(indice, armazem)
     leituras.length = 0

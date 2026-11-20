@@ -2,7 +2,7 @@ import { BlobReader, Writer, ZipReader, ZipWriter, type FileEntry } from '@zip.j
 import { dadosDaCopia, exigirCopia, jsonDaCopia, lerJsonDaTabela, lerOrigemBackup, lerVinculoCopia, objetoCopia } from '../dados/formato-copia.ts'
 import { consultasDaCopia } from '../dados/consultas-copia.ts'
 import { fotosNecessariasCopia, mesmoVinculo } from '../dados/repositorio-copia.ts'
-import { LIMITES_COPIA as L, TABELAS_COPIA, TABELAS_COPIA_V1, TABELAS_COPIA_V2, type DadosCopia, type EstagioCopia, type OrigemBackup, type TabelaCopia, type VinculoConta } from '../dados/tipos-copia.ts'
+import { LIMITES_COPIA as L, TABELAS_COPIA, TABELAS_COPIA_ATE_V10, TABELAS_COPIA_V1, TABELAS_COPIA_V2, type DadosCopia, type EstagioCopia, type OrigemBackup, type TabelaCopia, type VinculoConta } from '../dados/tipos-copia.ts'
 import { LIMITE_MINIATURA_BYTES } from '../dados/tipos-fotos.ts'
 import { hashDaFoto, miniaturaDaFoto } from './fotos.ts'
 
@@ -46,7 +46,7 @@ export function dataInternaDaCopia(capturadoEm?: string): Date {
 }
 /** Serializa os mesmos lotes JSON em qualquer executor. O binário de foto tem entrada própria. */
 export function* entradasDeDadosCopia(dados: DadosCopia): Generator<{ nome: string; blob: Blob }> {
-  for (const tabela of TABELAS_COPIA) {
+  for (const tabela of tabelasDoPacote(dados.prazosEncalhe.length > 0)) {
     const linhas: readonly unknown[] = tabela === 'fotos' ? dados.fotos.map(({ binario: _b, miniatura: _m, ...foto }) => foto) : dados[tabela]
     let lote: string[] = [], tamanho = 2, numero = 0
     function entrada() {
@@ -63,10 +63,16 @@ export function* entradasDeDadosCopia(dados: DadosCopia): Generator<{ nome: stri
     if (lote.length || numero === 0) yield entrada()
   }
 }
+/** Uma captura sem escolha conserva o formato e os bytes de uma reserva anterior à v11. */
+export function tabelasDoPacote(comPrazo: boolean): readonly TabelaCopia[] {
+  return comPrazo ? TABELAS_COPIA : TABELAS_COPIA_ATE_V10
+}
 /** Manifesto do mesmo retrato, depois de reunir e conferir todas as entradas. */
 export function manifestoDaCopia(estagio: Pick<EstagioCopia, 'id' | 'vinculo' | 'capturadoEm'>,
   quantidades: Readonly<Record<string, number>>, arquivos: readonly ArquivoListado[], origem?: OrigemBackup): Blob {
-  return textoJson({ formato: origem ? 5 : 4, esquema: 10, ...(origem ? { origem } : {}), id: estagio.id, vinculo: estagio.vinculo,
+  const comPrazo = Object.hasOwn(quantidades, 'prazosEncalhe')
+  const formato = comPrazo ? (origem ? 7 : 6) : (origem ? 5 : 4)
+  return textoJson({ formato, esquema: comPrazo ? 11 : 10, ...(origem ? { origem } : {}), id: estagio.id, vinculo: estagio.vinculo,
     capturadoEm: estagio.capturadoEm, quantidades, arquivos })
 }
 async function hashBlob(blob: Blob): Promise<string> {
@@ -84,7 +90,7 @@ async function conferirFotos(d: DadosCopia, exigirMiniatura = true): Promise<voi
 export async function criarArquivoCopia(estagio: EstagioCopia, dados: DadosCopia): Promise<Blob> {
   return criarArquivo(estagio, dados)
 }
-/** ZIP autossuficiente 5/10: aceita originais sem miniaturas, reconstruídas na importação (D-084). */
+/** ZIP autossuficiente: aceita originais sem miniaturas, reconstruídas na importação (D-084). */
 export async function criarArquivoBackup(estagio: EstagioCopia, dados: DadosCopia, origem: OrigemBackup,
   aoAvancar?: (etapa: EtapaArquivoCopia) => void, resumir = hashBlob): Promise<Blob> {
   return criarArquivo(estagio, dados, lerOrigemBackup(origem), aoAvancar, resumir)
@@ -129,7 +135,8 @@ async function criarArquivo(estagio: EstagioCopia, dados: DadosCopia, origem?: O
     aoAvancar?.('zip_consultas')
     for (const [nome, conteudo] of Object.entries(consultasDaCopia(dados))) await adicionar(nome, new Blob([conteudo], { type: 'text/csv;charset=utf-8' }))
     aoAvancar?.('zip_fechamento')
-    const manifesto = manifestoDaCopia(estagio, Object.fromEntries(TABELAS_COPIA.map((t) => [t, dados[t].length])), arquivos, origem)
+    const tabelas = tabelasDoPacote(dados.prazosEncalhe.length > 0)
+    const manifesto = manifestoDaCopia(estagio, Object.fromEntries(tabelas.map((t) => [t, dados[t].length])), arquivos, origem)
     exigirCopia(manifesto.size <= L.manifesto && bytes + manifesto.size <= L.arquivo, 'limite')
     await escritor.add('manifesto.json', new BlobReader(manifesto))
     const resultado = await escritor.close()
@@ -166,16 +173,19 @@ export async function lerArquivoCopia(arquivo: Blob, vinculo: VinculoConta, mini
       return new Blob(partes)
     }
     const manifesto: unknown = JSON.parse(await (await ler('manifesto.json', L.manifesto)).text())
-    exigirCopia(objetoCopia(manifesto) && Object.keys(manifesto).sort().join(',') ===
-      (manifesto['formato'] === 5 ? 'arquivos,capturadoEm,esquema,formato,id,origem,quantidades,vinculo' : 'arquivos,capturadoEm,esquema,formato,id,quantidades,vinculo') &&
-      ((manifesto['formato'] === 1 && manifesto['esquema'] === 6) || (manifesto['formato'] === 2 && manifesto['esquema'] === 7) ||
-        (manifesto['formato'] === 3 && manifesto['esquema'] === 9) || ((manifesto['formato'] === 4 || manifesto['formato'] === 5) && manifesto['esquema'] === 10)) && typeof manifesto['id'] === 'string' && /^[0-9a-f-]{36}$/i.test(manifesto['id']) &&
+    exigirCopia(objetoCopia(manifesto))
+    const formato = manifesto['formato'], esquema = manifesto['esquema']
+    const automatico = formato === 5 || formato === 7
+    exigirCopia(Object.keys(manifesto).sort().join(',') ===
+      (automatico ? 'arquivos,capturadoEm,esquema,formato,id,origem,quantidades,vinculo' : 'arquivos,capturadoEm,esquema,formato,id,quantidades,vinculo') &&
+      ((formato === 1 && esquema === 6) || (formato === 2 && esquema === 7) || (formato === 3 && esquema === 9) ||
+        ((formato === 4 || formato === 5) && esquema === 10) || ((formato === 6 || formato === 7) && esquema === 11)) &&
+      typeof manifesto['id'] === 'string' && /^[0-9a-f-]{36}$/i.test(manifesto['id']) &&
       typeof manifesto['capturadoEm'] === 'string' && !Number.isNaN(new Date(manifesto['capturadoEm']).getTime()) &&
       Array.isArray(manifesto['arquivos']) && objetoCopia(manifesto['quantidades']))
     exigirCopia(mesmoVinculo(lerVinculoCopia(manifesto['vinculo']), vinculo), 'conta')
-    const formato = manifesto['formato']
-    const origem = formato === 5 ? lerOrigemBackup(manifesto['origem']) : undefined
-    const tabelas = formato === 1 ? TABELAS_COPIA_V1 : formato === 2 ? TABELAS_COPIA_V2 : TABELAS_COPIA
+    const origem = automatico ? lerOrigemBackup(manifesto['origem']) : undefined
+    const tabelas = formato === 1 ? TABELAS_COPIA_V1 : formato === 2 ? TABELAS_COPIA_V2 : tabelasDoPacote(formato >= 6)
     const arquivos: ArquivoListado[] = manifesto['arquivos'].map((v: unknown) => {
       exigirCopia(objetoCopia(v) && Object.keys(v).sort().join(',') === 'bytes,nome,sha256' && typeof v['nome'] === 'string' && NOME_VALIDO.test(v['nome']) &&
         typeof v['bytes'] === 'number' && Number.isSafeInteger(v['bytes']) && v['bytes'] >= 0 && typeof v['sha256'] === 'string' && /^[0-9a-f]{64}$/.test(v['sha256']))
@@ -217,8 +227,8 @@ export async function lerArquivoCopia(arquivo: Blob, vinculo: VinculoConta, mini
     const quantidades = manifesto['quantidades']
     exigirCopia(Object.keys(quantidades).length === tabelas.length && tabelas.every((t) => quantidades[t] === dados[t].length))
     // Conferir todos os originais antes de executar o decoder; falha nunca devolve dados parciais.
-    await conferirFotos(dados, formato !== 5)
-    if (formato === 5) {
+    await conferirFotos(dados, !automatico)
+    if (automatico) {
       for (let i = 0; i < dados.fotos.length; i++) {
         const foto = dados.fotos[i]; exigirCopia(foto)
         if (!foto.binario || foto.miniatura) continue

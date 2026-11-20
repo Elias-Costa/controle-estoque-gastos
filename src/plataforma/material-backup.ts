@@ -33,6 +33,7 @@ export async function indexarMaterialBackup(d: DadosCopia, resumir?: (conteudo: 
   for (const v of d.encerramentos) await anotar('encerramento', v, pendentes.has('encerramentos/' + v.id))
   for (const v of d.modelos) await anotar('modelos', v, pendentes.has('modelos/' + v.id))
   for (const v of d.identidadesLoja) await anotar('identidade', v, pendentes.has('identidadeLoja/' + v.id))
+  for (const v of d.prazosEncalhe) await anotar('prazoEncalhe', v, pendentes.has('prazoEncalhe/' + v.id))
   for (const v of d.fotos) {
     // Metadado dispensado, sem os bytes, nunca autoriza apagar a única cópia com a foto.
     if (v.binario) await anotar('foto', conteudoDaFotoParaRetencao(v),

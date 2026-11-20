@@ -1,11 +1,12 @@
 import { expect, test } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
-import { ESQUEMA_V7, ESQUEMA_V8, ESQUEMA_V9 } from '../../src/dados/banco.ts'
+import { ESQUEMA_V7, ESQUEMA_V8, ESQUEMA_V9, ESQUEMA_V10 } from '../../src/dados/banco.ts'
 import { abrirApp, recarregar } from './apoio.ts'
 
-for (const versao of [7, 8, 9] as const) test(`E-38 IndexedDB real v${versao} → v10 conserva anotações/foto/fila e reabre offline`, async ({ page, context }, info) => {
-  const esquema = versao === 7 ? ESQUEMA_V7 : versao === 8 ? ESQUEMA_V8 : ESQUEMA_V9
-  // Mesma origem sem executar o app: a base antiga nasce antes da primeira abertura da v10.
+const esquemas = { 7: ESQUEMA_V7, 8: ESQUEMA_V8, 9: ESQUEMA_V9, 10: ESQUEMA_V10 }
+for (const versao of [7, 8, 9, 10] as const) test(`IndexedDB real v${versao} → v11 conserva anotações/foto/fila e reabre offline`, async ({ page, context }, info) => {
+  const esquema = esquemas[versao]
+  // Mesma origem sem executar o app: a base antiga nasce antes da primeira abertura da v11.
   await page.goto('/licencas/zip-js.txt')
   const bytes = [...await readFile('testes/arquivos/foto-teste.jpeg')]
   const anterior = await page.evaluate(async ({ esquema, versao, bytes }) => {
@@ -66,9 +67,9 @@ for (const versao of [7, 8, 9] as const) test(`E-38 IndexedDB real v${versao} �
     if (reabrir) await recarregar(page)
     const atual = await conferir()
     expect(JSON.parse(atual.linhas)).toEqual(JSON.parse(anterior.linhas))
-    expect(atual.versao).toBe(10); expect(atual.saldo).toBe('9007199254740993'); expect(atual.foto).toBe(true)
+    expect(atual.versao).toBe(11); expect(atual.saldo).toBe('9007199254740993'); expect(atual.foto).toBe(true)
     expect(atual.produto).toBe('Produto anterior à união')
-    for (const tabela of ['fatosCaixa', 'modelos', 'controleCopia', 'identidadesLoja', 'inscricoesLembretes', 'observacoesLembretes']) expect(atual.tabelas).toContain(tabela)
+    for (const tabela of ['fatosCaixa', 'modelos', 'controleCopia', 'identidadesLoja', 'inscricoesLembretes', 'observacoesLembretes', 'prazosEncalhe']) expect(atual.tabelas).toContain(tabela)
   }
-  await page.screenshot({ path: info.outputPath(`upgrade-v${versao}-v10-offline.png`), fullPage: true })
+  await page.screenshot({ path: info.outputPath(`upgrade-v${versao}-v11-offline.png`), fullPage: true })
 })

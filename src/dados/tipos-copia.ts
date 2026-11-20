@@ -7,6 +7,7 @@ import type { OperacaoCaixaLocal, VersaoCaixa } from './tipos-caixa.ts'
 import type { EnvioProdutoFoto, EstadoFotos, FotoLocal, ProtecaoFotoLocal, UsoFotoLocal } from './tipos-fotos.ts'
 import type { PreferenciaModelos } from './modelos-whatsapp.ts'
 import type { PreferenciaIdentidadeLoja } from './identidade-loja.ts'
+import type { PreferenciaEncalhe } from './prazo-encalhe.ts'
 
 /** Dono e destino da base; nunca contém credenciais (D-071, RNF-07). */
 export type VinculoConta = { readonly contaId: string; readonly destino: string }
@@ -30,6 +31,7 @@ export type DadosCopia = {
   operacoesCaixa: OperacaoCaixaLocal[]; versoesCaixa: VersaoCaixa[]; evidenciasCopia: EvidenciaCopia[]
   modelos: PreferenciaModelos[]
   identidadesLoja: PreferenciaIdentidadeLoja[]
+  prazosEncalhe: PreferenciaEncalhe[]
 }
 /** Lista explícita: nova tabela de uso exige formato e prova, nunca exportação automática de sessão. */
 export const TABELAS_COPIA_V1 = ['clientes', 'lancamentos', 'fila', 'sincronizacao', 'categorias', 'produtos',
@@ -38,7 +40,9 @@ export const TABELAS_COPIA_V1 = ['clientes', 'lancamentos', 'fila', 'sincronizac
 /** D-072: formato 2/esquema 7 acrescenta modelos; formato anterior tem lista fechada própria. */
 export const TABELAS_COPIA_V2 = [...TABELAS_COPIA_V1, 'modelos'] as const
 /** E-28D/D-076: formato 3/esquema 9 conserva identidade/logo e classificação das capturas. */
-export const TABELAS_COPIA = [...TABELAS_COPIA_V2, 'identidadesLoja'] as const
+export const TABELAS_COPIA_ATE_V10 = [...TABELAS_COPIA_V2, 'identidadesLoja'] as const
+/** D-089: pacotes 6/11 e 7/11 guardam a escolha e, quando houver, seu envio pendente. */
+export const TABELAS_COPIA = [...TABELAS_COPIA_ATE_V10, 'prazosEncalhe'] as const
 /** Nome de tabela permitido no pacote atual. */
 export type TabelaCopia = typeof TABELAS_COPIA[number]
 /** Controle durável da conta e da barreira de primeiro envio; ausência não apaga dados existentes. */

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import Dexie, { type DexieOptions } from 'dexie'
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb'
-import { BancoLocal, ESQUEMA_V1, ESQUEMA_V2, ESQUEMA_V3, ESQUEMA_V4, ESQUEMA_V5, ESQUEMA_V6, ESQUEMA_V7, ESQUEMA_V8, NOME_DO_BANCO } from '../src/dados/banco.ts'
+import { BancoLocal, ESQUEMA_V1, ESQUEMA_V2, ESQUEMA_V3, ESQUEMA_V4, ESQUEMA_V5, ESQUEMA_V6, ESQUEMA_V7, ESQUEMA_V8, ESQUEMA_V10, NOME_DO_BANCO } from '../src/dados/banco.ts'
 import type { Cliente, VendaFiado } from '../src/dominio/ficha.ts'
 
 /**
@@ -49,6 +49,7 @@ const ESQUEMAS_PUBLICADOS: Readonly<Record<number, Readonly<Record<string, strin
     fatosCaixa: 'id', operacoesCaixa: 'id', versoesCaixa: 'id, operacaoId', controleCopia: 'chave', estagiosCopia: 'id',
     lotesCopia: 'id, operacaoId', evidenciasCopia: 'id', modelos: 'chave' },
 }
+const PUBLICADO_V10 = { ...ESQUEMAS_PUBLICADOS[7], identidadesLoja: 'chave', inscricoesLembretes: 'chave', observacoesLembretes: 'chave' }
 
 /**
  * Todo caminho de chave que pode virar índice. Dinheiro (`valor`, `preco`, `desconto`) nunca
@@ -77,9 +78,9 @@ describe('esquema local (D-020, D-040)', () => {
   test('a versão declarada é a última publicada, e cada tabela bate com o literal publicado', async () => {
     const banco = abrir()
     await banco.open()
-    const ultima = 10
+    const ultima = 11
     expect(banco.verno).toBe(ultima)
-    const publicado = { ...ESQUEMAS_PUBLICADOS[7], identidadesLoja: 'chave', inscricoesLembretes: 'chave', observacoesLembretes: 'chave' }
+    const publicado = { ...PUBLICADO_V10, prazosEncalhe: 'chave' }
     if (publicado === undefined) throw new Error('sem esquema publicado')
     expect(banco.tables.map((tabela) => tabela.name).sort()).toEqual(Object.keys(publicado).sort())
     for (const [tabela, spec] of Object.entries(publicado)) {
@@ -100,6 +101,7 @@ describe('esquema local (D-020, D-040)', () => {
     expect(ESQUEMAS_PUBLICADOS[6]).toEqual({ ...ESQUEMA_V6 })
     expect(ESQUEMAS_PUBLICADOS[7]).toEqual({ ...ESQUEMA_V7 })
     expect<Record<string, string>>(ESQUEMA_V8).toEqual({ ...ESQUEMAS_PUBLICADOS[4], identidadesLoja: 'chave' })
+    expect<Record<string, string>>(ESQUEMA_V10).toEqual(PUBLICADO_V10)
   })
 
   test('todo índice está na lista de permissão — nenhum campo de dinheiro é chave (D-022)', async () => {
@@ -146,7 +148,7 @@ describe('esquema local (D-020, D-040)', () => {
     // `versao`, e o código lê as duas formas.
     const atual = abrir(nome, indexedDB)
     await atual.open()
-    expect(atual.verno).toBe(10)
+    expect(atual.verno).toBe(11)
     const cliente: Cliente | undefined = await atual.clientes.get('c1')
     expect(cliente).toEqual(vera)
     const lida = await atual.lancamentos.get('v1')

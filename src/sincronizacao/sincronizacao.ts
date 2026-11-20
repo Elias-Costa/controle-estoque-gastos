@@ -49,6 +49,8 @@ import { modelosDaNuvem, modelosParaNuvem } from './borda-modelos.ts'
 import { aplicarModelos } from './recepcao-modelos.ts'
 import { criarRepositorioIdentidadeLoja } from '../dados/repositorio-identidade-loja.ts'
 import { aplicarIdentidadeLoja, identidadeDaNuvem, identidadeParaNuvem } from './identidade-loja.ts'
+import { criarRepositorioPrazoEncalhe } from '../dados/repositorio-prazo-encalhe.ts'
+import { aplicarPrazoEncalhe, prazoEncalheDaNuvem, prazoEncalheParaNuvem } from './prazo-encalhe.ts'
 
 /** O que o indicador mostra (RF-25) e o que o mantenedor lê no console. */
 export type EstadoDaSincronizacao = {
@@ -133,6 +135,7 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
   const estoque = criarRepositorioEstoque(banco)
   const caixa = criarRepositorioCaixa(banco)
   const identidadeLoja = criarRepositorioIdentidadeLoja(banco)
+  const prazoEncalhe = criarRepositorioPrazoEncalhe(banco)
   const fotos = nuvem?.fotos ? criarSincronizacaoFotos(banco, nuvem, nuvem.fotos) : null
   const agora = dependencias.agora ?? (() => new Date())
   const agendar = dependencias.agendar ?? agendarPadrao
@@ -253,6 +256,16 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
         if (resposta.ok) await modelos.responderEnvio(envio)
         else if (resposta.falha.tipo !== 'recusa') return resposta.falha.tipo
         else await modelos.responderEnvio(envio, problemaDaFalha(resposta.falha))
+        continue
+      }
+      if (item.tabela === 'prazoEncalhe') {
+        if (!nuvemLigada.prazoEncalhe) continue
+        const envio = await prazoEncalhe.capturarEnvio(item.registroId)
+        if (!envio) continue
+        const resposta = await nuvemLigada.prazoEncalhe.enviar(prazoEncalheParaNuvem(envio.preferencia))
+        if (resposta.ok) await prazoEncalhe.responderEnvio(envio)
+        else if (resposta.falha.tipo !== 'recusa') return resposta.falha.tipo
+        else await prazoEncalhe.responderEnvio(envio, problemaDaFalha(resposta.falha))
         continue
       }
       if (item.tabela === 'operacoesCaixa') {
@@ -391,6 +404,12 @@ export function iniciarSincronizacao(dependencias: Dependencias): Sincronizacao 
     if (!modelos.ok) return modelos.falha.tipo === 'sessao' ? 'sessao' : 'rede'
     if (modelos.valor.length > 1) throw new Error('Mais de uma preferência de mensagens')
     for (const linha of modelos.valor) await aplicarModelos(banco, modelosDaNuvem(linha))
+    if (nuvemLigada.prazoEncalhe) {
+      const resposta = await nuvemLigada.prazoEncalhe.buscar()
+      if (!resposta.ok) return resposta.falha.tipo === 'sessao' ? 'sessao' : 'rede'
+      if (resposta.valor.length > 1) throw new Error('Mais de um prazo de encalhe na conta')
+      for (const linha of resposta.valor) await aplicarPrazoEncalhe(banco, prazoEncalheDaNuvem(linha))
+    }
     const clientes = await baixarTabela('clientes', (desde) => nuvemLigada.buscarClientes(desde), 'recebido_em', aplicarCliente)
     if (clientes !== 'ok') return clientes
     const lancamentos = await baixarTabela('lancamentos', (desde) => nuvemLigada.buscarLancamentos(desde), 'criado_em', aplicarLancamento)

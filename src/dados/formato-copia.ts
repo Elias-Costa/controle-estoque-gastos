@@ -11,6 +11,7 @@ import { LIMITE_FOTO_BYTES, LIMITE_MINIATURA_BYTES, type EnvioProdutoFoto, type 
 import { LIMITES_COPIA, TABELAS_COPIA, type DadosCopia, type EvidenciaCopia, type OrigemBackup, type TabelaCopia, type VinculoConta } from './tipos-copia.ts'
 import { preferenciaModelosValida } from './modelos-whatsapp.ts'
 import { preferenciaIdentidadeValida } from './identidade-loja.ts'
+import { preferenciaEncalheValida } from './prazo-encalhe.ts'
 
 /** Recusa de arquivo/preparação: códigos ficam na borda; a tela apresenta palavras próprias. */
 export class ErroCopia extends Error {
@@ -138,7 +139,7 @@ function versaoCaixa(v: unknown): v is VersaoCaixa {
     objetoCopia(v) && grupoCaixa(v['grupo']) && v['operacaoId'] === v['grupo'].operacao.id
 }
 function fila(v: unknown): v is ItemDaFila {
-  return campos(v, { ordem: positivo, tabela: escolha('clientes', 'lancamentos', 'categorias', 'produtos', 'operacoes', 'encerramentos', 'fotos', 'operacoesCaixa', 'modelos', 'identidadeLoja'), registroId: id, criadoEm: instante }, { versao: inteiro, problema })
+  return campos(v, { ordem: positivo, tabela: escolha('clientes', 'lancamentos', 'categorias', 'produtos', 'operacoes', 'encerramentos', 'fotos', 'operacoesCaixa', 'modelos', 'identidadeLoja', 'prazoEncalhe'), registroId: id, criadoEm: instante }, { versao: inteiro, problema })
 }
 function cursor(v: unknown): v is CursorDeDownload {
   return campos(v, { chave: escolha('clientes', 'lancamentos', 'categorias', 'produtos', 'estoque', 'caixa', 'identidadeLoja'), valor: texto }) && objetoCopia(v) &&
@@ -169,7 +170,7 @@ function lerLista<T>(v: unknown, guarda: (linha: unknown) => linha is T): T[] {
   return v.map((linha: unknown) => { exigirCopia(guarda(linha)); return linha })
 }
 /** Campos fechados por formato; leitores antigos não aceitam extensões de pacotes novos. */
-export function dadosDaCopia(v: unknown, formato: 1 | 2 | 3 | 4 | 5 = 4): DadosCopia {
+export function dadosDaCopia(v: unknown, formato: 1 | 2 | 3 | 4 | 5 | 6 | 7 = 6): DadosCopia {
   exigirCopia(objetoCopia(v) && Object.keys(v).length === TABELAS_COPIA.length && Object.keys(v).every((k) => TABELAS_COPIA.some((t) => t === k)))
   const dados: DadosCopia = { clientes: lerLista(v['clientes'], cliente), lancamentos: lerLista(v['lancamentos'], lancamento),
     fila: lerLista(v['fila'], fila), sincronizacao: lerLista(v['sincronizacao'], cursor), categorias: lerLista(v['categorias'], categoria),
@@ -179,8 +180,10 @@ export function dadosDaCopia(v: unknown, formato: 1 | 2 | 3 | 4 | 5 = 4): DadosC
     usosFotos: lerLista(v['usosFotos'], uso), estadoFotos: lerLista(v['estadoFotos'], estadoFoto), fatosCaixa: lerLista(v['fatosCaixa'], fato),
     operacoesCaixa: lerLista(v['operacoesCaixa'], opCaixa), versoesCaixa: lerLista(v['versoesCaixa'], versaoCaixa), evidenciasCopia: lerLista(v['evidenciasCopia'], evidencia),
     modelos: lerLista(v['modelos'], preferenciaModelosValida),
-    identidadesLoja: lerLista(v['identidadesLoja'], preferenciaIdentidadeValida) }
-  exigirCopia(dados.modelos.length <= 1 && dados.identidadesLoja.length <= 1)
+    identidadesLoja: lerLista(v['identidadesLoja'], preferenciaIdentidadeValida),
+    prazosEncalhe: lerLista(v['prazosEncalhe'], preferenciaEncalheValida) }
+  exigirCopia(dados.modelos.length <= 1 && dados.identidadesLoja.length <= 1 && dados.prazosEncalhe.length <= 1)
+  if (formato < 6) exigirCopia(dados.prazosEncalhe.length === 0 && !dados.fila.some((f) => f.tabela === 'prazoEncalhe'))
   if (formato < 3) {
     exigirCopia(dados.identidadesLoja.length === 0 && !dados.fila.some((f) => f.tabela === 'identidadeLoja') &&
       !dados.sincronizacao.some((c) => c.chave === 'identidadeLoja'))
@@ -273,7 +276,7 @@ export function validarVinculosCopia(d: DadosCopia): void {
   const ponteiros = new Set<string>()
   for (const f of d.fila) {
     exigirCopia(!ponteiros.has(`${f.tabela}/${f.registroId}`)); ponteiros.add(`${f.tabela}/${f.registroId}`)
-    const tabela = f.tabela === 'identidadeLoja' ? 'identidadesLoja' : f.tabela
+    const tabela = f.tabela === 'identidadeLoja' ? 'identidadesLoja' : f.tabela === 'prazoEncalhe' ? 'prazosEncalhe' : f.tabela
     exigirCopia(d[tabela].some((r) => 'id' in r && r.id === f.registroId) ||
       (f.tabela === 'operacoesCaixa' && d.versoesCaixa.some((v) => v.operacaoId === f.registroId && !!v.foraDaProjecao)) ||
       (f.tabela === 'operacoes' && d.versoesEstoque.some((v) => v.operacaoId === f.registroId)))

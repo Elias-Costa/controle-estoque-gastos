@@ -64,9 +64,23 @@ async function recusar(tx: TransactionSQL, operacao: (sp: SQL) => Promise<unknow
 async function assumir(tx: SQL, conta: string) { await tx`select set_config('request.jwt.claims',${JSON.stringify({ sub: conta, role: 'authenticated' })},true)` }
 
 describe.skipIf(!LIGADA)('BA-02 captura/retencao SQL — somente dados fictícios e rollback', () => {
+  test('E-42 servidor congela prazo da própria conta e aceita captura anterior sem essa fonte', () => transacao(async (tx, conta) => {
+    const id = uuidv7()
+    await tx`insert into public.prazos_encalhe(dono,id,dias,atualizado_em) values (${conta}::uuid,${id}::uuid,45,${AGORA}::timestamptz),
+      (${uuidv7()}::uuid,${uuidv7()}::uuid,120,${AGORA}::timestamptz)`
+    const c = await capturar(tx, conta)
+    await tx`update public.prazos_encalhe set dias=60 where dono=${conta}::uuid`
+    expect(await pagina(tx, conta, c.id, 'encalhes')).toMatchObject({ total: 1, linhas: [{ id, dias: 45 }] })
+    expect(await pagina(tx, conta, (await capturar(tx, conta)).id, 'encalhes')).toMatchObject({ total: 1, linhas: [{ id, dias: 45 }] })
+    // Documento já retido pelo executor anterior, antes de a fonte existir.
+    await tx`update backup_interno.capturas set documento=documento-'encalhes' where id=${c.id}::uuid`
+    expect(await pagina(tx, conta, c.id, 'encalhes')).toEqual({ total: 0, linhas: [] })
+    expect(await pagina(tx, conta, c.id, 'clientes')).toEqual({ total: 0, linhas: [] })
+  }))
   test('reversão vazia preserva fotos/ACLs; captura/configuração existente recusa antes do DDL', () => transacao(async (tx, conta) => {
     const reverter = await Bun.file('nuvem/migracoes/0014_backup-automatico.reverter.sql').text()
-    const [vazia] = await tx<{ n: number }[]>`select (select count(*) from backup_interno.capturas)::integer+(select count(*) from backup_interno.destinos)::integer n`
+    const [vazia] = await tx<{ n: number }[]>`select (select count(*) from backup_interno.capturas)::integer +
+      (select count(*) from backup_interno.destinos)::integer + (select count(*) from public.prazos_encalhe)::integer n`
     if (vazia?.n === 0 && exigirDestinoDeTeste() === 'local') {
       // D-041: a reversão histórica também precisa respeitar a ordem das dependências.
       const posteriores = (await lerMigracoes()).filter((m) => m.nome > '0014_backup-automatico')
