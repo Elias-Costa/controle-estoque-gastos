@@ -61,7 +61,8 @@ export function referenciaDoEfeito(movimento: ReferenciaEfeito): ReferenciaEfeit
 
 function inteiroComSinal(valor: number): boolean { return quantidadeValida(valor, -9_007_199_254_740_991) }
 function referenciaValida(ref: ReferenciaEfeito): boolean { return !!ref.id && quantidadeValida(ref.revisao, 1) }
-function quantidadeDoMovimento(movimento: MovimentoEstoque): number {
+/** Efeito físico assinado de um movimento, antes da seleção da revisão vigente. */
+export function quantidadeDoMovimento(movimento: MovimentoEstoque): number {
   switch (movimento.tipo) {
     case 'compra': case 'retorno': return movimento.quantidade
     case 'entrega': case 'saida': return -movimento.quantidade
