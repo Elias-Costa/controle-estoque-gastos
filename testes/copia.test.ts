@@ -11,8 +11,9 @@ import { criarRepositorioEstoque } from '../src/dados/repositorio-estoque.ts'
 import { criarOperacoesCaixa } from '../src/dados/operacoes-caixa.ts'
 import { criarRepositorioCaixa } from '../src/dados/repositorio-caixa.ts'
 import { criarRepositorioCopia, vincularContaCopia } from '../src/dados/repositorio-copia.ts'
+import { criarRepositorioPrazoEncalhe } from '../src/dados/repositorio-prazo-encalhe.ts'
 import { dadosDaCopia, exigirCopia, jsonDaCopia, objetoCopia } from '../src/dados/formato-copia.ts'
-import { LIMITES_COPIA, TABELAS_COPIA, type VinculoConta } from '../src/dados/tipos-copia.ts'
+import { LIMITES_COPIA, TABELAS_COPIA, TABELAS_COPIA_ATE_V10, type VinculoConta } from '../src/dados/tipos-copia.ts'
 import { criarArquivoBackup, criarArquivoCopia, lerArquivoCopia } from '../src/plataforma/arquivo-copia.ts'
 import { criarServicoCopia } from '../src/sincronizacao/copia.ts'
 import { criarBackupAparelho } from '../src/sincronizacao/backup-aparelho.ts'
@@ -23,6 +24,7 @@ import { projetarEstoque } from '../src/dominio/estoque.ts'
 import { projetarCaixa } from '../src/dominio/caixa.ts'
 import { conteudoDoEfeito } from '../src/dominio/regras-estoque.ts'
 import { consultasDaCopia } from '../src/dados/consultas-copia.ts'
+import { indexarMaterialBackup } from '../src/plataforma/material-backup.ts'
 
 const CONTA: VinculoConta = { contaId: uuidv7(), destino: 'http://127.0.0.1:54321' }
 const GRANDE = 9007199254740993n, DIA = '2026-10-24'
@@ -172,7 +174,7 @@ describe('E-35: arquivo e estágio, IndexedDB simulado; não prova aparelho', ()
     expect(lida.dados.versoesCaixa.length).toBe(2)
     const reader = new ZipReader(new BlobReader(p.arquivo), { useWebWorkers: false })
     const entradas = await reader.getEntries()
-    for (const tabela of TABELAS_COPIA) {
+    for (const tabela of TABELAS_COPIA_ATE_V10) {
       const e = entradas.find((e) => e.filename === `dados/${tabela}/000000.json`); exigirCopia(e && !e.directory)
       const linhas = tabela === 'fotos' ? p.dados.fotos.map(({ binario: _b, miniatura: _m, ...foto }) => foto) : p.dados[tabela]
       expect(await (await e.getData(new BlobWriter())).text()).toBe(jsonDaCopia(linhas))
@@ -232,6 +234,37 @@ describe('E-35: arquivo e estágio, IndexedDB simulado; não prova aparelho', ()
     expect((await b.fotos.toArray())[0]?.binario).toEqual(p.dados.fotos[0]?.binario)
     await recusa(repo.publicar(id, CONTA), 'vazia')
     a.close(); b.close()
+  })
+  test('E-42 restaura prazo e fila nos ZIPs manual e do aparelho e lê o arquivo anterior sem escolha', async () => {
+    const a = aparelho(); await povoar(a)
+    const anterior = await pacote(a)
+    const r = await criarRepositorioPrazoEncalhe(a).salvar(45, undefined)
+    if (!r.ok) throw new Error('Prazo não salvo')
+    const novo = await pacote(a), { estagio } = await criarRepositorioCopia(a).lerEstagio(novo.id)
+    const original = novo.dados.fotos[0]?.binario, miniatura = novo.dados.fotos[0]?.miniatura
+    exigirCopia(original && miniatura)
+    const origem = { tipo: 'aparelho', aparelhoId: uuidv7() } as const
+    const automatico = await criarArquivoBackup(estagio, novo.dados, origem)
+    for (const [arquivo, formato, origemEsperada] of [[anterior.arquivo, 4, undefined], [novo.arquivo, 6, undefined], [automatico, 7, origem]] as const) {
+      const leitor = new ZipReader(new BlobReader(arquivo), { useWebWorkers: false })
+      const manifesto = (await leitor.getEntries()).find((e) => e.filename === 'manifesto.json'); exigirCopia(manifesto && !manifesto.directory)
+      expect(JSON.parse(await (await manifesto.getData(new BlobWriter())).text())).toMatchObject({ formato, esquema: formato === 4 ? 10 : 11 })
+      await leitor.close()
+      const lida = await lerArquivoCopia(arquivo, CONTA, async (binario) => { expect(binario).toEqual(original); return miniatura })
+      expect(lida.origem).toEqual(origemEsperada)
+      const b = aparelho(); await vincularContaCopia(b, CONTA)
+      const repo = criarRepositorioCopia(b), id = await repo.reservarImportacao()
+      await repo.prepararImportacao(id, CONTA, lida.capturadoEm, lida.dados)
+      await repo.publicar(id, CONTA)
+      expect(await criarRepositorioPrazoEncalhe(b).ler()).toEqual(formato === 4 ? undefined : r.preferencia)
+      expect(await b.fila.toArray()).toEqual(formato === 4 ? anterior.dados.fila : novo.dados.fila)
+      expect(saldo(await b.lancamentos.toArray())).toBe(GRANDE - 10n)
+      b.close()
+    }
+    const comPrazo = await indexarMaterialBackup(novo.dados), semPrazo = await indexarMaterialBackup(anterior.dados)
+    expect(comPrazo.exclusivos.filter((h) => !semPrazo.exclusivos.includes(h))).toHaveLength(1)
+    expect(() => dadosDaCopia({ ...novo.dados, prazosEncalhe: [] })).toThrow()
+    a.close()
   })
   test('conta/destino divergentes e base preenchida nunca são substituídos', async () => {
     const a = aparelho(); await povoar(a); const p = await pacote(a)
@@ -294,7 +327,7 @@ describe('E-35: arquivo e estágio, IndexedDB simulado; não prova aparelho', ()
     antiga.close()
     const b = aparelho(fabrica, nome); await b.open()
     expect(await b.clientes.get(c.id)).toEqual(c); expect(await b.fila.count()).toBe(1)
-    expect(await b.controleCopia.count()).toBe(0); expect(b.verno).toBe(10); b.close()
+    expect(await b.controleCopia.count()).toBe(0); expect(b.verno).toBe(11); b.close()
   })
   test('Q47A encerrada e recusa de caixa conservam evidência e fila sem reabrir efeitos provisórios', async () => {
     const a = aparelho(), ids = await povoar(a), repo = criarRepositorioEstoque(a), estoque = criarOperacoesEstoque(repo)

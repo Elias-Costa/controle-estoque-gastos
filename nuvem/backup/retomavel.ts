@@ -1,8 +1,8 @@
 import { exigirCopia, objetoCopia } from '../../src/dados/formato-copia.ts'
-import { LIMITES_COPIA as L, TABELAS_COPIA, type VinculoConta } from '../../src/dados/tipos-copia.ts'
+import { LIMITES_COPIA as L, type VinculoConta } from '../../src/dados/tipos-copia.ts'
 import { consultasDaCopia } from '../../src/dados/consultas-copia.ts'
 import { conteudoDoEfeito } from '../../src/dominio/regras-estoque.ts'
-import { dataInternaDaCopia, entradasDeDadosCopia, manifestoDaCopia } from '../../src/plataforma/arquivo-copia.ts'
+import { dataInternaDaCopia, entradasDeDadosCopia, manifestoDaCopia, tabelasDoPacote } from '../../src/plataforma/arquivo-copia.ts'
 import { conteudoDaFotoParaRetencao } from '../../src/plataforma/material-backup.ts'
 import { baixarLoteDaCaptura, carregarFontesBackup, fotoDaCaptura, lerCapturaServidor, materialDaCaptura, metadadosDaCaptura,
   type CapturaServidor } from './captura.ts'
@@ -86,7 +86,7 @@ export async function executarPreparo(portas: Portas, vinculo: VinculoConta, sug
       const csvs = Object.entries(consultasDaCopia(dados)).map(([nome, conteudo]) => ({ nome, blob: new Blob([conteudo]) }))
       const consultas = await gravarLotesZip(csvs, data, partes, prefixo, reservar)
       await avancar({ dados: jsons, consultas, grupos: gruposDeFotos(c, fontes.fotos), material: await materialDaCaptura(dados),
-        quantidades: Object.fromEntries(TABELAS_COPIA.map((t) => [t, dados[t].length])) })
+        quantidades: Object.fromEntries(tabelasDoPacote(dados.prazosEncalhe.length > 0).map((t) => [t, dados[t].length])) })
       return pendente
     }
     if (fase === 'fotos') {
@@ -117,7 +117,7 @@ export async function executarPreparo(portas: Portas, vinculo: VinculoConta, sug
       const lerLotes = (v: unknown) => lista(v, L.entradas).map((l) => lerLoteGravado(l, conta))
       const lotes = [...lerLotes(p['dados']), ...fotos.map((f) => lerLoteGravado(f['lote'], conta)), ...lerLotes(p['consultas'])]
       const arquivos = lotes.flatMap((l) => l.arquivos), contagens = registro(p['quantidades'])
-      const quantidades = Object.fromEntries(TABELAS_COPIA.map((t) => {
+      const quantidades = Object.fromEntries(tabelasDoPacote(Object.hasOwn(contagens, 'prazosEncalhe')).map((t) => {
         const n = contagens[t]; exigirCopia(typeof n === 'number' && Number.isSafeInteger(n) && n >= 0); return [t, n]
       }))
       const bytes = arquivos.reduce((n, a) => n + a.bytes, 0)

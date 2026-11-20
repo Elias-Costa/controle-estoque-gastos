@@ -23,6 +23,7 @@ import { criarOperacoesCaixa } from './operacoes-caixa.ts'
 import { criarRepositorioModelos } from './repositorio-modelos.ts'
 import { criarLeituraDivulgacao } from './leitura-divulgacao.ts'
 import { criarRepositorioIdentidadeLoja } from './repositorio-identidade-loja.ts'
+import { criarRepositorioPrazoEncalhe } from './repositorio-prazo-encalhe.ts'
 import { criarLeituraProblemasDeEnvio } from './problemas-de-envio.ts'
 import { criarCorrecaoDescricaoEnvio } from './completar-descricao-envio.ts'
 
@@ -72,6 +73,11 @@ export const leituraDivulgacao = criarLeituraDivulgacao(banco)
 
 /** Identificação privada da loja, salva offline e anunciada ao mesmo motor da fila. */
 export const repositorioIdentidadeLoja = criarRepositorioIdentidadeLoja(banco, undefined, () => {
+  for (const ouvinte of ouvintes) ouvinte()
+})
+
+/** Prazo do Resumo lido e salvo no aparelho, com a mesma notificação de envio. */
+export const repositorioPrazoEncalhe = criarRepositorioPrazoEncalhe(banco, undefined, () => {
   for (const ouvinte of ouvintes) ouvinte()
 })
 

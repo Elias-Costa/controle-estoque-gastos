@@ -38,6 +38,7 @@
 import Dexie, { type DexieOptions, type Table } from 'dexie'
 import type { InscricaoLocal, ObservacaoLocalLembretes } from './tipos-lembretes.ts'
 import type { PreferenciaIdentidadeLoja } from './identidade-loja.ts'
+import type { PreferenciaEncalhe } from './prazo-encalhe.ts'
 import type { Cliente, Id, Lancamento } from '../dominio/ficha.ts'
 import type { MovimentoEstoque } from '../dominio/estoque.ts'
 import type { Categoria, Produto } from '../dominio/produtos.ts'
@@ -83,7 +84,7 @@ export const NOME_DO_BANCO = 'controle-fiado'
 export type TabelaSincronizada = 'clientes' | 'lancamentos'
 
 /** F2 usa a mesma FIFO; seu transporte conjunto entra em E-21, nunca pela rota financeira F1. */
-export type TabelaDaFila = TabelaSincronizada | 'categorias' | 'produtos' | 'operacoes' | 'encerramentos' | 'fotos' | 'operacoesCaixa' | 'modelos' | 'identidadeLoja'
+export type TabelaDaFila = TabelaSincronizada | 'categorias' | 'produtos' | 'operacoes' | 'encerramentos' | 'fotos' | 'operacoesCaixa' | 'modelos' | 'identidadeLoja' | 'prazoEncalhe'
 
 /** Cadastro completo sujeito a LWW por registro, separado da referência derivada de compras. */
 export type ProdutoLocal = Produto & {
@@ -221,6 +222,9 @@ export const ESQUEMA_V9 = { ...ESQUEMA_V7, identidadesLoja: 'chave' } as const
 /** D-079: somente metadados próprios da instalação, excluídos da cópia de negócio. */
 export const ESQUEMA_V10 = { ...ESQUEMA_V9, inscricoesLembretes: 'chave', observacoesLembretes: 'chave' } as const
 
+/** D-089: tabela aditiva, sem materializar o padrão em bases existentes. */
+export const ESQUEMA_V11 = { ...ESQUEMA_V10, prazosEncalhe: 'chave' } as const
+
 /**
  * A base local. `dependencias` existe para os testes injetarem um IndexedDB de mentira
  * isolado por teste (`fake-indexeddb`); em produção ninguém passa nada e o Dexie usa o do
@@ -228,6 +232,7 @@ export const ESQUEMA_V10 = { ...ESQUEMA_V9, inscricoesLembretes: 'chave', observ
  * `as` e sem `!` (AGENTS.md §4).
  */
 export class BancoLocal extends Dexie {
+  readonly prazosEncalhe: Table<PreferenciaEncalhe, string>
   readonly inscricoesLembretes: Table<InscricaoLocal, string>
   readonly observacoesLembretes: Table<ObservacaoLocalLembretes, string>
   readonly identidadesLoja: Table<PreferenciaIdentidadeLoja, string, PreferenciaIdentidadeLoja>
@@ -268,6 +273,8 @@ export class BancoLocal extends Dexie {
     this.version(8).stores(ESQUEMA_V8)
     this.version(9).stores(ESQUEMA_V9)
     this.version(10).stores(ESQUEMA_V10)
+    this.version(11).stores(ESQUEMA_V11)
+    this.prazosEncalhe = this.table('prazosEncalhe')
     this.inscricoesLembretes = this.table('inscricoesLembretes')
     this.observacoesLembretes = this.table('observacoesLembretes')
     this.identidadesLoja = this.table('identidadesLoja')

@@ -78,6 +78,10 @@ export type Nuvem = {
   readonly buscarCaixa: (apos: string, limite: number) => Promise<Resposta<readonly LinhaRecebida[]>>
   readonly enviarModelos: (linha: LinhaRecebida) => Promise<Resposta<void>>
   readonly buscarModelos: () => Promise<Resposta<readonly LinhaRecebida[]>>
+  readonly prazoEncalhe?: {
+    readonly enviar: (linha: LinhaRecebida) => Promise<Resposta<void>>
+    readonly buscar: () => Promise<Resposta<readonly LinhaRecebida[]>>
+  }
 }
 
 /**
@@ -133,7 +137,7 @@ export function criarNuvemSupabase(supabase: SupabaseClient, destino?: string): 
   }
 
   /** Página a página, em ordem estável (carimbo, id), até uma página vir curta. */
-  async function buscar(tabela: 'clientes' | 'lancamentos' | 'categorias' | 'produtos' | 'modelos_whatsapp', colunas: string, carimbo: string, desde: string | null): Promise<Resposta<readonly LinhaRecebida[]>> {
+  async function buscar(tabela: 'clientes' | 'lancamentos' | 'categorias' | 'produtos' | 'modelos_whatsapp' | 'prazos_encalhe', colunas: string, carimbo: string, desde: string | null): Promise<Resposta<readonly LinhaRecebida[]>> {
     const todas: LinhaRecebida[] = []
     for (let inicio = 0; ; inicio += LINHAS_POR_PAGINA) {
       let consulta = supabase.from(tabela).select(colunas).order(carimbo, { ascending: true }).order('id', { ascending: true })
@@ -219,6 +223,10 @@ export function criarNuvemSupabase(supabase: SupabaseClient, destino?: string): 
       return error ? { ok: false, falha: classificar(error) } : { ok: true, valor: undefined }
     },
     buscarModelos: () => buscar('modelos_whatsapp', 'id, chave, modelos, atualizado_em, recebido_em', 'chave', null),
+    prazoEncalhe: {
+      enviar: (linha) => gravar('salvar_prazo_encalhe', linha),
+      buscar: () => buscar('prazos_encalhe', 'id, dias, atualizado_em', 'id', null),
+    },
     buscarCaixa: async (apos, limite) => {
       const resposta = await rpc('baixar_caixa', { apos, limite })
       if (!resposta.ok) return resposta

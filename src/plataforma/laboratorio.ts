@@ -10,7 +10,7 @@
  */
 
 import type { BancoLocal } from '../dados/banco.ts'
-import { banco, repositorio, repositorioEstoque, operacoesEstoque, repositorioFotos, repositorioCaixa, operacoesCaixa, repositorioModelos, repositorioIdentidadeLoja } from '../dados/instancia.ts'
+import { banco, repositorio, repositorioEstoque, operacoesEstoque, repositorioFotos, repositorioCaixa, operacoesCaixa, repositorioModelos, repositorioIdentidadeLoja, repositorioPrazoEncalhe } from '../dados/instancia.ts'
 import { prepararFoto } from './fotos.ts'
 import { cadastrarCliente, lancarVendaFiado, receber } from '../dados/operacoes.ts'
 import type { Repositorio } from '../dados/repositorio.ts'
@@ -29,6 +29,7 @@ export type Laboratorio = {
   readonly copia: typeof copia
   readonly repositorioCopia: ReturnType<typeof criarRepositorioCopia>
   readonly repositorioIdentidadeLoja: typeof repositorioIdentidadeLoja
+  readonly repositorioPrazoEncalhe: typeof repositorioPrazoEncalhe
   readonly prepararFoto: typeof prepararFoto
   readonly repositorioFotos: typeof repositorioFotos
   readonly banco: BancoLocal
@@ -85,6 +86,7 @@ window.laboratorio = {
   copia,
   repositorioCopia: criarRepositorioCopia(banco),
   repositorioIdentidadeLoja,
+  repositorioPrazoEncalhe,
   prepararFoto,
   repositorioFotos,
   banco,

@@ -7,6 +7,7 @@ import { categoriaDaNuvem, produtoDaNuvem, recepcaoDaNuvem } from '../../src/sin
 import { recepcaoCaixaDaNuvem } from '../../src/sincronizacao/borda-caixa.ts'
 import { modelosDaNuvem } from '../../src/sincronizacao/borda-modelos.ts'
 import { identidadeDaNuvem } from '../../src/sincronizacao/identidade-loja.ts'
+import { prazoEncalheDaNuvem } from '../../src/sincronizacao/prazo-encalhe.ts'
 import { efeitosAposEncerramentos, identidadeDaTentativa } from '../../src/dominio/recuperacao-estoque.ts'
 import { chaveDoEfeito } from '../../src/dominio/estoque.ts'
 import { conteudoDoEfeito } from '../../src/dominio/regras-estoque.ts'
@@ -18,7 +19,7 @@ export type CapturaServidor = { readonly id: string; readonly capturadoEm: strin
 /** Portas próprias do servidor; nunca aceitar nome de RPC ou caminho arbitrário vindo do app. */
 export type RpcBackup = (nome: string, argumentos: Readonly<Record<string, unknown>>) => Promise<unknown>
 /** Fontes fechadas da fotografia SQL; nenhuma tabela Auth/push/configuração é exportada. */
-export const FONTES_BACKUP = ['clientes', 'lancamentos', 'categorias', 'produtos', 'estoque', 'caixa', 'modelos', 'identidades', 'fotos'] as const
+export const FONTES_BACKUP = ['clientes', 'lancamentos', 'categorias', 'produtos', 'estoque', 'caixa', 'modelos', 'identidades', 'fotos', 'encalhes'] as const
 /** Conjunto ainda não decodificado; monetários já chegam em texto exato do Postgres. */
 export type FontesBackup = Record<typeof FONTES_BACKUP[number], readonly unknown[]>
 
@@ -32,7 +33,7 @@ export function lerCapturaServidor(v: unknown, esperado: VinculoConta): CapturaS
 
 /** Só lê o documento já retido, sem páginas de tabelas vivas ou tolerância a lote faltante. */
 export async function carregarFontesBackup(rpc: RpcBackup, captura: CapturaServidor): Promise<FontesBackup> {
-  const fontes: FontesBackup = { clientes: [], lancamentos: [], categorias: [], produtos: [], estoque: [], caixa: [], modelos: [], identidades: [], fotos: [] }
+  const fontes: FontesBackup = { clientes: [], lancamentos: [], categorias: [], produtos: [], estoque: [], caixa: [], modelos: [], identidades: [], fotos: [], encalhes: [] }
   let quantidade = 0, bytes = 0
   for (const tabela of FONTES_BACKUP) {
     const linhas: unknown[] = []
@@ -79,14 +80,15 @@ export function fotoDaCaptura(c: CapturaServidor, entrada: unknown): FotoLocal {
     situacao: 'disponivel', registrada: true }
 }
 
-/** Reconstrói o retrato 5/10 sem carregar os bytes dos originais. */
+/** Reconstrói o retrato do servidor sem carregar os bytes dos originais. */
 export function metadadosDaCaptura(c: CapturaServidor, f: FontesBackup): DadosCopia {
   const d: DadosCopia = { clientes: f.clientes.map(clienteDaNuvem), lancamentos: f.lancamentos.map((v) => {
     const l = registro(v); return lancamentoDaNuvem({ ...l, cliente_id: l['clienteId'], estorna_id: l['estornaId'] })
   }), categorias: f.categorias.map(categoriaDaNuvem), produtos: f.produtos.map(produtoDaNuvem), fila: [], sincronizacao: [],
     operacoes: [], movimentos: [], versoesEstoque: [], encerramentos: [], relogioEstoque: [], fotos: [], protecoesFotos: [],
     enviosProdutoFoto: [], usosFotos: [], estadoFotos: [], fatosCaixa: [], operacoesCaixa: [], versoesCaixa: [], evidenciasCopia: [],
-    modelos: f.modelos.map((v) => modelosDaNuvem(registro(v))), identidadesLoja: f.identidades.map((v) => identidadeDaNuvem(registro(v))) }
+    modelos: f.modelos.map((v) => modelosDaNuvem(registro(v))), identidadesLoja: f.identidades.map((v) => identidadeDaNuvem(registro(v))),
+    prazosEncalhe: f.encalhes.map((v) => prazoEncalheDaNuvem(registro(v))) }
   const recepcoes = f.estoque.map(recepcaoDaNuvem), operacoes = recepcoes.filter((r) => r.tipo === 'operacao')
   d.encerramentos = recepcoes.flatMap((r) => r.tipo === 'encerramento' ? [r.encerramento] : [])
   const aceitos = operacoes.map((r) => r.grupo)
@@ -123,7 +125,7 @@ export function metadadosDaCaptura(c: CapturaServidor, f: FontesBackup): DadosCo
     d.operacoesCaixa.push({ ...r.grupo.operacao, versaoId: id }); d.fatosCaixa.push(...r.grupo.fatos)
   }
   d.fotos = f.fotos.map((entrada) => fotoDaCaptura(c, entrada))
-  return dadosDaCopia(d, 5)
+  return dadosDaCopia(d, 7)
 }
 
 /** Lê apenas as referências solicitadas. O escritor confere o SHA dos bytes efetivamente usados. */

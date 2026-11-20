@@ -12,6 +12,7 @@ import { BotaoEntrar } from './TelaEntrar.tsx'
 import { PALAVRAS_DOS_PRODUTOS } from './palavras-dos-produtos.ts'
 import { AvisoConferencias } from './tela-conferencias.tsx'
 import { PALAVRAS_DO_CAIXA } from './palavras-do-caixa.ts'
+import { PALAVRAS_DO_RESUMO } from './palavras-do-resumo.ts'
 import { Lembretes } from './lembretes.tsx'
 
 /**
@@ -40,6 +41,7 @@ export function TelaInicial({
   aoVerMinimo,
   aoConferir,
   aoVerCaixa,
+  aoVerResumo,
   aoVerCaixaDoMes,
   aoCopia,
   aoModelos,
@@ -55,6 +57,7 @@ export function TelaInicial({
   aoVerMinimo: () => void
   aoConferir: () => void
   aoVerCaixa: () => void
+  aoVerResumo: () => void
   aoVerCaixaDoMes: (mes: string) => void
   aoCopia: () => void
   aoModelos: () => void
@@ -77,6 +80,9 @@ export function TelaInicial({
         </button>
         <button type="button" className="min-h-11 min-w-11 border-0 bg-transparent px-3 text-acento" onClick={aoVerCaixa}>
           {PALAVRAS_DO_CAIXA.titulo} <span aria-hidden="true">&rsaquo;</span>
+        </button>
+        <button type="button" className="min-h-11 min-w-11 border-0 bg-transparent px-1 text-acento" onClick={aoVerResumo}>
+          {PALAVRAS_DO_RESUMO.titulo} <span aria-hidden="true">&rsaquo;</span>
         </button>
       </header>
 
