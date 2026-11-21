@@ -1,303 +1,142 @@
-# Controle de Estoque e Fiado
+# Fichinhas
 
-**Fichinhas** é um aplicativo de controle de fiado para revenda de cosméticos. Organiza clientes, vendas, parcelas e recebimentos em fichas digitais, com consulta ao saldo e ao histórico de cada cliente.
+Aplicativo de controle de fiado e estoque para revenda de cosméticos. Substitui o caderno de anotações: organiza clientes, vendas, parcelas, recebimentos, produtos e caixa, e funciona no celular mesmo sem internet.
+
+É um aplicativo web instalável (PWA): pode ser adicionado à tela de início do iPhone ou do Android e usado também no computador.
 
 ## Funcionalidades
 
-- **Clientes e fichas:** cadastro e atualização de dados, consulta de saldos, histórico de movimentações e desativação ou reativação de fichas.
-- **Vendas:** registro de vendas à vista ou fiado, com descrição obrigatória dos itens, preços editáveis e desconto opcional.
-- **Parcelamento:** divisão em até seis parcelas, com valores e datas de vencimento ajustáveis.
-- **Recebimentos:** registro de pagamentos totais ou parciais, com abatimento automático das parcelas em aberto, da mais antiga para a mais recente.
-- **Cobrança:** consulta de clientes com saldo pendente, priorização por atraso e mensagens de cobrança ou recibo preparadas para envio manual pelo WhatsApp.
-- **Textos do WhatsApp:** quatro modelos editáveis, com prévia e inserção de nome, valores e vencimento pelos botões; guardados offline e restaurados na mesma conta.
-- **Saldo anterior:** inclusão de dívidas existentes, com opção de parcelamento, para transferir registros do caderno.
-- **Correções e estornos:** correção de registros pendentes e estorno de lançamentos já sincronizados, com preservação do histórico financeiro.
+**Fiado**
+
+- **Clientes e fichas:** cadastro e atualização de dados, saldo e histórico de cada cliente, desativação e reativação de fichas.
+- **Vendas:** à vista ou fiado, com produto do estoque ou item avulso, preço editável e desconto opcional.
+- **Parcelamento:** de 1 a 6 parcelas, com valores e vencimentos ajustáveis.
+- **Recebimentos:** pagamentos totais ou parciais, abatidos automaticamente das parcelas em aberto, da mais antiga para a mais recente.
+- **Saldo anterior:** inclusão das dívidas que já existiam no caderno, com opção de parcelamento.
+- **Correções e estornos:** anotações ainda não enviadas podem ser corrigidas; lançamentos já enviados são corrigidos por estorno, sem apagar o histórico.
+- **Cobrança pelo WhatsApp:** lista de quem deve, ordenada por atraso, e mensagens de cobrança e recibo montadas a partir de quatro modelos editáveis. O envio é sempre feito pela própria pessoa, no WhatsApp.
+
+**Estoque**
+
+- **Produtos:** cadastro com foto, marca, categoria, preço de custo e de venda e estoque mínimo.
+- **Movimentação:** entrada item a item, baixa automática na entrega, controle do que foi vendido e ainda está "a entregar", trocas, devoluções e ajustes com motivo.
+- **Reposição:** lista dos produtos que chegaram ao estoque mínimo.
+- **Divulgação:** PDF dos produtos disponíveis, com filtros por categoria, marca e sexo e com o nome e o logo da loja, para compartilhar pelo WhatsApp.
+
+**Gestão**
+
+- **Caixa:** despesas e receitas avulsas, marcadas como do negócio ou pessoais, e o caixa do mês.
+- **Resumo:** valor a receber (vencido e a vencer), lucro apurável do mês, vendas por período e produtos com estoque baixo ou encalhados, com prazo de encalhe ajustável.
+- **Lembretes:** parcelas vencendo ou atrasadas, produtos no mínimo e resumo do caixa do mês, na tela inicial e por notificação quando o aparelho permite.
+- **Cópia das anotações:** arquivo ZIP com fichas, estoque, caixa, fotos, modelos de mensagem e histórico, além de consultas em CSV, que recupera tudo numa instalação vazia da mesma conta. Também há cópia automática diária no Google Drive conectado pelo app. O arquivo contém nomes, telefones e valores e não tem senha própria: deve ser guardado em local privado.
 
 ## Uso sem conexão
 
-Vendas e recebimentos podem ser registrados sem acesso à internet. As operações ficam no aparelho e são sincronizadas quando a conexão e o acesso à conta estão disponíveis. O aplicativo pode ser instalado na tela de início do celular e utilizado também no computador.
+Vendas, recebimentos e demais anotações são gravados primeiro no aparelho, sem depender da internet, e enviados à nuvem quando há conexão e acesso à conta. Cada anotação nasce com identificador próprio e chave de idempotência, então reenviar não duplica nada.
 
-Quando uma venda antiga tiver sido recusada por faltar a descrição de um item, o aviso oferece **Completar o que foi vendido**. A pessoa informa somente os nomes faltantes e confirma **Salvar e tentar enviar**. IDs, valores, datas e parcelas são preservados; o salvamento funciona offline e o envio espera a conexão. A opção só aparece quando o app confirma essa condição específica. Outros problemas continuam com a opção de relato ao mantenedor.
+Se uma anotação for recusada no envio, o aviso explica o motivo. Quando falta a descrição de um item vendido, o app permite completá-la sem alterar valores, datas ou parcelas; nos demais casos, oferece relatar o problema pelo WhatsApp.
 
-## Cópia em arquivo
+## Princípios do projeto
 
-Na tela inicial, abra **Cópia das anotações**, toque em **Preparar cópia completa** e depois
-em **Salvar arquivo**. O ZIP reúne fichas, estoque, caixa, fotos, classificação dos produtos,
-identificação/logo da loja, textos do WhatsApp, histórico e pendências;
-as três consultas CSV podem ser abertas separadamente. Guarde o arquivo em local privado:
-ele contém nomes, telefones e valores, sem senha adicional. Uma preparação interrompida
-pode ser retomada nessa tela. Fotos sem original local exigem internet para completar.
+- **Dinheiro em centavos inteiros**, nunca em ponto flutuante.
+- **Histórico financeiro imutável:** nenhum lançamento é apagado; correção é estorno.
+- **Escrita local primeiro:** nenhuma anotação depende da rede para ser concluída.
+- **Regras financeiras garantidas também no banco**, por gatilhos e políticas de acesso (RLS), e não só no app.
+- **Domínio isolado:** `src/dominio` não importa nada externo, e o lint impõe essa fronteira.
+- **Vocabulário do negócio no código:** `Ficha`, `Fiado`, `Recebimento`, `Parcela`, `Estorno`.
 
-Para recuperar em uma base vazia, abra essa tela **antes do primeiro login**, escolha
-**Começar a usar uma cópia**, entre na mesma conta e selecione o arquivo. O app confere tudo
-antes de publicar localmente; anotações existentes impedem a importação. Ao voltar a internet,
-confere os dados mais novos da conta e protege as fotos antes de enviar pendências.
-Não há substituição de dados da nuvem. O limite do pacote é 256 MiB; excesso é recusado sem
-omitir anotações. Provas de aparelho e limites medidos constam na documentação local.
-
-Em **Mensagens do WhatsApp**, escolha a situação, edite e toque em **Guardar os textos**.
-Os quatro textos começam com as mensagens existentes. Os botões inserem os dados da ficha;
-o exemplo do editor usa dados fictícios. Na ficha e após receber, a prévia mostra a mensagem
-real antes do link. Quem envia continua sendo você, no WhatsApp. Edição inválida conserva
-o rascunho; mudança já salva por outra aba pede conferência. O novo leitor também aceita
-as cópias anteriores da E-35, restaurando os textos da mesma conta ao reconectar.
-
-## Stack utilizada
+## Stack
 
 | Camada | Tecnologias |
 |---|---|
-| Interface | React 19 e TypeScript 6 |
-| Estilos | Tailwind CSS 4 |
-| Armazenamento local | Dexie sobre IndexedDB |
-| Banco de dados e autenticação | Supabase com PostgreSQL |
-| Aplicativo instalável (PWA) | vite-plugin-pwa |
+| Interface | React 19, TypeScript 6 e Tailwind CSS 4 |
+| Armazenamento no aparelho | Dexie sobre IndexedDB |
+| Nuvem | Supabase: PostgreSQL, autenticação, Storage e funções Edge |
+| Aplicativo instalável | vite-plugin-pwa com Workbox |
+| Integrações | Web Push (lembretes) e Google Drive (cópia automática) |
+| Documentos | jsPDF (divulgação) e zip.js (cópia em arquivo) |
 | Build | Vite 8 |
-| Runtime e gerenciamento de pacotes | Bun |
+| Runtime e pacotes | Bun |
 | Qualidade e testes | oxlint, Bun Test e Playwright |
 
-A cópia usa zip.js 2.24.0; o aviso BSD-3-Clause acompanha o app em
-[`public/licencas/zip-js.txt`](public/licencas/zip-js.txt).
+## Como rodar
 
-## Estado atual
-
-Fichas, fiado e controle de estoque estão em uso real. A divulgação de produtos disponíveis
-por PDF para compartilhamento manual no WhatsApp foi entregue e conferida no aparelho.
-A extensão inclui classificação opcional dos produtos
-e filtros por categoria, marca e sexo. O PDF usa nome/descrição editáveis e logo opcional da
-loja, salvos offline e recuperáveis pela mesma conta. Gastos, cópia completa, modelos editáveis
-e lembretes estão implementados na candidata de F3 e aguardam publicação e confirmação
-da entrega; indicadores do negócio continuam previstos para fase futura.
-
-## Verificação
-
-Com Bun e Docker disponíveis, `bun run local:iniciar` prepara o Supabase local. Rodar
-`bun run check`, `bun run test:integracao:local` e `bun run test:navegador:local`;
-`bun run local:parar` conserva os dados fictícios. O Storage local faz parte dos testes de foto.
-Cada rodada de integração/navegador usa uma conta fictícia nova e preserva as anteriores.
-
-`bun run test:interface` constrói o app sem nuvem e verifica contraste dos campos, alvos,
-foco, texto ampliado e ações fixas no Chromium, com dados fictícios em contextos isolados.
-Não precisa de Docker nem de credenciais. Usa a porta 4176 e não substitui as suítes de
-integração/sincronização ou a validação em aparelho real. Requer o Chromium do Playwright
-(`bunx playwright install chromium`, uma vez).
-
-Homologação usa os comandos `test:integracao:homologacao` e `test:navegador:homologacao`,
-com o projeto confirmado em `nuvem/destinos-de-teste.ts`. O mantenedor configura
-`.env.homologacao.local` com `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `SUPABASE_DB_URL`
-(Session pooler, TLS), `SUPABASE_TESTE_EMAIL` e `SUPABASE_TESTE_SENHA`. Produção não recebe
-suítes nem resets. `TESTE_NOME` é um filtro opcional de integração para diagnóstico;
-removê-lo para executar o portão completo. Antes da publicação de caixa/F3, o mantenedor roda
-`bun run migrar` em produção: o runner aplica somente pendentes, em ordem, incluindo
-`0008_caixa` e `0009_modelos-whatsapp`, preservando os dados existentes. Modelos acrescentam
-v7 e a união v9 conserva tanto bases F3/v7 quanto F2.1/v8. Este checkout contém os pares
-0001–0013; 0010/0011/0012 pertencem à melhoria já entregue e 0013 acrescenta lembretes.
-O runner também encontra
-0008/0009 ausentes mesmo depois dessas migrations, sem downgrade. Todas precisam preceder
-o app F3; esta reintegração não publica a fase. Só depois dos critérios da F3 promove para
-`main`, que publica pelo deploy existente. Não reverter migrations nem limpar dados para
-atualizar o app; conferir carimbo, fichas, estoque, fotos e envios pendentes na abertura seguinte.
-
-## Lembretes homologados (F3)
-
-O checkout usa banco v10 e cópia 4/esquema 10, com leitores 1/6, 2/7 e 3/9. Os lembretes
-da inicial usam anotações locais e continuam disponíveis sem permissão de notificação.
-Inscrição e consentimento pertencem à instalação e ficam fora da cópia em arquivo.
-Chegada do push e abertura pelo toque confirmadas no Android em 02/11/2026, na homologação.
-Push depende da configuração abaixo. Nesta entrega dos lembretes não haverá prova no iPhone;
-iOS permanece sem comprovação. F3 ainda não foi publicada.
-
-Preparação em **local/homologação**, nessa ordem, sem usar produção:
+Pré-requisitos: [Bun](https://bun.sh) (testado com a versão 1.4) e, apenas para os testes com Supabase local, Docker.
 
 ```bash
-bun run lembretes:edge
-bun run lembretes:preparar:local
-bun run lembretes:preparar:homologacao
+bun install
+bun run dev
 ```
 
-O primeiro comando gera `dist/lembretes/index.js`, sem segredos. Publicar esse conteúdo
-como função **`enviar-lembretes`** no projeto separado, com `verify_jwt=false` somente nela;
-o handler autentica token próprio antes de acessar dados. CLI continua exclusiva dos
-serviços locais; publicação hospedada é pelo painel/plugin. A 0013 deve preceder a função.
-No local, servir o bundle exige ativar temporariamente o Edge e fornecer os segredos ao
-processo; o roteiro e o instrumento sem arquivo de segredos ficam em
-`docs/ensaios/e38/LEIA-ME.md`. A configuração normal conserva Edge desabilitado.
+Sem variáveis de ambiente, o app funciona inteiro no aparelho, sem nuvem: as anotações ficam guardadas localmente, aguardando envio. Para conectá-lo a um projeto Supabase, crie um `.env.local` (ignorado pelo git) com:
 
-O preparo em local/homologação guarda material de teste no Vault e a chave pública no esquema
-interno, sem imprimir a privada/token nem criar job. Repetir conserva as mesmas chaves;
-divergência de configuração existente recusa rotação automática. Somente o mantenedor,
-em terminal interativo e sem redirecionamento, usa `bun run lembretes:segredos:local` ou
-`bun run lembretes:segredos:homologacao` para configurar no Edge os três valores mostrados:
-`LEMBRETES_TOKEN_SHA256`, `LEMBRETES_VAPID_CONTATO`, `LEMBRETES_VAPID_CHAVES`.
-No campo de valor do painel, colar somente o trecho depois de `NOME=`: o hash sem
-aspas, o contato como URL e as chaves como JSON começando por `{`. Salvar os segredos
-e publicar novamente a função para conferir a configuração carregada.
-Não colar esses valores em chat, fonte, `.env*`, arquivo de cópia ou log. A credencial
-administrativa do Edge é a fornecida pelo ambiente Supabase, nunca enviada ao navegador do app.
-
-Depois da função e dos segredos, executar `bun run lembretes:agendar:local` e, depois,
-`bun run lembretes:agendar:homologacao`. Esses comandos exigem 401 sem token, 400 com
-corpo inválido e verificação autenticada saudável
-antes de criar/conferir o job. Tentativas às 9h, 9h15 e 9h30 de Fortaleza, sem garantir
-entrega nesse horário; após envio incerto não reenviam aquele destino no dia. Job/segredos
-não são semeadura nem parte da migration e não expiram automaticamente. A publicação
-em produção continua na entrega de F3; nenhum desses comandos seleciona produção.
-
-Na entrega de F3, depois de `bun run migrar`, os comandos próprios abaixo exigem o
-projeto público de produção confirmado pelo mantenedor (D-081). Usar a configuração
-de produção já administrada por ele, em terminal sem variáveis de teste/laboratório.
-Eles não selecionam homologação nem aplicam migrations; Vault precisa estar disponível.
-
-```bash
-bun run lembretes:preparar:producao --projeto=awmesexptpalzonbucwc
-bun run lembretes:segredos:producao --projeto=awmesexptpalzonbucwc
-```
-
-O mantenedor copia os três valores somente para os segredos Edge **desse mesmo projeto**,
-sem redirecionar a saída. Publicar/configurar a função `enviar-lembretes` com o bundle e
-`verify_jwt=false` somente nela, preservando o token próprio. Depois:
-
-```bash
-bun run lembretes:agendar:producao --projeto=awmesexptpalzonbucwc
-```
-
-A guarda compara argumento, API e banco antes de conectar; recusa projetos diferentes
-e mantém a restrição das suítes. O agendamento conserva os negativos/saúde e não substitui
-job divergente. O bundle Edge em `dist/lembretes/index.js` é para o painel: gerar com
-`lembretes:edge` quando for copiar; um novo `bun run build` o remove de `dist`, deixando
-somente o app para publicação estática. Executar as etapas nessa ordem, conferir o
-registro das migrations e guardar commit/carimbo da entrega. F3 ainda aguarda publicação
-e confirmação dos dados no aparelho pelo mantenedor.
-
-## Contato privado para relatar problema de envio
-
-O número do mantenedor não pertence ao código, aos testes nem a variáveis VITE. Após
-aplicar 0012, o mantenedor configura o contato no SQL Editor do Supabase de produção,
-substituindo o marcador pelo número completo com país e DDD, apenas dígitos:
-
-```sql
-insert into public.contato_suporte(chave, telefone)
-values ('mantenedor', '<numero_com_pais_e_ddd>')
-on conflict (chave) do update set telefone = excluded.telefone;
-```
-
-A tabela é inacessível aos papéis do app. Só a RPC `obter_contato_suporte` pode devolver
-o número a uma sessão autenticada, e o aplicativo a chama somente ao tocar em “Relatar
-problema”. Sem cache do contato no aparelho; a busca exige conexão. O WhatsApp abre com
-o diagnóstico pronto e a pessoa confirma o envio. Abrir a conversa não marca a anotação
-como enviada nem resolve sua recusa.
-
-As suítes de integração/navegador usam temporariamente um contato fictício nos ambientes
-de teste validados e restauram a configuração anterior no encerramento, inclusive após
-falha do teste. Se a conexão impedir a restauração, o comando falha e essa configuração
-de teste precisa ser recuperada antes de outra rodada. Não configuram nem testam produção.
-
-## Android pelo Wi-Fi nos testes
-
-O preview LAN pode usar um certificado local cuja autoridade foi instalada manualmente no
-Android. Defina `CERTIFICADO_HTTPS_LOCAL` e `CHAVE_HTTPS_LOCAL` com caminhos absolutos para
-o certificado de servidor e sua chave; `preview:laboratorio:lan` e `preview:local:lan` usam
-o par em HTTPS. Os arquivos devem ficar fora do repositório e da pasta `public`.
-Sem o par, LAN conserva o certificado autoassinado anterior, sem comprovação de confiança
-no aparelho. As variáveis locais não são consumidas quando `LAN` está desligado.
-
-Para enviar somente o certificado público da autoridade ao telefone:
-
-```powershell
-bun --no-env-file run ferramentas/servir-certificado-local.ts '<caminho-absoluto-do-rootCA.pem>' '<IPv4-do-PC>'
-```
-
-O comando informa uma URL HTTP na porta 4176 e o SHA-256 público; a única rota de download
-é `/fichinhas-teste.crt`. No Android, instalar como certificado de CA, depois abrir o app
-em `https://<IPv4-do-PC>:4174`, usando build e conta de homologação. A 4175 é reservada ao
-build sem nuvem. PC e Android devem estar no mesmo Wi-Fi, com as portas liberadas apenas
-na rede local. Encerrar o servidor de certificado após o download. Não compartilhar chaves
-privadas; não trocar IP, HTTPS ou porta durante uma prova de retenção local.
-
-## Configuração Google para o backup — homologação
-
-Para a conexão pelo app (emenda D-085), usar `backup:google:web:homologacao` com
-o JSON **Aplicativo da Web**, fora do repositório. Depois de publicar o serviço,
-abrir o laboratório em `http://127.0.0.1:4174` e escolher a conta Google pelo app.
-[Sequência e retornos OAuth](nuvem/backup/LEIA-ME.md#conectar-google-drive-pelo-app--d-085).
-
-O caminho Desktop abaixo conserva os ensaios anteriores da BA-02. No terminal interativo Windows,
-com o cliente Desktop do projeto `fichinhas-backup-homologacao` fora do repositório:
-
-```powershell
-bun run backup:google:autorizar:homologacao 'C:\caminho-privado\cliente-desktop.json'
-bun run backup:google:verificar:homologacao
-```
-
-O primeiro abre o navegador e pede conferência da conta no terminal antes de guardar
-a autorização no Vault. O segundo confere renovação/conta/cota, sem enviar arquivos.
-Há variantes `:local` e `backup:google:reautorizar:<ambiente>` para repetir consentimento
-com a mesma conta/cliente. [Procedimento e limites](nuvem/backup/LEIA-ME.md).
-Esses comandos não aplicam migrations, não configuram produção e ainda não entregam
-backup automático. Não enviar JSON de credenciais ou tokens ao chat.
-
-Depois de autorizar, o caminho de servidor da BA-02 usa a migration aditiva 0014 e
-comandos restritos a teste:
-
-```bash
-bun run backup:preparar:homologacao
-bun run backup:edge
-bun run backup:ensaio:homologacao
-```
-
-O preparo imprime somente o hash público `BACKUP_TOKEN_SHA256`; o bundle sai em
-`dist/backup/index.js`. O ensaio **envia dados fictícios ao Drive autorizado** e baixa/
-restaura o ZIP no Chromium; executa o servidor em Bun, sem provar a função hospedada.
-Após publicar `enviar-backup` na homologação, com esse hash nos segredos Edge e
-verificação JWT desligada somente nela, `bun run backup:agendar:homologacao` confere
-negativos/saúde antes de criar o job próprio das 11h de Fortaleza. [Publicação,
-retomada e alcance das provas](nuvem/backup/LEIA-ME.md#prepararpublicar-em-homologação).
-Para repetir download/restauração sem nova semente, usar `bun run backup:executar:homologacao`.
-Com `--captura=<UUID>`, baixa e restaura uma cópia já pronta, inclusive gerada pelo Edge,
-sem iniciar novo envio.
-
-Para ensaiar o complemento do aparelho, aplicar a migration 0015 pelo runner e publicar
-o bundle atualizado de `enviar-backup` em homologação. O ensaio abre o build de laboratório
-no Chromium com a conta fictícia vinculada ao Drive de teste, interrompe o envio e tenta
-retomar a mesma candidata. [Procedimento](nuvem/backup/LEIA-ME.md#complemento-do-aparelho-ba-03).
-
-```bash
-bun run backup:aparelho:homologacao
-```
-
-Para preparar o disparo natural das 11h de Fortaleza com o volume de BA-04, use
-`bun run backup:volume:homologacao` na conta fictícia vinculada ao Drive de teste.
-O comando `bun run backup:volume:local` confere o mesmo transporte com uma amostra.
-Depois da carga base, acrescente `--variacao` ao mesmo comando para preparar a
-prova de crescimento e troca de um original.
-[Carga e leitura da prova](nuvem/backup/LEIA-ME.md#carga-da-ba-04).
-
-Para comparar a montagem de uma captura fictícia retida antes/depois de otimização,
-use `bun run backup:perfil:homologacao --captura=<UUID> --referencia` uma vez e
-repita sem `--referencia`. O instrumento lê a captura e originais, salva a referência
-local e exige igualdade de tamanho/SHA; não envia ao Drive. CPU medida no Bun não
-comprova o orçamento do Edge. [Procedimento](nuvem/backup/LEIA-ME.md#captura-retomada-e-proteção).
-
-## Configuração do backup em produção
-
-As entradas de produção são próprias; as suítes continuam restritas a local e
-homologação. O mantenedor aplica as migrations pendentes pelo runner antes do
-preparo. Estes comandos não aplicam migrations nem publicam serviços:
-
-| Comando | Finalidade |
+| Variável | Uso |
 |---|---|
-| `backup:google:web:producao` | Prepara cliente Web e UUID permitido; a conta Google é escolhida pelo app |
-| `backup:google:verificar:producao` | Renovação da conexão ativa, identidade e cota, sem enviar arquivo |
-| `backup:google:autorizar:producao` | Caminho Desktop anterior, preservado para manutenção do vínculo legado |
-| `backup:google:reautorizar:producao` | Consentimento do mesmo vínculo Desktop; não migra conta nem conexão Web |
-| `backup:preparar:producao` | Token próprio no Vault e hash público do serviço |
-| `backup:agendar:producao` | Conferência HTTP/saúde e agendamento do job próprio |
+| `VITE_SUPABASE_URL` | URL do projeto, embutida no build |
+| `VITE_SUPABASE_ANON_KEY` | Chave pública (anon), embutida no build |
+| `SUPABASE_DB_URL` | Conexão Postgres usada por `bun run migrar` |
 
-Executar com `bun run <comando>` e `--projeto=awmesexptpalzonbucwc`. As ações
-Google também exigem `--conta=<UUID>`. A ação `web` exige o caminho absoluto do JSON
-Web. Autorizar/reautorizar exigem o caminho
-absoluto do JSON Desktop do projeto Google `fichinhas-backup`, fora do repositório.
-O UUID é conferido no Auth, sem a senha da usuária. Não enviar JSON ou tokens ao chat.
-Em **Cópia das anotações → Conectar Google Drive**, a usuária escolhe a conta e
-autoriza no Google; o app mostra o e-mail conectado. A conexão seguinte conserva
-os arquivos anteriores e separa os catálogos. Verificar informa `conectadoPeloApp`.
-[Ordem de configuração, publicação do Edge e limites](nuvem/backup/LEIA-ME.md#produção--preparo-pelo-mantenedor).
+Build de produção e pré-visualização:
+
+```bash
+bun run build
+bun run preview
+```
+
+O comportamento sem conexão deve ser conferido no build (`preview`), nunca no servidor de desenvolvimento.
+
+## Testes
+
+```bash
+bun run check
+```
+
+Roda typecheck, oxlint e os testes unitários. É o portão de qualquer mudança.
+
+**Integração e navegador**, contra um Supabase local em Docker, só com dados fictícios e sem `.env`:
+
+```bash
+bun run local:iniciar
+bun run test:integracao:local
+bun run test:navegador:local
+bun run local:parar
+```
+
+Os comandos validam que o destino é local, aplicam as migrations pendentes e criam uma conta fictícia nova a cada rodada. A integração prova as garantias do banco (imutabilidade, RLS, gatilhos) e o transporte real de sincronização e fotos. `local:parar` conserva os dados fictícios.
+
+**Interface**, sem Docker e sem credenciais:
+
+```bash
+bunx playwright install chromium
+bun run test:interface
+```
+
+Constrói o app sem nuvem e verifica no Chromium contraste, alvos de toque, foco, texto ampliado e ações fixas, com dados fictícios em contextos isolados. Usa a porta 4176. A instalação do Chromium só é necessária uma vez. Não substitui as suítes de integração nem o teste em aparelho real.
+
+**Homologação:** `test:integracao:homologacao` e `test:navegador:homologacao` rodam contra um projeto Supabase separado, identificado em `nuvem/destinos-de-teste.ts`. As credenciais ficam em `.env.homologacao.local`: as três variáveis acima (com `SUPABASE_DB_URL` pelo Session pooler, com TLS) mais `SUPABASE_TESTE_EMAIL` e `SUPABASE_TESTE_SENHA`. Sem destino confirmado, os comandos recusam a conexão.
+
+## Ambientes e publicação
+
+- **Local → homologação → produção.** As suítes de teste rodam só em local e homologação. A produção guarda dados reais e não recebe testes, resets nem reversão de migrations.
+- **Migrations** ficam em `nuvem/migracoes/`, sempre em pares `NNNN_nome.sql` e `NNNN_nome.reverter.sql`. Migration aplicada não se edita: a correção entra na seguinte. `bun run migrar` aplica somente as pendentes, em ordem, preservando os dados; `bun run migrar:reverter` atua apenas no ambiente local.
+- **Funções Edge** (`enviar-lembretes` e `enviar-backup`) e seus segredos são preparados por comandos próprios de cada ambiente (`lembretes:*` e `backup:*`, no `package.json`). Em produção, cada comando exige o projeto explícito (`--projeto=<id>`) e confere API e banco antes de conectar. O passo a passo fica na documentação operacional, que não é publicada.
+- **Branches:** `developer` para desenvolvimento e `main` para publicação. O `bun run build` gera o site estático publicado a partir da `main`.
+
+## Estrutura do repositório
+
+| Pasta | Conteúdo |
+|---|---|
+| `src/dominio` | Regras do negócio (dinheiro, parcelas, saldos, estoque), sem dependências externas |
+| `src/dados` | Base local (Dexie) e operações atômicas |
+| `src/sincronizacao` | Fila de envio, conta e transporte para o Supabase |
+| `src/interface` | Telas e componentes React |
+| `src/plataforma` | Recursos do navegador: arquivos, fotos, PDF, notificações e service worker |
+| `nuvem` | Migrations, runner, funções Edge e backup |
+| `supabase` | Configuração do Supabase local |
+| `ferramentas` | Scripts de ambiente de teste, empacotamento e ícones |
+| `testes` | Testes de unidade, integração, navegador e interface |
+| `public` | Ícones, telas de abertura e avisos de licença |
+
+## Licença
+
+Código sob a licença MIT ([LICENSE](LICENSE)). Os avisos das bibliotecas e fontes distribuídas com o app ficam em [`public/licencas/`](public/licencas/): zip.js (BSD-3-Clause), jsPDF (MIT) e Noto Sans (SIL Open Font License 1.1).
